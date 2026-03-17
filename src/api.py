@@ -17,6 +17,7 @@ from src.database import db
 from src.llm_service import LLMService
 from src.services import SystemService, DownloadService, ConfigService
 from src.core import DaemonManager, SpiderScheduler, ArticleProcessor
+from src.core.scheduler import SPIDER_REGISTRY
 
 logger = logging.getLogger(__name__)
 
@@ -125,11 +126,15 @@ class Api:
         """
         mode = self.config_service.get('trackMode', 'continuous')
 
+        # 获取用户订阅的来源列表
+        subscribed_sources = self.config_service.get('subscribedSources', None)
+
         # 委托给调度器执行（异步提交）
         result = self.scheduler.run_all_spiders(
             mode=mode,
             is_manual=is_manual,
-            wait_for_completion=False  # 不等待处理完成，立即返回
+            wait_for_completion=False,  # 不等待处理完成，立即返回
+            enabled_sources=subscribed_sources
         )
 
         # 如果调度器返回错误，直接返回
@@ -327,10 +332,19 @@ class Api:
         os._exit(0)
 
     def get_all_sources(self) -> dict:
-        """获取所有数据来源列表"""
+        """获取所有数据来源列表（按 SPIDER_REGISTRY 定义的顺序返回）"""
         try:
-            sources = db.get_all_sources()
-            return {"status": "success", "data": sources}
+            # 从数据库获取所有存在的来源
+            db_sources = set(db.get_all_sources())
+
+            # 按 SPIDER_REGISTRY 的顺序返回（只返回数据库中存在的）
+            ordered_sources = [
+                spider_cls.SOURCE_NAME
+                for spider_cls, _, _, _ in SPIDER_REGISTRY
+                if spider_cls.SOURCE_NAME in db_sources
+            ]
+
+            return {"status": "success", "data": ordered_sources}
         except Exception as e:
             return {"status": "error", "message": str(e)}
 

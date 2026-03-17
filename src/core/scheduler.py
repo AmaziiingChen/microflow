@@ -19,19 +19,20 @@ logger = logging.getLogger(__name__)
 
 
 # 爬虫注册表：(爬虫类, 板块数量, 描述, 是否需要校园网)
+# 顺序：公文通 -> 中德智能制造 -> 人工智能 -> 新材料与新能源 -> 城市交通与物流 -> 健康与环境工程 -> 工程物理 -> 药学院 -> 集成电路与光电芯片 -> 未来技术 -> 创意设计 -> 商学院
 SPIDER_REGISTRY: List[Tuple[Type[BaseSpider], int, str, bool]] = [
-    (GwtSpider, 1, "公文通", True),           # 公文通需要校园网
-    (NmneSpider, 6, "新材料与新能源学院", False),
-    (AiSpider, 2, "人工智能学院", False),
+    (GwtSpider, 1, "公文通", True),                    # 公文通需要校园网
     (SgimSpider, 1, "中德智能制造学院", False),
+    (AiSpider, 2, "人工智能学院", False),
+    (NmneSpider, 6, "新材料与新能源学院", False),
     (UtlSpider, 2, "城市交通与物流学院", False),
     (HseeSpider, 2, "健康与环境工程学院", False),
     (CepSpider, 2, "工程物理学院", False),
     (CopSpider, 2, "药学院", False),
-    (DesignSpider, 6, "创意设计学院", False),
-    (BusinessSpider, 4, "商学院", False),
     (IcocSpider, 3, "集成电路与光电芯片学院", False),
     (FutureTechSpider, 6, "未来技术学院", False),
+    (DesignSpider, 6, "创意设计学院", False),
+    (BusinessSpider, 4, "商学院", False),
 ]
 
 
@@ -134,7 +135,8 @@ class SpiderScheduler:
         mode: str = 'continuous',
         is_manual: bool = False,
         wait_for_completion: bool = False,
-        skip_network_check: bool = False
+        skip_network_check: bool = False,
+        enabled_sources: List[str] = None
     ) -> Dict[str, Any]:
         """
         执行所有爬虫的抓取任务（异步提交到处理队列）
@@ -144,6 +146,7 @@ class SpiderScheduler:
             is_manual: 是否手动触发
             wait_for_completion: 是否等待所有任务处理完成（阻塞）
             skip_network_check: 是否跳过网络检测（用于补偿抓取）
+            enabled_sources: 启用的来源列表，如果为 None 则执行所有爬虫
 
         Returns:
             {
@@ -206,6 +209,11 @@ class SpiderScheduler:
 
             # 4. 遍历所有爬虫实例（智能过滤）
             for spider in self.active_spiders:
+                # 订阅过滤：如果指定了 enabled_sources，且当前爬虫不在列表中，则跳过
+                if enabled_sources is not None and spider.SOURCE_NAME not in enabled_sources:
+                    logger.debug(f"⏭️ [{spider.SOURCE_NAME}] 跳过（未在订阅列表中）")
+                    continue
+
                 requires_intranet = getattr(spider, '_requires_intranet', False)
 
                 # 智能路由：公网环境下跳过需要校园网的爬虫

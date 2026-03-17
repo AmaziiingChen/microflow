@@ -1018,6 +1018,29 @@
                 </div>
             </div>
 
+            <!-- 🌟 新增：订阅管理模块 -->
+            <div class="form-group">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <label class="form-label" style="margin: 0;">订阅管理</label>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="action-btn btn-secondary" style="padding: 4px 10px; font-size: 11px;" @click="selectAllSources">全选</button>
+                        <button class="action-btn btn-secondary" style="padding: 4px 10px; font-size: 11px;" @click="deselectAllSources">全不选</button>
+                    </div>
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; background: #F9FAFB; border-radius: 8px; border: 1px solid var(--border-color);">
+                    <label v-for="source in allAvailableSources" :key="source"
+                           style="display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 6px 12px; background: white; border-radius: 6px; border: 1px solid #E5E7EB; transition: all 0.2s;"
+                           :style="{ borderColor: config.subscribedSources.includes(source) ? 'var(--accent-color)' : '', background: config.subscribedSources.includes(source) ? 'rgba(52, 120, 246, 0.05)' : 'white' }">
+                        <input type="checkbox"
+                               :value="source"
+                               v-model="config.subscribedSources"
+                               style="width: 14px; height: 14px;">
+                        <span style="font-size: 13px; font-weight: 500; color: #374151;">{{ source }}</span>
+                    </label>
+                </div>
+                <span class="helper-text">选择要抓取的数据源，未选中的来源将被跳过</span>
+            </div>
+
             <div style="margin-top: 24px; display: flex; gap: 12px;">
                 <button class="action-btn btn-secondary" style="flex: 1;" @click="testConnection">
                     {{ isTesting ? '测试中...' : '测试连接' }}
@@ -1043,7 +1066,7 @@
         });
 
         try {
-            const { createApp, ref, computed, onMounted } = Vue;
+            const { createApp, ref, computed, onMounted, watch } = Vue;
 
             createApp({
                 setup() {
@@ -1111,7 +1134,8 @@
                     prompt: '',
                     autoStart: false,
                     muteMode: false,
-                    trackMode: 'continuous'
+                    trackMode: 'continuous',
+                    subscribedSources: []  // 🌟 新增：订阅的来源列表
                 });
                 const showApiKey = ref(false); // 密钥显示/隐藏状态
                 const settingsMsg = ref('');
@@ -1123,9 +1147,44 @@
                 const isSearching = ref(false); // 搜索状态标识
                 let searchTimeout = null;
 
-                // 🌟 新增：来源筛选状态
-                const sources = ref(['全部']);
+                // 🌟 新增：所有可用来源（固定顺序，与后端 SPIDER_REGISTRY 一致）
+                const allAvailableSources = ref([
+                    '公文通',
+                    '中德智能制造学院',
+                    '人工智能学院',
+                    '新材料与新能源学院',
+                    '城市交通与物流学院',
+                    '健康与环境工程学院',
+                    '工程物理学院',
+                    '药学院',
+                    '集成电路与光电芯片学院',
+                    '未来技术学院',
+                    '创意设计学院',
+                    '商学院'
+                ]);
+
+                // 🌟 修改：sources 改为 computed，根据订阅设置动态生成筛选栏
+                // 始终以"全部"开头，后面跟着订阅的学院（按固定顺序）
+                const sources = computed(() => {
+                    const subscribed = config.value.subscribedSources || [];
+                    if (subscribed.length === 0) {
+                        // 未设置订阅时显示全部
+                        return ['全部', ...allAvailableSources.value];
+                    }
+                    // 按固定顺序过滤出订阅的来源
+                    const ordered = allAvailableSources.value.filter(s => subscribed.includes(s));
+                    return ['全部', ...ordered];
+                });
+
                 const activeSource = ref('全部');
+
+                // 🌟 新增：全选/全不选方法
+                const selectAllSources = () => {
+                    config.value.subscribedSources = [...allAvailableSources.value];
+                };
+                const deselectAllSources = () => {
+                    config.value.subscribedSources = [];
+                };
 
                 // 新增：处理搜索（带 300ms 防抖机制）
                 const handleSearch = () => {
@@ -1312,10 +1371,21 @@
                         const timeA = a.exact_time || a.date || "";
                         const timeB = b.exact_time || b.date || "";
                         // 使用 localeCompare 比较字符串时间，timeB 放前面表示降序
-                        return timeB.localeCompare(timeA); 
+                        return timeB.localeCompare(timeA);
                     });
 
-                    // 👇 变化 3：最后把排好序的数组 return 出去
+                    // 👇 变化 3：订阅过滤 - 根据用户设置过滤显示的文章
+                    // 如果订阅列表非空，则只显示订阅来源的文章；否则显示全部
+                    const subscribedSources = config.value.subscribedSources;
+                    if (subscribedSources && subscribedSources.length > 0) {
+                        mapped = mapped.filter(item => {
+                            // 使用 source_name 进行过滤（公文通的文章可能没有 source_name 或为"公文通"）
+                            const sourceName = item.source_name || '公文通';
+                            return subscribedSources.includes(sourceName);
+                        });
+                    }
+
+                    // 👇 变化 4：最后把过滤并排好序的数组 return 出去
                     return mapped;
                 });
 
@@ -1358,6 +1428,14 @@
                     }
                 };
 
+                // 🌟 新增：监听订阅变化，当 activeSource 被取消订阅时自动切换到"全部"
+                watch(sources, (newSources) => {
+                    if (activeSource.value !== '全部' && !newSources.includes(activeSource.value)) {
+                        // 当前选中的来源已不在订阅列表中，自动切换到"全部"
+                        filterBySource('全部');
+                    }
+                });
+
                 onMounted(() => {
                     console.log('Vue onMounted 触发');
                     // debugEl.innerHTML += '<br>✅ onMounted 触发 | 等待 pywebview...';
@@ -1376,17 +1454,6 @@
                     window.addEventListener('pywebviewready', async () => {
                         console.log('pywebviewready 事件触发');
                         // debugEl.innerHTML += '<br>✅ pywebviewready 触发 | 加载数据...';
-
-                        // 🌟 新增：获取所有来源列表
-                        try {
-                            const sourcesRes = await pywebview.api.get_all_sources();
-                            if (sourcesRes.status === 'success' && sourcesRes.data) {
-                                // 在最前面插入"全部"选项
-                                sources.value = ['全部', ...sourcesRes.data];
-                            }
-                        } catch (e) {
-                            console.warn('获取来源列表失败:', e);
-                        }
 
                         // 1. 软件打开时，先只拉取第 1 页的数据
                         try {
@@ -1822,7 +1889,7 @@
 
                     // 设置当前文章的刷新状态
                     isRegenerating.value = { ...isRegenerating.value, [articleId]: true };
-                    statusMsg.value = '🔄 正在重新生成 AI 总结...';
+                    statusMsg.value = '正在重新生成 AI 总结...';
 
                     try {
                         const res = await window.pywebview.api.regenerate_summary(articleId);
@@ -1861,7 +1928,7 @@
                                 articles.value[index] = { ...articles.value[index], ...updatedArticle };
                             }
 
-                            statusMsg.value = '✅ AI 总结已重新生成！';
+                            statusMsg.value = 'AI 总结已重新生成！';
                         } else {
                             statusMsg.value = '❌ ' + (res.message || '生成失败');
                         }
@@ -1979,6 +2046,8 @@
                     resetPrompt, saveSettings, testConnection,closeAppWindow,searchQuery, handleSearch, clearSearch, regenerateSummary,
                     // 🌟 新增：来源筛选相关
                     sources, activeSource, filterBySource,
+                    // 🌟 新增：订阅管理相关
+                    allAvailableSources, selectAllSources, deselectAllSources,
                     // 🌟 新增：文件名拆分
                     splitFilename
                 };
