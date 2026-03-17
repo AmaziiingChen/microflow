@@ -87,8 +87,8 @@ class SpiderScheduler:
         for spider_cls, section_count, description, requires_intranet in SPIDER_REGISTRY:
             try:
                 spider = spider_cls()
-                # 将 requires_intranet 属性附加到爬虫实例
-                spider._requires_intranet = requires_intranet
+                # 使用 setattr 动态添加属性（避免 Pylance 警告）
+                setattr(spider, '_requires_intranet', requires_intranet)
                 self.active_spiders.append(spider)
                 section_info = f" ({section_count} 个板块)" if section_count > 1 else ""
                 network_req = "校园网" if requires_intranet else "公网"
@@ -136,7 +136,7 @@ class SpiderScheduler:
         is_manual: bool = False,
         wait_for_completion: bool = False,
         skip_network_check: bool = False,
-        enabled_sources: List[str] = None
+        enabled_sources: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
         执行所有爬虫的抓取任务（异步提交到处理队列）

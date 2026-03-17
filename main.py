@@ -237,4 +237,4 @@ if __name__ == '__main__':
                 window.show()
 
     # 启动应用，并将回调函数注入进去
-    webview.start(func=on_app_start, debug=False)
+    webview.start(func=on_app_start, debug=True)

@@ -19,6 +19,7 @@ class AppConfig:
     auto_start: bool = False
     mute_mode: bool = False
     track_mode: str = "continuous"
+    subscribed_sources: list = field(default_factory=list)  # 🌟 新增：订阅的来源列表
 
 
 class ConfigService:
@@ -72,7 +73,8 @@ class ConfigService:
                 prompt=data.get('prompt', default.prompt),
                 auto_start=data.get('autoStart', default.auto_start),
                 mute_mode=data.get('muteMode', default.mute_mode),
-                track_mode=data.get('trackMode', default.track_mode)
+                track_mode=data.get('trackMode', default.track_mode),
+                subscribed_sources=data.get('subscribedSources', default.subscribed_sources)  # 🌟 新增
             )
             return self._config
 
@@ -109,7 +111,8 @@ class ConfigService:
                 prompt=config_dict.get('prompt', self._default_prompt),
                 auto_start=config_dict.get('autoStart', False),
                 mute_mode=config_dict.get('muteMode', False),
-                track_mode=config_dict.get('trackMode', 'continuous')
+                track_mode=config_dict.get('trackMode', 'continuous'),
+                subscribed_sources=config_dict.get('subscribedSources', [])  # 🌟 新增
             )
 
             logger.info("配置已成功保存")
@@ -141,7 +144,8 @@ class ConfigService:
             "prompt": config.prompt,
             "autoStart": config.auto_start,
             "muteMode": config.mute_mode,
-            "trackMode": config.track_mode
+            "trackMode": config.track_mode,
+            "subscribedSources": config.subscribed_sources  # 🌟 新增
         }
 
     def get(self, key: str, default: Any = None) -> Any:
@@ -165,6 +169,7 @@ class ConfigService:
             'autoStart': 'auto_start',
             'muteMode': 'mute_mode',
             'trackMode': 'track_mode',
+            'subscribedSources': 'subscribed_sources',  # 🌟 新增
         }
 
         # 转换键名

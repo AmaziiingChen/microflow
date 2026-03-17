@@ -1030,7 +1030,7 @@
                 <div style="display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; background: #F9FAFB; border-radius: 8px; border: 1px solid var(--border-color);">
                     <label v-for="source in allAvailableSources" :key="source"
                            style="display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 6px 12px; background: white; border-radius: 6px; border: 1px solid #E5E7EB; transition: all 0.2s;"
-                           :style="{ borderColor: config.subscribedSources.includes(source) ? 'var(--accent-color)' : '', background: config.subscribedSources.includes(source) ? 'rgba(52, 120, 246, 0.05)' : 'white' }">
+                           :style="{ borderColor: (config.subscribedSources || []).includes(source) ? 'var(--accent-color)' : '', background: (config.subscribedSources || []).includes(source) ? 'rgba(52, 120, 246, 0.05)' : 'white' }">
                         <input type="checkbox"
                                :value="source"
                                v-model="config.subscribedSources"
@@ -1066,7 +1066,7 @@
         });
 
         try {
-            const { createApp, ref, computed, onMounted, watch } = Vue;
+            const { createApp, ref, computed, onMounted } = Vue;
 
             createApp({
                 setup() {
@@ -1427,14 +1427,6 @@
                         if (res.data.length < 20) noMoreData.value = true;
                     }
                 };
-
-                // 🌟 新增：监听订阅变化，当 activeSource 被取消订阅时自动切换到"全部"
-                watch(sources, (newSources) => {
-                    if (activeSource.value !== '全部' && !newSources.includes(activeSource.value)) {
-                        // 当前选中的来源已不在订阅列表中，自动切换到"全部"
-                        filterBySource('全部');
-                    }
-                });
 
                 onMounted(() => {
                     console.log('Vue onMounted 触发');
