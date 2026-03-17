@@ -1,0 +1,173 @@
+"""配置管理服务 - 负责配置的加载、保存和验证"""
+
+import json
+import os
+import logging
+from typing import Dict, Any, Optional
+from dataclasses import dataclass, field, asdict
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class AppConfig:
+    """应用配置数据类"""
+    base_url: str = "https://api.deepseek.com/v1"
+    api_key: str = ""
+    model_name: str = "deepseek-chat"
+    prompt: str = ""
+    auto_start: bool = False
+    mute_mode: bool = False
+    track_mode: str = "continuous"
+
+
+class ConfigService:
+    """
+    配置管理服务 - 单一职责：配置的持久化与热更新
+
+    使用方式：
+        config_service = ConfigService(config_path, default_prompt)
+        config = config_service.load()
+        config_service.save(new_config)
+    """
+
+    def __init__(self, config_path: str, default_prompt: str = ""):
+        """
+        初始化配置服务
+
+        Args:
+            config_path: 配置文件路径
+            default_prompt: 默认的 AI 提示词
+        """
+        self.config_path = config_path
+        self._default_prompt = default_prompt
+        self._config: Optional[AppConfig] = None
+
+        # 确保配置目录存在
+        config_dir = os.path.dirname(config_path)
+        if config_dir and not os.path.exists(config_dir):
+            os.makedirs(config_dir, exist_ok=True)
+
+    def load(self) -> AppConfig:
+        """
+        从文件加载配置
+
+        Returns:
+            AppConfig 配置对象
+        """
+        default = AppConfig(prompt=self._default_prompt)
+
+        if not os.path.exists(self.config_path):
+            self._config = default
+            return self._config
+
+        try:
+            with open(self.config_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            self._config = AppConfig(
+                base_url=data.get('baseUrl', default.base_url),
+                api_key=data.get('apiKey', default.api_key),
+                model_name=data.get('modelName', default.model_name),
+                prompt=data.get('prompt', default.prompt),
+                auto_start=data.get('autoStart', default.auto_start),
+                mute_mode=data.get('muteMode', default.mute_mode),
+                track_mode=data.get('trackMode', default.track_mode)
+            )
+            return self._config
+
+        except Exception as e:
+            logger.error(f"读取配置文件失败: {e}")
+            self._config = default
+            return self._config
+
+    def save(self, config_dict: Dict[str, Any]) -> bool:
+        """
+        保存配置到文件
+
+        Args:
+            config_dict: 配置字典（前端格式）
+
+        Returns:
+            是否保存成功
+        """
+        try:
+            # 确保目录存在
+            config_dir = os.path.dirname(self.config_path)
+            if config_dir:
+                os.makedirs(config_dir, exist_ok=True)
+
+            # 写入文件
+            with open(self.config_path, 'w', encoding='utf-8') as f:
+                json.dump(config_dict, f, ensure_ascii=False, indent=4)
+
+            # 更新内存中的配置
+            self._config = AppConfig(
+                base_url=config_dict.get('baseUrl', self._config.base_url if self._config else ""),
+                api_key=config_dict.get('apiKey', ''),
+                model_name=config_dict.get('modelName', 'deepseek-chat'),
+                prompt=config_dict.get('prompt', self._default_prompt),
+                auto_start=config_dict.get('autoStart', False),
+                mute_mode=config_dict.get('muteMode', False),
+                track_mode=config_dict.get('trackMode', 'continuous')
+            )
+
+            logger.info("配置已成功保存")
+            return True
+
+        except Exception as e:
+            logger.error(f"保存配置失败: {e}")
+            return False
+
+    @property
+    def current(self) -> AppConfig:
+        """获取当前配置（如果未加载则先加载）"""
+        if self._config is None:
+            self.load()
+        return self._config
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        转换为前端期望的字典格式
+
+        Returns:
+            前端格式的配置字典
+        """
+        config = self.current
+        return {
+            "baseUrl": config.base_url,
+            "apiKey": config.api_key,
+            "modelName": config.model_name,
+            "prompt": config.prompt,
+            "autoStart": config.auto_start,
+            "muteMode": config.mute_mode,
+            "trackMode": config.track_mode
+        }
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """
+        获取单个配置项
+
+        Args:
+            key: 配置键名（支持前端格式如 'apiKey' 或 Python 格式如 'api_key'）
+            default: 默认值
+
+        Returns:
+            配置值
+        """
+        config = self.current
+
+        # 支持两种格式的键名
+        key_mapping = {
+            'baseUrl': 'base_url',
+            'apiKey': 'api_key',
+            'modelName': 'model_name',
+            'autoStart': 'auto_start',
+            'muteMode': 'mute_mode',
+            'trackMode': 'track_mode',
+        }
+
+        # 转换键名
+        attr_name = key_mapping.get(key, key)
+
+        return getattr(config, attr_name, default)
