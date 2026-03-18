@@ -495,7 +495,7 @@
             display: flex; align-items: center; gap: 12px; padding: 12px 16px;
             background: #F9FAFB; border: 1px solid var(--border-color); border-radius: 8px;
             cursor: pointer; transition: all 0.2s ease;
-            width: fit-content;
+            min-width: 400px;
             max-width: 100%;
         }
         .attachment-card:hover {
@@ -925,8 +925,8 @@
                                 </svg>
                             </div>
                             <div class="att-info">
-                                <div class="att-name" :title="att.name">
-                                    <span class="att-name-prefix">{{ truncateMiddle(att.name).start }}</span><span v-if="!truncateMiddle(att.name).short" class="att-name-ellipsis">…</span><span v-if="!truncateMiddle(att.name).short" class="att-name-middle">{{ truncateMiddle(att.name).end }}</span><span class="att-name-suffix">{{ truncateMiddle(att.name).suffix }}</span>
+                                <div class="att-name" :title="att.name" :ref="el => setAttNameRef(el, att.url)">
+                                    <span class="att-name-prefix" :ref="el => setPrefixRef(el, att.url)">{{ truncateMiddle(att.name).start }}</span><span v-if="!truncateMiddle(att.name).short && isPrefixTruncated(att.url)" class="att-name-ellipsis">…</span><span v-if="!truncateMiddle(att.name).short" class="att-name-middle">{{ truncateMiddle(att.name).end }}</span><span class="att-name-suffix">{{ truncateMiddle(att.name).suffix }}</span>
                                 </div>
                             </div> </div> </div> </div> </div> <div class="detail-footer">
                 <div class="disclaimer">
@@ -2034,6 +2034,45 @@
                 // ========================================
                 // 🌟 新增：文件名智能拆分（响应式中间省略）
                 // 显示格式：[前半部分]…[末尾4字符][后缀]
+
+                // 存储每个附件前半部分的 DOM 引用和截断状态
+                const prefixRefs = {};
+                const truncatedStates = ref({});
+
+                // 设置前半部分 DOM 引用
+                const setPrefixRef = (el, url) => {
+                    if (el) {
+                        prefixRefs[url] = el;
+                        // 延迟检测截断状态
+                        setTimeout(() => checkTruncation(url), 0);
+                    }
+                };
+
+                // 设置容器 DOM 引用
+                const setAttNameRef = (el, url) => {
+                    if (el) {
+                        // 监听容器宽度变化
+                        const resizeObserver = new ResizeObserver(() => {
+                            checkTruncation(url);
+                        });
+                        resizeObserver.observe(el);
+                    }
+                };
+
+                // 检测前半部分是否被截断
+                const checkTruncation = (url) => {
+                    const el = prefixRefs[url];
+                    if (el) {
+                        const isTruncated = el.scrollWidth > el.clientWidth;
+                        truncatedStates.value[url] = isTruncated;
+                    }
+                };
+
+                // 判断是否被截断
+                const isPrefixTruncated = (url) => {
+                    return truncatedStates.value[url] || false;
+                };
+
                 const truncateMiddle = (filename) => {
                     if (!filename) return { start: '', end: '', suffix: '', short: true };
 
@@ -2069,7 +2108,7 @@
                     // 🌟 新增：订阅管理相关
                     allAvailableSources, selectAllSources, deselectAllSources,
                     // 🌟 新增：文件名拆分（中间省略）
-                    truncateMiddle
+                    truncateMiddle, setPrefixRef, setAttNameRef, isPrefixTruncated
                 };
             }
         }).mount('#app');
