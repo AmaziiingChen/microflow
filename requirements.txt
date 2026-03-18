@@ -48,12 +48,12 @@ pydantic_core==2.41.5
 pydeck==0.9.1
 pyflakes==3.4.0
 Pygments==2.19.2
-pyobjc-core==12.1
-pyobjc-framework-Cocoa==12.1
-pyobjc-framework-Quartz==12.1
-pyobjc-framework-Security==12.1
-pyobjc-framework-UniformTypeIdentifiers==12.1
-pyobjc-framework-WebKit==12.1
+pyobjc-core==12.1; sys_platform == 'darwin'
+pyobjc-framework-Cocoa==12.1; sys_platform == 'darwin'
+pyobjc-framework-Quartz==12.1; sys_platform == 'darwin'
+pyobjc-framework-Security==12.1; sys_platform == 'darwin'
+pyobjc-framework-UniformTypeIdentifiers==12.1; sys_platform == 'darwin'
+pyobjc-framework-WebKit==12.1; sys_platform == 'darwin'
 pystray==0.19.5
 pytest==9.0.2
 pytest-cov==7.0.0
