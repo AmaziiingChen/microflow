@@ -483,45 +483,59 @@
 
         .btn-back { background: #FF5C5F; } 
         .btn-back:hover { background: #E55356; } /* 红色变深 */
-        
+
         .status-center { text-align: center; color: var(--text-sub); font-size: 13px; margin-top: 10px; }
         /* 底部独立附件区样式 */
         .attachments-section { margin-top: 32px; padding-bottom: 10px; }
         .attachments-divider { height: 1px; background: var(--border-color); margin-bottom: 12px; }
         .attachments-title { font-size: 14px; font-weight: 800; color: #111; margin-bottom: 8px; }
-        .attachments-list { display: grid; gap: 10px; grid-template-columns: 1fr; }
-        
+        .attachments-list { display: flex; flex-direction: column; gap: 10px; max-width: 100%; }
+
         .attachment-card {
             display: flex; align-items: center; gap: 12px; padding: 12px 16px;
             background: #F9FAFB; border: 1px solid var(--border-color); border-radius: 8px;
             cursor: pointer; transition: all 0.2s ease;
+            width: fit-content;
+            max-width: 100%;
         }
         .attachment-card:hover {
             background: #EFF6FF; border-color: #BFDBFE; 
             box-shadow: 0 4px 12px rgba(37, 99, 235, 0.08);
         }
-        .att-icon { font-size: 24px; line-height: 1; }
-        .att-info { flex: 1; min-width: 0; }
-        /* 🌟 响应式中间省略：外层容器 */
+        .att-icon { font-size: 24px; line-height: 1; flex-shrink: 0; }
+        .att-info { flex: 1; min-width: 0; overflow: hidden; }
+        /* 🌟 响应式中间省略 */
         .att-name {
             display: flex;
             font-size: 13px;
             font-weight: 600;
             color: #374151;
-            min-width: 0; /* 允许收缩 */
+            min-width: 0;
+            overflow: hidden;
         }
-        /* 前半部分：可收缩，超出显示省略号 */
+        /* 前半部分：可收缩 */
         .att-name-prefix {
+            white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            white-space: nowrap;
-            flex-shrink: 1; /* 允许收缩 */
+            flex-shrink: 1;
             min-width: 0;
         }
-        /* 后半部分：永不收缩，始终完整显示后缀 */
+        /* 省略号 */
+        .att-name-ellipsis {
+            white-space: nowrap;
+            flex-shrink: 0;
+            color: #6B7280;
+        }
+        /* 后半部分：不收缩 */
+        .att-name-middle {
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        /* 后缀：不收缩 */
         .att-name-suffix {
             white-space: nowrap;
-            flex-shrink: 0; /* 禁止收缩 */
+            flex-shrink: 0;
         }
         .att-action { font-size: 11px; color: var(--accent-color); margin-top: 4px; font-weight: 700; opacity: 0.8; }
         .attachment-card:hover .att-action { opacity: 1; }
@@ -912,7 +926,7 @@
                             </div>
                             <div class="att-info">
                                 <div class="att-name" :title="att.name">
-                                    <span class="att-name-prefix">{{ splitFilename(att.name).prefix }}</span><span class="att-name-suffix">{{ splitFilename(att.name).suffix }}</span>
+                                    <span class="att-name-prefix">{{ truncateMiddle(att.name).start }}</span><span v-if="!truncateMiddle(att.name).short" class="att-name-ellipsis">…</span><span v-if="!truncateMiddle(att.name).short" class="att-name-middle">{{ truncateMiddle(att.name).end }}</span><span class="att-name-suffix">{{ truncateMiddle(att.name).suffix }}</span>
                                 </div>
                             </div> </div> </div> </div> </div> <div class="detail-footer">
                 <div class="disclaimer">
@@ -2019,17 +2033,31 @@
 
                 // ========================================
                 // 🌟 新增：文件名智能拆分（响应式中间省略）
-                const splitFilename = (filename) => {
-                    if (!filename) return { prefix: '', suffix: '' };
-                    // 查找最后一个点号
+                // 显示格式：[前半部分]…[末尾4字符][后缀]
+                const truncateMiddle = (filename) => {
+                    if (!filename) return { start: '', end: '', suffix: '', short: true };
+
+                    // 查找最后一个点号（文件扩展名）
                     const lastDotIndex = filename.lastIndexOf('.');
-                    if (lastDotIndex === -1 || lastDotIndex === 0) {
-                        // 无后缀或以点开头
-                        return { prefix: filename, suffix: '' };
+                    let mainPart = filename;
+                    let suffix = '';
+
+                    if (lastDotIndex !== -1 && lastDotIndex !== 0) {
+                        suffix = filename.slice(lastDotIndex); // 包含点号，如 ".pdf"
+                        mainPart = filename.slice(0, lastDotIndex);
                     }
-                    const suffix = filename.slice(lastDotIndex); // 包含点号
-                    const prefix = filename.slice(0, lastDotIndex);
-                    return { prefix, suffix };
+
+                    // 短文件名（主文件名 <= 10 字符）：直接显示，不分割
+                    if (mainPart.length <= 10) {
+                        return { start: mainPart, end: '', suffix, short: true };
+                    }
+
+                    // 长文件名：前半部分包含大部分内容，后半部分固定显示最后4字符
+                    const endLen = 4;
+                    const start = mainPart.slice(0, -endLen);
+                    const end = mainPart.slice(-endLen);
+
+                    return { start, end, suffix, short: false };
                 };
 
                 return {
@@ -2040,8 +2068,8 @@
                     sources, activeSource, filterBySource,
                     // 🌟 新增：订阅管理相关
                     allAvailableSources, selectAllSources, deselectAllSources,
-                    // 🌟 新增：文件名拆分
-                    splitFilename
+                    // 🌟 新增：文件名拆分（中间省略）
+                    truncateMiddle
                 };
             }
         }).mount('#app');
