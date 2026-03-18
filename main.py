@@ -199,7 +199,7 @@ if __name__ == '__main__':
 
     # 构建托盘右键菜单
     tray_menu = pystray.Menu(
-        pystray.MenuItem('详情', on_show_window),
+        pystray.MenuItem('详情', on_show_window, default=True),  # 🌟 设为默认，点击图标直接显示窗口
         pystray.MenuItem('退出', on_quit_app)
     )
 
@@ -237,4 +237,4 @@ if __name__ == '__main__':
                 window.show()
 
     # 启动应用，并将回调函数注入进去
-    webview.start(func=on_app_start, debug=True)
+    webview.start(func=on_app_start, debug=False)

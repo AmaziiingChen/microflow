@@ -759,6 +759,17 @@
             display: inline-block;
             vertical-align: middle;
         }
+
+        /* ============================================================
+           截图状态冻结：强制停止所有动画（防止旋转按钮消失）
+        ============================================================ */
+        body.is-capturing *,
+        body.is-capturing *::before,
+        body.is-capturing *::after {
+            animation: none !important;
+            transition: none !important;
+            /* transform: none !important; 取消这行，防止破坏正常的排版定位 */
+        }
     </style>
 </head>
 <body>
@@ -1880,8 +1891,9 @@
                     setTimeout(() => statusMsg.value = '', 3000);
                 };
 
-                // 👇 新增：生成精美长截图
-                // 👇 最新修复版：保留所有按钮与 AI 提示，同时解决发灰与文字重叠问题
+                // ------------------------------------------------------------
+                // 保存长图快照 (Snapshot) - 终极护城河版：彻底解绑 viewport 锁定
+                // ------------------------------------------------------------
                 const takeSnapshot = async (item) => {
                     const oldMsg = statusMsg.value;
                     statusMsg.value = '📸 正在生成高清长截图，请稍候...';
@@ -1889,59 +1901,88 @@
                     const targetView = document.querySelector('.detail-view');
                     const scrollContent = document.querySelector('.detail-content');
 
-                    // 记录原样式
-                    const originalOverflow = scrollContent.style.overflowY;
-                    const originalFlex = scrollContent.style.flex;
-                    const originalHeight = targetView.style.height;
-                    const originalBg = targetView.style.backgroundColor; 
+                    if (!targetView || !scrollContent) return;
 
-                    // 1. 解除滚动限制，展现全文 (这里不再隐藏 footer 和顶部小按钮)
-                    scrollContent.style.overflowY = 'visible';
-                    scrollContent.style.flex = 'none';
+                    // 1. 记录所有原始样式（包括 body 和 position 属性）
+                    const origBodyHeight = document.body.style.height;
+                    const origBodyOverflow = document.body.style.overflow;
+
+                    const origPos = targetView.style.position;
+                    const origBottom = targetView.style.bottom;
+                    const origHeight = targetView.style.height;
+                    const origViewOverflow = targetView.style.overflow;
+                    const origBg = targetView.style.backgroundColor;
+
+                    const origContentOverflow = scrollContent.style.overflowY;
+                    const origContentFlex = scrollContent.style.flex;
+
+                    // 2. 彻底解除屏幕束缚（关键修复：防止 SVG 引擎裁剪）
+                    document.body.style.height = 'auto';
+                    document.body.style.overflow = 'visible';
+
+                    targetView.style.position = 'absolute'; // 👈 挣脱 fixed 定位
+                    targetView.style.bottom = 'auto';       // 👈 解除底部锁定
                     targetView.style.height = 'auto';
                     targetView.style.overflow = 'visible';
-                    
-                    // 【防灰涂层】：强制给目标容器刷上纯白底色，防止透明度混合发灰
                     targetView.style.backgroundColor = '#ffffff';
 
-                    // 【排版缓冲】：强制等待 200 毫秒！
-                    // 给浏览器留出计算 DOM 展开后的真实高度和文字换行坐标的时间，彻底杜绝重叠
-                    await new Promise(resolve => setTimeout(resolve, 500));
+                    scrollContent.style.overflowY = 'visible';
+                    scrollContent.style.flex = 'none';
+
+                    // 3. 冻结动画，防止图标消失
+                    document.body.classList.add('is-capturing');
+
+                    // 【排版缓冲】：给浏览器留出计算 DOM 展开后真实高度的时间
+                    await new Promise(resolve => setTimeout(resolve, 800));
+                    await document.fonts.ready;
 
                     try {
-                        // 2. 调用 html2canvas 进行内存渲染
+                        console.log('🎨 [Snapshot] 正在使用 foreignObjectRendering 引擎进行原生 SVG 渲染...');
+
+                        // 4. 调用 html2canvas (SVG 引擎)
                         const canvas = await html2canvas(targetView, {
-                            scale: 2, // 保证高清画质
+                            scale: 2,
                             useCORS: true,
                             backgroundColor: '#ffffff',
-                            allowTaint: true, 
-                            letterRendering: true, 
+                            allowTaint: true,
+                            foreignObjectRendering: true,
                             windowWidth: targetView.scrollWidth,
                             windowHeight: targetView.scrollHeight
                         });
 
-                        // 3. 导出并保存
+                        // 5. 导出并保存
                         const base64image = canvas.toDataURL("image/png");
                         const res = await window.pywebview.api.save_snapshot(base64image, item.title);
-                        
-                        if (res.status === 'success') {
+
+                        if (res && res.status === 'success') {
+                            console.log('✅ [Snapshot] 保存成功');
                             statusMsg.value = '✅ 快照保存成功！';
-                        } else if (res.status === 'cancelled') {
+                        } else if (res && res.status === 'cancelled') {
                             statusMsg.value = '';
                         } else {
-                            statusMsg.value = '❌ 保存失败: ' + res.message;
+                            console.error('❌ [Snapshot] 后端保存失败:', res);
+                            statusMsg.value = '❌ 保存失败: ' + (res.message || '未知错误');
                         }
-                    } catch (e) {
-                        console.error('截图失败:', e);
-                        statusMsg.value = '❌ 生成截图失败';
+                    } catch (error) {
+                        console.error('💥 [Snapshot] 前端捕获失败:', error);
+                        statusMsg.value = '❌ 截图失败: ' + error.message;
                     } finally {
-                        // 4. 恢复原状
-                        scrollContent.style.overflowY = originalOverflow;
-                        scrollContent.style.flex = originalFlex;
-                        targetView.style.height = originalHeight;
-                        targetView.style.overflow = '';
-                        targetView.style.backgroundColor = originalBg; 
-                        
+                        // 6. 恢复所有原始样式
+                        document.body.style.height = origBodyHeight;
+                        document.body.style.overflow = origBodyOverflow;
+
+                        targetView.style.position = origPos;
+                        targetView.style.bottom = origBottom;
+                        targetView.style.height = origHeight;
+                        targetView.style.overflow = origViewOverflow;
+                        targetView.style.backgroundColor = origBg;
+
+                        scrollContent.style.overflowY = origContentOverflow;
+                        scrollContent.style.flex = origContentFlex;
+
+                        document.body.classList.remove('is-capturing');
+
+                        console.log('🔄 [Snapshot] CSS 布局已恢复正常。');
                         setTimeout(() => statusMsg.value = oldMsg, 3000);
                     }
                 };
