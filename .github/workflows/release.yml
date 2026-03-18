@@ -1,4 +1,8 @@
-name: Build and Upload to COS
+name: Build and Release
+
+# 赋予 GitHub Actions 创建 Release 的权限
+permissions:
+  contents: write
 
 on:
   push:
@@ -13,11 +17,9 @@ jobs:
         include:
           - os: windows-latest
             artifact_name: microflow_win.exe
-            # 本体为 MicroFlow.exe，拷贝至根目录并重命名为小写供网络分发
             build_cmd: pyinstaller --onefile --windowed --name "MicroFlow" --add-data "frontend;frontend" --icon "frontend/icons/icon_white.png" main.py && cp dist/MicroFlow.exe ./microflow_win.exe
           - os: macos-latest
             artifact_name: microflow_mac.zip
-            # Mac 打包为大写的 MicroFlow.app，然后压缩
             build_cmd: pyinstaller --windowed --name "MicroFlow" --add-data "frontend:frontend" --icon "frontend/icons/icon_white.png" main.py && cd dist && zip -r ../microflow_mac.zip MicroFlow.app
 
     runs-on: ${{ matrix.os }}
@@ -34,60 +36,23 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller requests cos-python-sdk-v5
+          pip install pyinstaller
           pip install -r requirements.txt
 
       - name: Build with PyInstaller
         run: |
           ${{ matrix.build_cmd }}
 
-      - name: Upload to Tencent Cloud COS
-        env:
-          PYTHONUTF8: 1
-          PYTHONIOENCODING: utf8
-          SECRET_ID: ${{ secrets.COS_SECRET_ID }}
-          SECRET_KEY: ${{ secrets.COS_SECRET_KEY }}
-          BUCKET: ${{ secrets.COS_BUCKET }}
-          REGION: ${{ secrets.COS_REGION }}
-          ARTIFACT_NAME: ${{ matrix.artifact_name }}
-        run: |
-          python -c "
-          import os
-          from qcloud_cos import CosConfig
-          from qcloud_cos import CosS3Client
-
-          # Initialize COS client
-          config = CosConfig(
-              Region=os.environ['REGION'],
-              SecretId=os.environ['SECRET_ID'],
-              SecretKey=os.environ['SECRET_KEY'],
-              Timeout=60
-          )
-          client = CosS3Client(config)
-
-          bucket = os.environ['BUCKET']
-          artifact_name = os.environ['ARTIFACT_NAME']
-
-          # Upload artifact (已替换为多线程分块的高铁引擎，并增加防弹装甲)
-          print(f'Uploading {artifact_name} to COS...')
-          client.upload_file(
-              Bucket=bucket,
-              LocalFilePath=artifact_name,
-              Key=artifact_name,
-              PartSize=10,
-              MAXThread=3,
-              EnableMD5=False
-          )
-          print(f'{artifact_name} upload completed.')
-          "
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      # 【核心改动 1】大文件不再去挤腾讯云，直接秒传给 GitHub Releases 官方存储
+      - name: Upload to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
         with:
-          name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.artifact_name }}
+          files: ${{ matrix.artifact_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # 在两个构建任务完成后，统一生成 version.json
+  # 生成并上传 1KB 的控制文件到腾讯云
   update-version-json:
     needs: build
     runs-on: ubuntu-latest
@@ -113,6 +78,7 @@ jobs:
           BUCKET: ${{ secrets.COS_BUCKET }}
           REGION: ${{ secrets.COS_REGION }}
           TAG_NAME: ${{ github.ref_name }}
+          GITHUB_REPOSITORY: ${{ github.repository }} # 自动获取你的仓库名
         run: |
           python -c "
           import os
@@ -121,7 +87,6 @@ jobs:
           from qcloud_cos import CosConfig
           from qcloud_cos import CosS3Client
 
-          # Initialize COS client (这里也顺手加上 Timeout 防护)
           config = CosConfig(
               Region=os.environ['REGION'],
               SecretId=os.environ['SECRET_ID'],
@@ -131,16 +96,24 @@ jobs:
           client = CosS3Client(config)
 
           bucket = os.environ['BUCKET']
-          region = os.environ['REGION']
           tag_name = os.environ['TAG_NAME']
+          repo = os.environ['GITHUB_REPOSITORY']
 
-          # Generate download URLs
-          base_url = f'https://{bucket}.cos.{region}.myqcloud.com'
+          # 【核心改动 2】下载链接改为 GitHub Release 地址，并套上国内高速代理节点 (ghproxy)
+          base_url = f'https://ghproxy.cn/https://github.com/{repo}/releases/download/{tag_name}'
 
-          # Generate version.json (with dual-platform download links)
+          # 【核心改动 3】加入熔断开关和系统公告的底层数据结构
           version_info = {
               'version': tag_name,
               'release_date': datetime.now().isoformat(),
+              'is_active': True,
+              'kill_message': '由于合规性要求，MicroFlow 已永久停止服务。祝大家学业顺利！',
+              'announcement': {
+                  'id': f'notice_{tag_name}',
+                  'title': '🚀 欢迎使用 MicroFlow (微流)',
+                  'tags': ['系统通知', tag_name],
+                  'summary': '初次见面！为了让 AI 能够为您智能总结公文，请点击本卡片进入设置界面，配置您的 API 密钥。'
+              },
               'downloads': {
                   'windows': f'{base_url}/microflow_win.exe',
                   'macos': f'{base_url}/microflow_mac.zip'
@@ -151,7 +124,7 @@ jobs:
           print('Generated version.json:')
           print(version_json)
 
-          # Upload version.json (小文件依然用 put_object，安全快速)
+          # 1KB 小文件传给腾讯云，绝对不会假死
           client.put_object(
               Bucket=bucket,
               Body=version_json.encode('utf-8'),
