@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>通文</title>
+    <title>微流 Microflow</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
@@ -992,6 +992,34 @@
         .subs-chip.active-morandi-5 { background-color: #E8DCC8; color: #8B7A5B; box-shadow: 0 2px 6px rgba(139, 122, 91, 0.15); }
         .subs-chip.active-morandi-6 { background-color: #D8E0E0; color: #6B8080; box-shadow: 0 2px 6px rgba(107, 128, 128, 0.15); }
         .subs-chip.active-morandi-7 { background-color: #E4DCD4; color: #7B6B5B; box-shadow: 0 2px 6px rgba(123, 107, 91, 0.15); }
+
+        /* ================= 新增：软件更新弹窗 ================= */
+        .update-modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(17, 24, 39, 0.4); backdrop-filter: blur(4px);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 9999; animation: fadeIn 0.2s;
+        }
+        .update-modal {
+            background: #fff; width: 360px; max-width: 90%; border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.15); overflow: hidden;
+            display: flex; flex-direction: column; animation: slideUp 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+        .update-header {
+            background: linear-gradient(135deg, #EFF6FF, #DBEAFE); color: #1E3A8A;
+            padding: 20px; font-size: 18px; font-weight: 800; text-align: center;
+            border-bottom: 1px solid #BFDBFE;
+        }
+        .update-body {
+            padding: 20px; max-height: 300px; overflow-y: auto;
+            font-size: 13px; line-height: 1.6; color: #4B5563;
+        }
+        .update-footer {
+            padding: 16px 20px; background: #F9FAFB; border-top: 1px solid #E5E7EB;
+            display: flex; gap: 12px;
+        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
@@ -1351,6 +1379,18 @@
                 {{ settingsMsg }}
             </div>
         </div>
+
+        <!-- 🌟 新增：软件更新弹窗 -->
+        <div v-if="updateInfo" class="update-modal-overlay">
+            <div class="update-modal">
+                <div class="update-header">🚀 发现新版本 {{ updateInfo.latest_version }}</div>
+                <div class="update-body markdown-body" v-html="renderMarkdown(updateInfo.notes)"></div>
+                <div class="update-footer">
+                    <button class="action-btn btn-secondary" style="flex: 1;" @click="updateInfo = null">暂不更新</button>
+                    <button class="action-btn btn-primary" style="flex: 1.5; background: #2563EB; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);" @click="openBrowser(updateInfo.download_url)">下载高速版</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -1378,6 +1418,7 @@
                 const articles = ref([]);
                 const isLoading = ref(false);
                 const statusMsg = ref('');
+                const updateInfo = ref(null); // 🌟 新增：存储新版本信息
                 const progressText = ref(''); // 👈 新增响应式变量
 
                 // 🎯 更新按钮冷却时间相关变量
@@ -1813,6 +1854,16 @@
                             }
                         } catch (e) {
                             console.warn('加载配置失败:', e);
+                        }
+
+                        // 👇 附加：静默检查软件更新
+                        try {
+                            const updateRes = await pywebview.api.check_software_update();
+                            if (updateRes && updateRes.has_update) {
+                                updateInfo.value = updateRes;
+                            }
+                        } catch (e) {
+                            console.warn('检查更新失败:', e);
                         }
 
                         // 1. 软件打开时，先只拉取第 1 页的数据
@@ -2580,7 +2631,7 @@
                 };
 
                 return {
-                    currentView, activeArticle, lastArticle, isNavigatingBack, processedArticles, isLoading, statusMsg, tagColors, getTagColor, formatDateTime,
+                    currentView, activeArticle, lastArticle, isNavigatingBack, processedArticles, isLoading, statusMsg, updateInfo, tagColors, getTagColor, formatDateTime,
                     checkUpdates, openDetail, backToList, goToLastArticle, renderMarkdown, openBrowser, copyText, downloadFile,scrollToAttachments,takeSnapshot,progressText,page, isLoadingMore, noMoreData, loadMoreArticles,openSettings, backToPrevious, config, showApiKey, settingsMsg, isTesting, isRegenerating,
                     resetPrompt, saveSettings, testConnection,closeAppWindow,searchQuery, handleSearch, clearSearch, regenerateSummary,
                     // 🌟 更新按钮冷却

@@ -1,0 +1,152 @@
+name: Build and Upload to COS
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+        include:
+          - os: windows-latest
+            artifact_name: microflow_win.exe
+            build_cmd: pyinstaller --onefile --windowed --name "Tongwen" --add-data "frontend;frontend" --icon "frontend/icons/icon_white.png" main.py
+          - os: macos-latest
+            artifact_name: microflow_mac.zip
+            build_cmd: pyinstaller --windowed --name "Tongwen" --add-data "frontend:frontend" --icon "frontend/icons/icon_white.png" main.py && cd dist && zip -r ../microflow_mac.zip Tongwen.app
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller requests cos-python-sdk-v5
+          pip install -r requirements.txt
+
+      - name: Build with PyInstaller
+        run: |
+          ${{ matrix.build_cmd }}
+
+      - name: Upload to Tencent Cloud COS
+        env:
+          SECRET_ID: ${{ secrets.COS_SECRET_ID }}
+          SECRET_KEY: ${{ secrets.COS_SECRET_KEY }}
+          BUCKET: ${{ secrets.COS_BUCKET }}
+          REGION: ${{ secrets.COS_REGION }}
+          ARTIFACT_NAME: ${{ matrix.artifact_name }}
+        run: |
+          python -c "
+          import os
+          from qcloud_cos import CosConfig
+          from qcloud_cos import CosS3Client
+
+          # 初始化 COS 客户端
+          config = CosConfig(
+              Region=os.environ['REGION'],
+              SecretId=os.environ['SECRET_ID'],
+              SecretKey=os.environ['SECRET_KEY']
+          )
+          client = CosS3Client(config)
+
+          bucket = os.environ['BUCKET']
+          artifact_name = os.environ['ARTIFACT_NAME']
+
+          # 上传安装包
+          print(f'正在上传 {artifact_name} 到 COS...')
+          with open(artifact_name, 'rb') as f:
+              client.put_object(
+                  Bucket=bucket,
+                  Body=f,
+                  Key=artifact_name
+              )
+          print(f'{artifact_name} 上传完成')
+          "
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_name }}
+
+  # 在两个构建任务完成后，统一生成 version.json
+  update-version-json:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install COS SDK
+        run: pip install cos-python-sdk-v5
+
+      - name: Generate and upload version.json
+        env:
+          SECRET_ID: ${{ secrets.COS_SECRET_ID }}
+          SECRET_KEY: ${{ secrets.COS_SECRET_KEY }}
+          BUCKET: ${{ secrets.COS_BUCKET }}
+          REGION: ${{ secrets.COS_REGION }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          python -c "
+          import os
+          import json
+          from datetime import datetime
+          from qcloud_cos import CosConfig
+          from qcloud_cos import CosS3Client
+
+          # 初始化 COS 客户端
+          config = CosConfig(
+              Region=os.environ['REGION'],
+              SecretId=os.environ['SECRET_ID'],
+              SecretKey=os.environ['SECRET_KEY']
+          )
+          client = CosS3Client(config)
+
+          bucket = os.environ['BUCKET']
+          region = os.environ['REGION']
+          tag_name = os.environ['TAG_NAME']
+
+          # 生成下载直链
+          base_url = f'https://{bucket}.cos.{region}.myqcloud.com'
+
+          # 生成 version.json（包含双平台下载链接）
+          version_info = {
+              'version': tag_name,
+              'release_date': datetime.now().isoformat(),
+              'downloads': {
+                  'windows': f'{base_url}/microflow_win.exe',
+                  'macos': f'{base_url}/microflow_mac.zip'
+              }
+          }
+
+          version_json = json.dumps(version_info, ensure_ascii=False, indent=2)
+          print('生成的 version.json:')
+          print(version_json)
+
+          # 上传 version.json
+          client.put_object(
+              Bucket=bucket,
+              Body=version_json.encode('utf-8'),
+              Key='version.json',
+              ContentType='application/json'
+          )
+          print('version.json 上传完成')
+          "

@@ -12,6 +12,9 @@ import webview
 import os
 import json
 import shutil
+import requests
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from typing import Dict, Any, Optional
 
 from src.database import db
@@ -32,6 +35,9 @@ class Api:
     """V2 多源调度引擎 - 门面层"""
 
     def __init__(self):
+        # 当前软件版本号
+        self.CURRENT_VERSION = "v1.0.0"
+
         # 大模型服务
         self.llm = LLMService()
 
@@ -398,7 +404,7 @@ class Api:
             file_types = ('字体文件 (*.ttf;*.otf;*.woff;*.woff2)', '所有文件 (*.*)')
             # 呼出文件选择对话框
             result = webview.windows[0].create_file_dialog(
-                webview.OPEN_DIALOG,
+                webview.OPEN_DIALOG, #type: ignore
                 allow_multiple=False,
                 file_types=file_types
             )
@@ -430,3 +436,45 @@ class Api:
         except Exception as e:
             logger.error(f"导入字体失败: {e}")
             return {"status": "error", "message": str(e)}
+
+    def check_software_update(self) -> Dict[str, Any]:
+        """检查腾讯云 COS 上的 version.json 并返回对应系统的下载链接"""
+        import platform
+
+        try:
+            # 从腾讯云 COS 获取版本信息
+            version_url = "https://microflow-1412347033.cos.ap-guangzhou.myqcloud.com/version.json"
+
+            response = requests.get(version_url, timeout=5, verify=False)
+            if response.status_code == 200:
+                data = response.json()
+                latest_version = data.get("version", "")
+
+                # 简单的版本号字符串比对 (例如 "v1.1.0" > "v1.0.0")
+                if latest_version and latest_version > self.CURRENT_VERSION:
+                    # 根据当前系统选择对应的下载链接
+                    downloads = data.get("downloads", {})
+                    current_system = platform.system().lower()  # 'windows' 或 'darwin'
+
+                    if current_system == "windows":
+                        download_url = downloads.get("windows", "")
+                    elif current_system == "darwin":
+                        download_url = downloads.get("macos", "")
+                    else:
+                        download_url = ""
+
+                    # 构造更新说明
+                    release_date = data.get("release_date", "")
+                    notes = f"发布时间: {release_date}" if release_date else "有新版本可用"
+
+                    return {
+                        "has_update": True,
+                        "latest_version": latest_version,
+                        "notes": notes,
+                        "download_url": download_url
+                    }
+
+            return {"has_update": False}
+        except Exception as e:
+            logger.error(f"检查更新失败: {e}")
+            return {"has_update": False, "error": str(e)}
