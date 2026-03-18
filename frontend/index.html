@@ -1580,12 +1580,14 @@
                                 console.warn('刷新来源列表失败:', e);
                             }
 
-                            // 🌟 读取后端返回的 new_count 字段
-                            const count = res.new_count || 0;
+                            // 🌟 读取后端返回的 submitted_count 字段
+                            const count = res.submitted_count || 0;
                             if (count > 0) {
                                 statusMsg.value = `找到 ${count} 篇新内容，正在由AI总结...`;
+                                // 有新内容时保持提示，不自动清除
                             } else {
                                 statusMsg.value = "当前已是最新，无新公文";
+                                setTimeout(() => statusMsg.value = '', 4000);
                             }
                         } else {
                             // 如果是报错，后端确实会返回 message 字段
@@ -1612,8 +1614,6 @@
                                 updateCooldown.value = 0;
                             }
                         }, 1000);
-
-                        setTimeout(() => statusMsg.value = '', 4000);
                     }
                 };
 
@@ -1651,6 +1651,12 @@
                 // 👇 终极版：接收后台强提醒 -> 直接在右上角展示新内容详情
                 window.showArticleDetailFromBackend = (item) => {
                 console.log('🔔 收到后台推送:', item.title);
+
+                // 🌟 AI 总结完成反馈
+                statusMsg.value = `AI 总结完成: ${item.title}`;
+                setTimeout(() => {
+                    if (statusMsg.value.includes('总结完成')) statusMsg.value = '';
+                }, 4000);
 
                 // ======== 🌟 新增：数据预处理加工区 ========
                 let parsedTags = [];
@@ -1722,6 +1728,12 @@
             // 👇 新增：静默更新文章数据（不弹出详情，仅更新列表）
             window.silentUpdateArticle = (item) => {
                 console.log('🔔 静默更新文章:', item.title);
+
+                // 🌟 AI 总结完成反馈
+                statusMsg.value = `AI 总结完成: ${item.title}`;
+                setTimeout(() => {
+                    if (statusMsg.value.includes('总结完成')) statusMsg.value = '';
+                }, 4000);
 
                 // 数据预处理
                 let parsedTags = [];

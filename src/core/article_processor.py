@@ -374,8 +374,8 @@ class ArticleProcessor:
         return False
 
     def should_skip_by_url(self, url: str, is_manual: bool) -> bool:
-        """根据 URL 判断是否应该跳过（持续追踪模式）"""
-        if not is_manual and self.db.check_if_url_exists(url):
+        """根据 URL 判断是否应该跳过（严格依据本地数据库差异比对）"""
+        if self.db.check_if_url_exists(url):
             return True
         return False
 
