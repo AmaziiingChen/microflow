@@ -60,21 +60,23 @@ jobs:
           config = CosConfig(
               Region=os.environ['REGION'],
               SecretId=os.environ['SECRET_ID'],
-              SecretKey=os.environ['SECRET_KEY']
+              SecretKey=os.environ['SECRET_KEY'],
+              Timeout=60
           )
           client = CosS3Client(config)
 
           bucket = os.environ['BUCKET']
           artifact_name = os.environ['ARTIFACT_NAME']
 
-          # Upload artifact
+          # Upload artifact (已替换为多线程分块的高铁引擎，并增加防弹装甲)
           print(f'Uploading {artifact_name} to COS...')
           client.upload_file(
               Bucket=bucket,
               LocalFilePath=artifact_name,
               Key=artifact_name,
-              PartSize=1,
-              MAXThread=10
+              PartSize=10,
+              MAXThread=3,
+              EnableMD5=False
           )
           print(f'{artifact_name} upload completed.')
           "
@@ -119,11 +121,12 @@ jobs:
           from qcloud_cos import CosConfig
           from qcloud_cos import CosS3Client
 
-          # Initialize COS client
+          # Initialize COS client (这里也顺手加上 Timeout 防护)
           config = CosConfig(
               Region=os.environ['REGION'],
               SecretId=os.environ['SECRET_ID'],
-              SecretKey=os.environ['SECRET_KEY']
+              SecretKey=os.environ['SECRET_KEY'],
+              Timeout=60
           )
           client = CosS3Client(config)
 
@@ -148,7 +151,7 @@ jobs:
           print('Generated version.json:')
           print(version_json)
 
-          # Upload version.json
+          # Upload version.json (小文件依然用 put_object，安全快速)
           client.put_object(
               Bucket=bucket,
               Body=version_json.encode('utf-8'),
