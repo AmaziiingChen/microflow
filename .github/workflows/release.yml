@@ -1,9 +1,5 @@
 name: Build and Release
 
-# 赋予 GitHub Actions 创建 Release 的权限
-permissions:
-  contents: write
-
 on:
   push:
     tags:
@@ -43,16 +39,20 @@ jobs:
         run: |
           ${{ matrix.build_cmd }}
 
-      # 【核心改动 1】大文件不再去挤腾讯云，直接秒传给 GitHub Releases 官方存储
-      - name: Upload to GitHub Releases
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: ${{ matrix.artifact_name }}
+      # 【核心大招】弃用手写 Python，换用腾讯云官方 CLI 工具跨国强传
+      - name: Upload to Tencent Cloud COS via Official CLI
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SECRET_ID: ${{ secrets.COS_SECRET_ID }}
+          SECRET_KEY: ${{ secrets.COS_SECRET_KEY }}
+          BUCKET: ${{ secrets.COS_BUCKET }}
+          REGION: ${{ secrets.COS_REGION }}
+          ARTIFACT: ${{ matrix.artifact_name }}
+        run: |
+          pip install coscmd
+          coscmd config -a $SECRET_ID -s $SECRET_KEY -b $BUCKET -r $REGION
+          coscmd upload -rs $ARTIFACT /
 
-  # 生成并上传 1KB 的控制文件到腾讯云
+  # 依然由 Ubuntu 节点最后生成配置
   update-version-json:
     needs: build
     runs-on: ubuntu-latest
@@ -78,7 +78,6 @@ jobs:
           BUCKET: ${{ secrets.COS_BUCKET }}
           REGION: ${{ secrets.COS_REGION }}
           TAG_NAME: ${{ github.ref_name }}
-          GITHUB_REPOSITORY: ${{ github.repository }} # 自动获取你的仓库名
         run: |
           python -c "
           import os
@@ -96,13 +95,12 @@ jobs:
           client = CosS3Client(config)
 
           bucket = os.environ['BUCKET']
+          region = os.environ['REGION']
           tag_name = os.environ['TAG_NAME']
-          repo = os.environ['GITHUB_REPOSITORY']
 
-          # 【核心改动 2】下载链接改为 GitHub Release 地址，并套上国内高速代理节点 (ghproxy)
-          base_url = f'https://ghproxy.cn/https://github.com/{repo}/releases/download/{tag_name}'
+          # 下载链接彻底回归国内腾讯云原生直链，告别第三方代理
+          base_url = f'https://{bucket}.cos.{region}.myqcloud.com'
 
-          # 【核心改动 3】加入熔断开关和系统公告的底层数据结构
           version_info = {
               'version': tag_name,
               'release_date': datetime.now().isoformat(),
@@ -121,15 +119,12 @@ jobs:
           }
 
           version_json = json.dumps(version_info, ensure_ascii=False, indent=2)
-          print('Generated version.json:')
           print(version_json)
 
-          # 1KB 小文件传给腾讯云，绝对不会假死
           client.put_object(
               Bucket=bucket,
               Body=version_json.encode('utf-8'),
               Key='version.json',
               ContentType='application/json'
           )
-          print('version.json upload completed.')
           "
