@@ -9,7 +9,7 @@ from typing import Dict, Any, List, Optional, Tuple, Callable, Type
 from src.spiders import (
     BaseSpider, GwtSpider, NmneSpider, AiSpider,
     SgimSpider, UtlSpider, HseeSpider, CepSpider, CopSpider, DesignSpider,
-    BusinessSpider, IcocSpider, FutureTechSpider
+    BusinessSpider, IcocSpider, FutureTechSpider, SflSpider
 )
 from src.database import db
 from src.core.article_processor import ArticleProcessor, ArticleContext
@@ -33,6 +33,7 @@ SPIDER_REGISTRY: List[Tuple[Type[BaseSpider], int, str, bool]] = [
     (FutureTechSpider, 6, "未来技术学院", False),
     (DesignSpider, 6, "创意设计学院", False),
     (BusinessSpider, 4, "商学院", False),
+    (SflSpider, 2, "外国语学院", False),
 ]
 
 

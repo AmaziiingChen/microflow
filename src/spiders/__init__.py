@@ -11,6 +11,7 @@ from .design_spider import DesignSpider
 from .business_spider import BusinessSpider
 from .icoc_spider import IcocSpider
 from .future_tech_spider import FutureTechSpider
+from .sfl_spider import SflSpider
 
 # 重导出类型别名，方便外部使用
 from .base_spider import ArticleData
@@ -29,5 +30,6 @@ __all__ = [
     'DesignSpider',
     'BusinessSpider',
     'IcocSpider',
-    'FutureTechSpider'
+    'FutureTechSpider',
+    'SflSpider'
 ]

@@ -8,10 +8,43 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
     <style>
-        :root { 
-            --bg-color: #F6F6F8; --card-bg: #FFFFFF; --text-main: #111827; 
-            --text-sub: #4B5563; --accent-color: #3478F6; --border-color: #E5E7EB; 
+        :root {
+            --bg-color: #F6F6F8; --card-bg: #FFFFFF; --text-main: #111827;
+            --text-sub: #4B5563; --accent-color: #3478F6; --border-color: #E5E7EB;
         }
+
+        /* ================= 新增：本地思源宋体引入 ================= */
+        @font-face {
+            font-family: 'Source Han Serif SC';
+            src: url('SimplifiedChinese/SourceHanSerifSC-Regular.otf') format('opentype');
+            font-weight: 400;
+            font-style: normal;
+        }
+        @font-face {
+            font-family: 'Source Han Serif SC';
+            src: url('SimplifiedChinese/SourceHanSerifSC-Medium.otf') format('opentype');
+            font-weight: 500;
+            font-style: normal;
+        }
+        @font-face {
+            font-family: 'Source Han Serif SC';
+            src: url('SimplifiedChinese/SourceHanSerifSC-Bold.otf') format('opentype');
+            font-weight: 700;
+            font-style: normal;
+        }
+
+        /* 衬线体模式：全局覆盖字体 */
+        .serif-mode {
+            font-family: 'Source Han Serif SC', "Songti SC", "Noto Serif SC", "SimSun", serif !important;
+        }
+        /* 确保正文内的元素也被完美覆盖 */
+        .serif-mode .markdown-body,
+        .serif-mode .list-card-title,
+        .serif-mode .detail-title,
+        .serif-mode .form-input {
+            font-family: 'Source Han Serif SC', "Songti SC", "Noto Serif SC", "SimSun", serif !important;
+        }
+
         * { box-sizing: border-box; }
         body { 
             font-family: "Helvetica Neue", Helvetica, "Segoe UI", Arial, "Microsoft YaHei", sans-serif;
@@ -1070,6 +1103,29 @@
             </div>
 
             <div class="form-group">
+                <label class="form-label">字体风格</label>
+                <div style="display: flex; flex-direction: row; gap: 12px; margin-top: 8px;">
+                    <label style="flex: 1; display: flex; align-items: flex-start; gap: 8px; cursor: pointer; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; transition: all 0.2s;"
+                        :style="{ borderColor: config.fontFamily === 'sans-serif' ? 'var(--accent-color)' : '', background: config.fontFamily === 'sans-serif' ? 'rgba(52, 120, 246, 0.05)' : '' }">
+                        <input type="radio" value="sans-serif" v-model="config.fontFamily" style="margin-top: 2px;">
+                        <div>
+                            <div style="font-weight: 700; color: #111; font-size: 14px; font-family: 'Helvetica Neue', Helvetica, 'Segoe UI', Arial, sans-serif;">现代黑体</div>
+                            <div style="font-size: 11px; color: #6B7280; margin-top: 4px; line-height: 1.4;">系统默认无衬线字体，极简现代、清晰易读</div>
+                        </div>
+                    </label>
+
+                    <label style="flex: 1; display: flex; align-items: flex-start; gap: 8px; cursor: pointer; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; transition: all 0.2s;"
+                        :style="{ borderColor: config.fontFamily === 'serif' ? 'var(--accent-color)' : '', background: config.fontFamily === 'serif' ? 'rgba(52, 120, 246, 0.05)' : '' }">
+                        <input type="radio" value="serif" v-model="config.fontFamily" style="margin-top: 2px;">
+                        <div>
+                            <div style="font-weight: 700; color: #111; font-size: 14px; font-family: 'Source Han Serif SC', serif;">思源宋体</div>
+                            <div style="font-size: 11px; color: #6B7280; margin-top: 4px; line-height: 1.4;">优雅衬线字体，极具正式感，适合沉浸式阅读</div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-group">
                 <label class="form-label">追踪模式</label>
                 <div style="display: flex; flex-direction: row; gap: 12px; margin-top: 8px;">
                     
@@ -1142,7 +1198,7 @@
         });
 
         try {
-            const { createApp, ref, computed, onMounted } = Vue;
+            const { createApp, ref, computed, onMounted, watch } = Vue;
 
             createApp({
                 setup() {
@@ -1216,8 +1272,19 @@
                     autoStart: false,
                     muteMode: false,
                     trackMode: 'continuous',
+                    fontFamily: 'sans-serif', // 🌟 新增：字体风格，默认黑体
                     subscribedSources: []  // 🌟 新增：订阅的来源列表
                 });
+
+                // 🌟 动态监听字体配置，将其直接作用于 body 标签
+                watch(() => config.value.fontFamily, (newFont) => {
+                    if (newFont === 'serif') {
+                        document.body.classList.add('serif-mode');
+                    } else {
+                        document.body.classList.remove('serif-mode');
+                    }
+                }, { immediate: true }); // immediate: true 确保在软件刚打开、初始配置加载后立刻生效
+
                 const showApiKey = ref(false); // 密钥显示/隐藏状态
                 const settingsMsg = ref('');
                 const isTesting = ref(false);
@@ -1241,7 +1308,8 @@
                     '集成电路与光电芯片学院',
                     '未来技术学院',
                     '创意设计学院',
-                    '商学院'
+                    '商学院',
+                    '外国语学院'
                 ]);
 
                 // 🌟 修改：sources 改为 computed，根据订阅设置动态生成筛选栏
@@ -1527,6 +1595,16 @@
                     window.addEventListener('pywebviewready', async () => {
                         console.log('pywebviewready 事件触发');
                         // debugEl.innerHTML += '<br>✅ pywebviewready 触发 | 加载数据...';
+
+                        // 👇 修复：启动时立刻读取并应用全局配置（如字体、深色模式等）
+                        try {
+                            const configRes = await pywebview.api.load_config();
+                            if (configRes.status === 'success') {
+                                config.value = { ...config.value, ...configRes.data };
+                            }
+                        } catch (e) {
+                            console.warn('加载配置失败:', e);
+                        }
 
                         // 1. 软件打开时，先只拉取第 1 页的数据
                         try {

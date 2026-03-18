@@ -146,7 +146,8 @@ if __name__ == '__main__':
     api = Api()
     
     # 获取前端页面路径
-    html_url = f"file://{get_html_path()}"
+    # 移除 file:// 协议，让 pywebview 启用本地 HTTP 服务器，彻底绕过字体跨域拦截
+    html_url = get_html_path()
     
     # 🌟 检测启动参数：如果是开机自启（带了 --minimized 参数），则初始隐藏
     start_minimized = "--minimized" in sys.argv
@@ -236,5 +237,5 @@ if __name__ == '__main__':
                 window.restore()
                 window.show()
 
-    # 启动应用，并将回调函数注入进去
-    webview.start(func=on_app_start, debug=False)
+    # 启动应用，并将回调函数注入进去，强制开启 HTTP 服务
+    webview.start(func=on_app_start, debug=False, http_server=True)
