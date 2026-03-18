@@ -19,7 +19,7 @@ def check_campus_network() -> bool:
     """探测是否处于深圳技术大学校园网环境"""
     try:
         # 探测公文通主页，设置 2 秒极短超时
-        requests.head("https://gwt.sztu.edu.cn/", timeout=2, verify=False)
+        requests.head("https://nbw.sztu.edu.cn/list.jsp?urltype=tree.TreeTempUrl&wbtreeid=1029", timeout=2, verify=False)
         return True
     except requests.exceptions.RequestException:
         return False
@@ -152,9 +152,9 @@ if __name__ == '__main__':
         print("⛔️ 访问受限：未检测到校园网环境。")
         error_html = """
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-align: center; margin-top: 20vh; color: #111827;">
-            <h2 style="color: #E11D48;">⛔️ 访问受限</h2>
-            <p style="color: #4B5563; font-size: 14px;">微流 Microflow仅限在深圳技术大学校园网环境下运行。</p>
-            <p style="color: #4B5563; font-size: 14px;">请连接校园 WiFi 或 VPN 后重新启动软件。</p>
+            <h2 style="color: #E11D48;">访问受限</h2>
+            <p style="color: #4B5563; font-size: 14px;">微流 Microflow 仅限在深圳技术大学校园网环境下运行。</p>
+            <p style="color: #4B5563; font-size: 14px;">请连接校园 WiFi 后重新启动软件。</p>
         </div>
         """
         webview.create_window('网络错误', html=error_html, width=400, height=300)

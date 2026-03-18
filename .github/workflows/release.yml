@@ -13,10 +13,12 @@ jobs:
         include:
           - os: windows-latest
             artifact_name: microflow_win.exe
-            build_cmd: pyinstaller --onefile --windowed --name "Tongwen" --add-data "frontend;frontend" --icon "frontend/icons/icon_white.png" main.py
+            # 1. 名字改为 microflow_win 2. 编译后将其从 dist 文件夹移到根目录供上传
+            build_cmd: pyinstaller --onefile --windowed --name "microflow_win" --add-data "frontend;frontend" --icon "frontend/icons/icon_white.png" main.py && cp dist/microflow_win.exe ./microflow_win.exe
           - os: macos-latest
             artifact_name: microflow_mac.zip
-            build_cmd: pyinstaller --windowed --name "Tongwen" --add-data "frontend:frontend" --icon "frontend/icons/icon_white.png" main.py && cd dist && zip -r ../microflow_mac.zip Tongwen.app
+            # 1. 名字改为 Microflow 2. 压缩包内也会显示为 Microflow.app
+            build_cmd: pyinstaller --windowed --name "Microflow" --add-data "frontend:frontend" --icon "frontend/icons/icon_white.png" main.py && cd dist && zip -r ../microflow_mac.zip Microflow.app
 
     runs-on: ${{ matrix.os }}
 
