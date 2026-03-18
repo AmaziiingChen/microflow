@@ -69,12 +69,13 @@ jobs:
 
           # Upload artifact
           print(f'Uploading {artifact_name} to COS...')
-          with open(artifact_name, 'rb') as f:
-              client.put_object(
-                  Bucket=bucket,
-                  Body=f,
-                  Key=artifact_name
-              )
+          client.upload_file(
+              Bucket=bucket,
+              LocalFilePath=artifact_name,
+              Key=artifact_name,
+              PartSize=1,
+              MAXThread=10
+          )
           print(f'{artifact_name} upload completed.')
           "
 
