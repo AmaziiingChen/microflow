@@ -40,7 +40,6 @@ jobs:
           ${{ matrix.build_cmd }}
 
       # 【核心大招】弃用手写 Python，换用腾讯云官方 CLI 工具跨国强传
-      # 【核心大招】弃用手写 Python，换用腾讯云官方 CLI 工具跨国强传
       - name: Upload to Tencent Cloud COS via Official CLI
         shell: bash   # <--- 【就是加这一行！】强制 Windows 使用 bash 执行脚本
         env:
@@ -100,10 +99,8 @@ jobs:
           region = os.environ['REGION']
           tag_name = os.environ['TAG_NAME']
 
-          # 下载链接彻底回归国内腾讯云原生直链，告别第三方代理
           base_url = f'https://{bucket}.cos.{region}.myqcloud.com'
 
-          # 这里是你的终极遥控器与公告下发面板
           version_info = {
               'version': tag_name,
               'latestVersion': tag_name, # 兼容 CC 的读取习惯

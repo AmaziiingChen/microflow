@@ -153,7 +153,7 @@ if __name__ == '__main__':
         error_html = """
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-align: center; margin-top: 20vh; color: #111827;">
             <h2 style="color: #E11D48;">访问受限</h2>
-            <p style="color: #4B5563; font-size: 14px;">微流 Microflow 仅限在深圳技术大学校园网环境下运行。</p>
+            <p style="color: #4B5563; font-size: 14px;">Microflow（微流） 仅限在深圳技术大学校园网环境下运行。</p>
             <p style="color: #4B5563; font-size: 14px;">请连接校园 WiFi 后重新启动软件。</p>
         </div>
         """
@@ -174,7 +174,7 @@ if __name__ == '__main__':
 
     # 创建原生窗口 (保留了你设置的 450x750 尺寸和相关属性)
     window = webview.create_window(
-        title='微流 Microflow',
+        title='Microflow',
         url=html_url,
         js_api=api,
         width=465,
