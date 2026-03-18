@@ -916,7 +916,10 @@
                             class="attachment-card"
                             @click="downloadFile(att)">
                             <div class="att-icon">
-                                <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="color: #8395FF;">
+                                <!-- 自定义图标 -->
+                                <img v-if="getAttachmentIcon(att.name)" :src="getAttachmentIcon(att.name)" width="24" height="24" style="vertical-align: middle;">
+                                <!-- 默认图标 -->
+                                <svg v-else viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="color: #8395FF;">
                                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                                     <polyline points="14 2 14 8 20 8"></polyline>
                                     <line x1="16" y1="13" x2="8" y2="13"></line>
@@ -2073,6 +2076,36 @@
                     return truncatedStates.value[url] || false;
                 };
 
+                // 🌟 根据文件扩展名获取对应图标
+                const getAttachmentIcon = (filename) => {
+                    if (!filename) return null;
+                    const ext = filename.split('.').pop().toLowerCase();
+
+                    // PDF 文件
+                    if (ext === 'pdf') return 'icons/pdf.svg';
+
+                    // Word 文档
+                    if (['doc', 'docx'].includes(ext)) return 'icons/doc.svg';
+
+                    // PPT 文件
+                    if (['ppt', 'pptx'].includes(ext)) return 'icons/ppt.svg';
+
+                    // Excel 文件
+                    if (['xls', 'xlsx', 'csv'].includes(ext)) return 'icons/xls.svg';
+
+                    // 图片文件
+                    if (['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'ico', 'tiff', 'tif'].includes(ext)) return 'icons/picture.svg';
+
+                    // 压缩文件
+                    if (['zip', '7z', 'rar', 'tar', 'gz', 'bz2', 'xz'].includes(ext)) return 'icons/zip.svg';
+
+                    // 文本文档
+                    if (['txt', 'text', 'log', 'md', 'markdown'].includes(ext)) return 'icons/txt.svg';
+
+                    // 其他文件类型，返回 null 使用默认图标
+                    return null;
+                };
+
                 const truncateMiddle = (filename) => {
                     if (!filename) return { start: '', end: '', suffix: '', short: true };
 
@@ -2108,7 +2141,9 @@
                     // 🌟 新增：订阅管理相关
                     allAvailableSources, selectAllSources, deselectAllSources,
                     // 🌟 新增：文件名拆分（中间省略）
-                    truncateMiddle, setPrefixRef, setAttNameRef, isPrefixTruncated
+                    truncateMiddle, setPrefixRef, setAttNameRef, isPrefixTruncated,
+                    // 🌟 新增：附件图标
+                    getAttachmentIcon
                 };
             }
         }).mount('#app');
