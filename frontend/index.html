@@ -115,6 +115,19 @@
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02); /* 按下时阴影变小，符合物理直觉 */
         }
 
+        /* 🌟 系统公告卡片特殊样式 */
+        .announcement-card {
+            background-color: #F0F9FF !important; /* 极浅的蓝色背景 */
+            border-color: #BAE6FD !important;
+        }
+        .announcement-card:hover {
+            background-color: #E0F2FE !important;
+            border-color: #7DD3FC !important;
+        }
+        .announcement-icon {
+            margin-right: 6px;
+        }
+
         /* 标题行：标题 + 附件图标 弹性布局 */
         .title-row {
             display: flex;
@@ -1083,14 +1096,18 @@
                 </div>
             </div>
 
-            <div v-for="(item, index) in processedArticles" :key="item.url" class="list-card" @click="openDetail(item)">
+            <div v-for="(item, index) in processedArticles" :key="item.id || item.url"
+                :class="['list-card', { 'announcement-card': item.is_announcement }]"
+                @click="item.is_announcement ? handleNoticeClick(item) : openDetail(item)">
                 <!-- 标题行：标题 + 附件图标 -->
                 <div class="title-row">
                     <h3 class="list-card-title" :class="item.is_read === 0 ? 'unread' : 'read'">
+                        <!-- 🌟 公告图标 -->
+                        <span v-if="item.is_announcement" class="announcement-icon">📢</span>
                         {{ item.title }}
                     </h3>
-                    <!-- 附件图标：仅当有附件时显示 -->
-                    <span v-if="item.parsedAttachments && item.parsedAttachments.length > 0"
+                    <!-- 附件图标：仅当有附件时显示，公告不显示 -->
+                    <span v-if="!item.is_announcement && item.parsedAttachments && item.parsedAttachments.length > 0"
                           class="attachment-icon" :title="'共 ' + item.parsedAttachments.length + ' 个附件'">
                         <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
                             <path d="M147.328 0C101.504 0 64 36.864 64 81.92v860.16C64 987.136 101.504 1024 147.328 1024h729.344c45.824 0 83.328-36.864 83.328-81.92V286.72L668.288 0h-520.96z" fill="#BBC6FF"/>
@@ -1102,7 +1119,7 @@
                 <div class="article-meta">
                     <!-- AI 标签：只渲染第一个，使用莫兰迪配色循环 -->
                     <span v-if="item.parsedTags && item.parsedTags.length > 0"
-                          :class="['tag', 'morandi-' + (index % 8), { 'tag-dimmed': item.is_read }]">
+                          :class="['tag', item.is_announcement ? 'tag-blue' : 'morandi-' + (index % 8), { 'tag-dimmed': item.is_read && !item.is_announcement }]">
                         {{ item.parsedTags[0] }}
                     </span>
                     <!-- 部门：优先显示（公文通场景） -->
@@ -1441,6 +1458,20 @@
                 // 统一的标签颜色获取函数（详情页彩色标签用）
                 const getTagColor = (index) => tagColors[index % tagColors.length];
 
+                // 🌟 新增：系统公告状态
+                const systemNotice = ref({
+                    id: 'sys_notice_1',
+                    title: '🚀 欢迎使用 MicroFlow (微流)',
+                    publish_time: new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }),
+                    department: '系统公告',
+                    tags: ['新手指南', '版本 1.0.0'],
+                    summary: '初次见面！为了让 AI 能够为您智能总结公文，请点击本卡片进入设置界面，配置您的 API 密钥。这里未来也会是接收最新版本更新和系统通知的地方。',
+                    is_announcement: true,
+                    version: '1.0.0'
+                });
+                // 🌟 新增：已读公告版本，从 localStorage 初始化
+                const readNoticeVersion = ref(localStorage.getItem('microflow_read_notice') || '');
+
                 // 全局时间格式化函数：yyyy年mm月dd日 HH:mm 或 yyyy年mm月dd日
                 const formatDateTime = (dateStr) => {
                     if (!dateStr) return '';
@@ -1730,7 +1761,7 @@
                 const processedArticles = computed(() => {
                     // 👇 变化 1：用 let mapped = 把 map 的结果存起来，而不是直接 return
                     let mapped = articles.value.map(item => {
-                        
+
                         // ======= 1. 你原有的：解析 AI 返回的【标签】和正文 =======
                         let parsedTags = [];
                         let parsedBody = item.summary || "无总结内容";
@@ -1755,8 +1786,8 @@
                                 // 把 Python 存入的 JSON 字符串还原成 JS 数组
                                 parsedAttachments = JSON.parse(item.attachments);
                             }
-                        } catch (e) { 
-                            console.error("附件解析失败", e); 
+                        } catch (e) {
+                            console.error("附件解析失败", e);
                         }
 
                         // ======= 3. 最终组装返回 =======
@@ -1784,9 +1815,46 @@
                         });
                     }
 
-                    // 👇 变化 4：最后把过滤并排好序的数组 return 出去
+                    // 👇 变化 4：整合系统公告
+                    // 构造公告对象，格式与公文一致
+                    const noticeItem = {
+                        id: systemNotice.value.id,
+                        title: systemNotice.value.title,
+                        publish_time: systemNotice.value.publish_time,
+                        department: systemNotice.value.department,
+                        parsedTags: systemNotice.value.tags,
+                        parsedBody: systemNotice.value.summary,
+                        summary: systemNotice.value.summary,
+                        is_announcement: true,
+                        version: systemNotice.value.version,
+                        formattedTime: systemNotice.value.publish_time,
+                        is_read: readNoticeVersion.value >= systemNotice.value.version ? 1 : 0
+                    };
+
+                    // 判断公告是否已读
+                    const isNoticeRead = readNoticeVersion.value >= systemNotice.value.version;
+                    if (!isNoticeRead) {
+                        // 未读：置顶
+                        mapped.unshift(noticeItem);
+                    } else {
+                        // 已读：沉底
+                        mapped.push(noticeItem);
+                    }
+
+                    // 👇 变化 5：最后把整合好的数组 return 出去
                     return mapped;
                 });
+
+                // 🌟 新增：处理系统公告点击
+                const handleNoticeClick = (item) => {
+                    if (item.is_announcement) {
+                        // 标记为已读
+                        localStorage.setItem('microflow_read_notice', item.version);
+                        readNoticeVersion.value = item.version;
+                        // 打开设置面板
+                        openSettings();
+                    }
+                };
 
                 const page = ref(1);
                 const isLoadingMore = ref(false);
@@ -2645,7 +2713,9 @@
                     // 🌟 新增：附件图标
                     getAttachmentIcon,
                     // 🌟 新增：自定义字体导入
-                    importCustomFont
+                    importCustomFont,
+                    // 🌟 新增：公告点击处理
+                    handleNoticeClick
                 };
             }
         }).mount('#app');
