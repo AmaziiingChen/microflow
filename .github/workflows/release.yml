@@ -103,20 +103,26 @@ jobs:
           # 下载链接彻底回归国内腾讯云原生直链，告别第三方代理
           base_url = f'https://{bucket}.cos.{region}.myqcloud.com'
 
+          # 这里是你的终极遥控器与公告下发面板
           version_info = {
               'version': tag_name,
+              'latestVersion': tag_name, # 兼容 CC 的读取习惯
               'release_date': datetime.now().isoformat(),
               'is_active': True,
-              'kill_message': '由于合规性要求，MicroFlow 已永久停止服务。祝大家学业顺利！',
+              'kill_message': '由于合规性要求，MicroFlow 已永久停止服务。感谢您的使用。',
               'announcement': {
                   'id': f'notice_{tag_name}',
-                  'title': '🚀 欢迎使用 MicroFlow (微流)',
+                  'title': f'MicroFlow {tag_name} 更新公告',
+                  'version': tag_name,
+                  'publish_time': datetime.now().strftime('%Y年%m月%d日'),
+                  'department': '系统公告',
                   'tags': ['系统通知', tag_name],
-                  'summary': '初次见面！为了让 AI 能够为您智能总结公文，请点击本卡片进入设置界面，配置您的 API 密钥。'
+                  'summary': '初次见面！为了让 AI 能够为您智能总结公文，请先配置您的 API 密钥。',
+                  'content': '亲爱的同学/老师，欢迎使用 MicroFlow！<br><br>为了让 AI 能够为您智能总结长篇公文，您需要先配置 AI 的 API 密钥。<br><br>👉 **配置方法**：请点击本界面**左上角的「设置/齿轮」图标**，在弹出的面板中填入您的 API 信息。<br><br>配置完成后，您就可以体验极速的公文摘要功能了。'
               },
               'downloads': {
-                  'windows': f'{base_url}/microflow_win.exe',
-                  'macos': f'{base_url}/microflow_mac.zip'
+                  'github': f'https://github.com/{repo}/releases/tag/{tag_name}',
+                  'netdisk': '您可以去腾讯云手动修改此 JSON 文件，填入您的网盘链接'
               }
           }
 

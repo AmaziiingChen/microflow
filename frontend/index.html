@@ -1192,18 +1192,56 @@
                 </div>
 
                 <div class="meta-badges">
-                    <span class="meta-badge">
-                        {{ activeArticle.source_name === '公文通' ? (activeArticle.department || '未知部门') : activeArticle.source_name }}
-                    </span>
-
-                    <span class="meta-badge">{{ activeArticle.category || '未知类别' }}</span>
-                    <span class="meta-badge">{{ formatDateTime(activeArticle.exact_time || activeArticle.date) }}</span>
+                    <!-- 🌟 公告特殊处理：显示版本号和发布时间 -->
+                    <template v-if="activeArticle.is_announcement">
+                        <span class="meta-badge" style="background: #EFF6FF; color: #1E40AF; border-color: #BFDBFE;">系统通知</span>
+                        <span class="meta-badge">v{{ activeArticle.version }}</span>
+                        <span class="meta-badge">{{ activeArticle.publish_time || activeArticle.formattedTime }}</span>
+                    </template>
+                    <!-- 普通公文：保持原有逻辑 -->
+                    <template v-else>
+                        <span class="meta-badge">
+                            {{ activeArticle.source_name === '公文通' ? (activeArticle.department || '未知部门') : activeArticle.source_name }}
+                        </span>
+                        <span class="meta-badge">{{ activeArticle.category || '未知类别' }}</span>
+                        <span class="meta-badge">{{ formatDateTime(activeArticle.exact_time || activeArticle.date) }}</span>
+                    </template>
                 </div>
             </div>
 
             <div class="detail-content markdown-body" id="scroll-container">
-                
-                <div v-html="renderMarkdown(activeArticle.parsedBody)"></div>
+
+                <!-- 🌟 公告详情页：特殊排版 -->
+                <template v-if="activeArticle.is_announcement">
+                    <div class="announcement-detail-wrapper" style="background: linear-gradient(135deg, #F0F9FF 0%, #E0F2FE 100%); border-radius: 16px; padding: 24px; margin-bottom: 20px;">
+                        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                            <span style="font-size: 32px;">📢</span>
+                            <div>
+                                <div style="font-size: 14px; color: #3B82F6; font-weight: 700;">系统公告</div>
+                                <div style="font-size: 12px; color: #6B7280;">版本 v{{ activeArticle.version }}</div>
+                            </div>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.7); border-radius: 12px; padding: 16px; font-size: 15px; line-height: 1.8; color: #374151;">
+                            <div v-html="renderMarkdown(activeArticle.parsedBody || activeArticle.summary)"></div>
+                        </div>
+                    </div>
+
+                    <!-- 公告专属操作提示 -->
+                    <div style="background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 12px; padding: 16px; margin-top: 16px;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                            <span style="font-size: 18px;">⚙️</span>
+                            <span style="font-weight: 700; color: #92400E;">配置 AI 引擎</span>
+                        </div>
+                        <p style="margin: 0; font-size: 14px; color: #78350F; line-height: 1.6;">
+                            点击左上角的 <strong>齿轮图标</strong> 进入设置界面，配置您的 API 密钥即可启用智能摘要功能。
+                        </p>
+                    </div>
+                </template>
+
+                <!-- 普通公文：原有渲染逻辑 -->
+                <template v-else>
+                    <div v-html="renderMarkdown(activeArticle.parsedBody)"></div>
+                </template>
 
                 <div v-if="activeArticle.parsedAttachments && activeArticle.parsedAttachments.length > 0" 
                      class="attachments-section" id="attachments-area">
@@ -1461,14 +1499,61 @@
                 // 🌟 新增：系统公告状态
                 const systemNotice = ref({
                     id: 'sys_notice_1',
-                    title: '🚀 欢迎使用 MicroFlow (微流)',
+                    title: '欢迎使用 MicroFlow (微流)',
                     publish_time: new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }),
                     department: '系统公告',
                     tags: ['新手指南', '版本 1.0.0'],
                     summary: '初次见面！为了让 AI 能够为您智能总结公文，请点击本卡片进入设置界面，配置您的 API 密钥。这里未来也会是接收最新版本更新和系统通知的地方。',
+                    content: '亲爱的同学/老师，欢迎使用 MicroFlow！<br><br>为了让 AI 能够为您智能总结长篇公文，您需要先配置 AI 的 API 密钥。<br><br>👉 **配置方法**：请点击本界面**左上角的「设置/齿轮」图标**，在弹出的面板中填入您的 API 信息。<br><br>配置完成后，您就可以体验极速的公文摘要功能了。本卡片不仅是新手指南，未来也会在这里向您推送最新的版本更新说明。',
                     is_announcement: true,
                     version: '1.0.0'
                 });
+
+                // 🌟 新增：云端配置拉取方法
+                const latestVersion = ref(''); // 记录最新版本号
+                const fetchSystemConfig = async () => {
+                    // 云端配置 JSON 直链（请替换为实际地址）
+                    const configUrl = 'https://microflow-1412347033.cos.ap-guangzhou.myqcloud.com/version.json';
+
+                    try {
+                        const response = await fetch(configUrl, {
+                            method: 'GET',
+                            cache: 'no-cache', // 避免缓存
+                            headers: { 'Accept': 'application/json' }
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}`);
+                        }
+
+                        const data = await response.json();
+
+                        // 解析云端配置，更新 systemNotice
+                        if (data.announcement) {
+                            systemNotice.value = {
+                                id: data.announcement.id || 'sys_notice_1',
+                                title: data.announcement.title || systemNotice.value.title,
+                                publish_time: data.announcement.publish_time || systemNotice.value.publish_time,
+                                department: data.announcement.department || '系统公告',
+                                tags: data.announcement.tags || systemNotice.value.tags,
+                                summary: data.announcement.summary || systemNotice.value.summary,
+                                content: data.announcement.content || systemNotice.value.content,
+                                is_announcement: true,
+                                version: data.announcement.version || systemNotice.value.version
+                            };
+                        }
+
+                        // 记录最新版本号
+                        if (data.latestVersion) {
+                            latestVersion.value = data.latestVersion;
+                        }
+
+                        console.log('✅ 云端配置拉取成功:', data);
+                    } catch (error) {
+                        console.warn('⚠️ 云端配置拉取失败，使用本地保底公告:', error.message);
+                        // 网络失败时保持本地默认公告不变
+                    }
+                };
                 // 🌟 新增：已读公告版本，从 localStorage 初始化
                 const readNoticeVersion = ref(localStorage.getItem('microflow_read_notice') || '');
 
@@ -1822,8 +1907,10 @@
                         title: systemNotice.value.title,
                         publish_time: systemNotice.value.publish_time,
                         department: systemNotice.value.department,
+                        source_name: '系统通知', // 🌟 彩色标签显示
+                        category: `v${systemNotice.value.version}`, // 🌟 灰色标签显示版本号
                         parsedTags: systemNotice.value.tags,
-                        parsedBody: systemNotice.value.summary,
+                        parsedBody: systemNotice.value.content || systemNotice.value.summary,
                         summary: systemNotice.value.summary,
                         is_announcement: true,
                         version: systemNotice.value.version,
@@ -1851,8 +1938,10 @@
                         // 标记为已读
                         localStorage.setItem('microflow_read_notice', item.version);
                         readNoticeVersion.value = item.version;
-                        // 打开设置面板
-                        openSettings();
+                        // 进入公文详情页（与普通公文一致）
+                        activeArticle.value = item;
+                        lastArticle.value = item;
+                        currentView.value = 'detail';
                     }
                 };
 
@@ -1913,6 +2002,9 @@
                     window.addEventListener('pywebviewready', async () => {
                         console.log('pywebviewready 事件触发');
                         // debugEl.innerHTML += '<br>✅ pywebviewready 触发 | 加载数据...';
+
+                        // 🌟 新增：异步拉取云端配置（不阻塞主流程）
+                        fetchSystemConfig().catch(err => console.warn('云端配置拉取异常:', err));
 
                         // 👇 修复：启动时立刻读取并应用全局配置（如字体、深色模式等）
                         try {
