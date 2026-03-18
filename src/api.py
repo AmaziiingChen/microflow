@@ -11,6 +11,7 @@ import logging
 import webview
 import os
 import json
+import shutil
 from typing import Dict, Any, Optional
 
 from src.database import db
@@ -389,4 +390,43 @@ class Api:
 
         except Exception as e:
             logger.error(f"重新生成总结失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def import_custom_font(self) -> Dict[str, Any]:
+        """呼出系统原生文件选择器，导入并持久化自定义字体"""
+        try:
+            file_types = ('字体文件 (*.ttf;*.otf;*.woff;*.woff2)', '所有文件 (*.*)')
+            # 呼出文件选择对话框
+            result = webview.windows[0].create_file_dialog(
+                webview.OPEN_DIALOG,
+                allow_multiple=False,
+                file_types=file_types
+            )
+
+            if not result:
+                return {"status": "cancelled"}
+
+            source_path = result[0]
+            ext = os.path.splitext(source_path)[1].lower()
+            if ext not in ['.ttf', '.otf', '.woff', '.woff2']:
+                return {"status": "error", "message": "不支持的字体格式，仅支持 ttf/otf/woff/woff2"}
+
+            # 将字体安全拷贝到 frontend/fonts 目录下，供本地 HTTP 服务器读取
+            frontend_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'frontend')
+            fonts_dir = os.path.join(frontend_dir, 'fonts')
+            os.makedirs(fonts_dir, exist_ok=True)
+
+            # 统一重命名避免编码问题
+            target_filename = f"custom_font{ext}"
+            target_path = os.path.join(fonts_dir, target_filename)
+
+            shutil.copy2(source_path, target_path)
+
+            return {
+                "status": "success",
+                "font_path": f"fonts/{target_filename}",
+                "font_name": os.path.basename(source_path)
+            }
+        except Exception as e:
+            logger.error(f"导入字体失败: {e}")
             return {"status": "error", "message": str(e)}

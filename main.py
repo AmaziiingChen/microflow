@@ -3,7 +3,7 @@ import os
 import sys
 import pystray
 from PIL import Image, ImageDraw
-
+import requests
 # 引入我们的"总调度室"
 from src.api import Api
 
@@ -12,6 +12,22 @@ from src.api import Api
 _tray_icon = None
 _has_alert = False
 _base_icon_256 = None  # 存储超清母版，用于后续超采样画红点
+
+def check_campus_network() -> bool:
+    """探测是否处于校园网环境"""
+    try:
+        # 尝试访问仅限内网访问的公文通主页或特定 API
+        # 设置极短的超时时间（如 2 秒），避免用户在非内网环境下白白等待
+        target_url = "https://nbw.sztu.edu.cn/list.jsp?urltype=tree.TreeTempUrl&wbtreeid=1029" # 替换为真实的公文通内网地址
+        response = requests.head(target_url, timeout=2, verify=False)
+        
+        # 只要能连通（无论返回 200 还是 302 重定向），都说明在内网
+        return True
+    except requests.exceptions.RequestException:
+        # 包含 Timeout, ConnectionError 等，说明外网无法解析或连接
+        return False
+    
+
 
 def set_tray_alert():
     """在托盘图标上显示红点提醒（超采样抗锯齿版）"""
@@ -134,6 +150,14 @@ def load_tray_icon():
     else:
         print(f"⚠️ 找不到托盘图标文件: {icon_path}")
 if __name__ == '__main__':
+    if not check_campus_network():
+        # 如果不在校园网，弹出一个系统原生警告窗并退出程序
+        # 或者启动一个只显示“请连接校园网”的专用单页面 HTML
+        webview.create_window('网络错误', html='<h2 style="text-align:center;margin-top:20vh;">请连接深圳技术大学校园网后使用本软件</h2>', width=500, height=200)
+        webview.start()
+        sys.exit(0)
+    
+    # 网络校验通过，正常启动原本的通文逻辑...
     # 实例化后端桥接 API
     api = Api()
     

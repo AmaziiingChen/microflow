@@ -633,7 +633,7 @@
         .settings-view::-webkit-scrollbar-thumb:hover {
             background-color: rgba(0, 0, 0, 0.3); /* 鼠标悬浮时颜色加深，提供交互反馈 */
         }
-        .settings-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; border-bottom: 1px solid var(--border-color); padding-bottom: 16px; }
+        .settings-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; }
         .settings-header h2 { 
             margin: 0; 
             font-size: 20px; 
@@ -838,10 +838,10 @@
         }
 
         .settings-section-title {
-            font-size: 13px;
+            font-size: 12.5px;
             font-weight: 700;
             color: #6B7280;
-            margin: 24px 0 8px 12px;
+            margin: 16px 0 8px 4px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
@@ -896,6 +896,82 @@
         }
         .ios-toggle:checked { background: var(--accent-color); }
         .ios-toggle:checked::after { transform: translateX(20px); }
+
+        /* ================= 新增：iOS 风格行列表 (用于字体选择) ================= */
+        .list-row-group {
+            border: 1px solid #E5E7EB;
+            border-radius: 10px;
+            overflow: hidden;
+            background: #FFFFFF;
+        }
+        .list-row-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 16px;
+            cursor: pointer;
+            transition: background 0.2s;
+            border-bottom: 1px solid #F3F4F6;
+        }
+        .list-row-item:last-child { border-bottom: none; }
+        .list-row-item:hover { background: #F9FAFB; }
+        .list-row-item:active { background: #F3F4F6; }
+
+        /* 原生风格单选勾号 */
+        .row-check {
+            color: transparent;
+            font-weight: 900;
+            font-size: 16px;
+            transition: color 0.2s;
+        }
+        .list-row-item.active .row-check { color: var(--accent-color); }
+
+        /* ================= 新增：分段控制器 (用于追踪模式) ================= */
+        .segmented-control {
+            display: flex;
+            background: #F3F4F6;
+            padding: 3px;
+            border-radius: 8px;
+        }
+        .segment-item {
+            flex: 1;
+            text-align: center;
+            padding: 8px 0;
+            font-size: 13px;
+            font-weight: 600;
+            color: #6B7280;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .segment-item.active {
+            background: #FFFFFF;
+            color: #111827;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+        }
+
+        /* ================= 新增：独立悬浮的 Toast 提示语 ================= */
+        .floating-toast {
+            position: fixed;
+            bottom: 90px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(17, 24, 39, 0.85);
+            backdrop-filter: blur(8px);
+            color: #FFFFFF;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 9999;
+            pointer-events: none;
+            animation: toastFadeIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+        @keyframes toastFadeIn {
+            from { opacity: 0; transform: translate(-50%, 10px); }
+            to { opacity: 1; transform: translate(-50%, 0); }
+        }
 
         /* 胶囊式多选按钮 (订阅管理) */
         .subs-chip {
@@ -1190,33 +1266,42 @@
             <div class="settings-card">
                 <div class="form-group">
                     <label class="form-label">阅读字体</label>
-                    <div style="display: flex; gap: 12px;">
-                        <label class="custom-radio" :class="{ active: config.fontFamily === 'sans-serif' }" style="flex: 1; padding: 16px; border: 1.5px solid var(--border-color); border-radius: 10px; cursor: pointer; transition: 0.2s;" :style="{ borderColor: config.fontFamily === 'sans-serif' ? 'var(--accent-color)' : '', background: config.fontFamily === 'sans-serif' ? '#F4F8FF' : '' }">
-                            <input type="radio" value="sans-serif" v-model="config.fontFamily">
-                            <div style="font-weight: 800; font-size: 15px; color: #111;">现代黑体</div>
-                            <!-- <div style="font-size: 12px; color: #6B7280; margin-top: 4px;">极简清晰，适合快读阅读</div> -->
-                        </label>
-                        <label class="custom-radio" :class="{ active: config.fontFamily === 'serif' }" style="flex: 1; padding: 16px; border: 1.5px solid var(--border-color); border-radius: 10px; cursor: pointer; transition: 0.2s;" :style="{ borderColor: config.fontFamily === 'serif' ? 'var(--accent-color)' : '', background: config.fontFamily === 'serif' ? '#F4F8FF' : '' }">
-                            <input type="radio" value="serif" v-model="config.fontFamily">
-                            <div style="font-weight: 800; font-size: 15px; color: #111; font-family: 'Source Han Serif SC', serif;">思源宋体</div>
-                            <!-- <div style="font-size: 12px; color: #6B7280; margin-top: 4px;">优雅衬线，还原红头文件质感</div> -->
-                        </label>
+                    <div class="list-row-group">
+                        <div class="list-row-item" :class="{ active: config.fontFamily === 'sans-serif' }" @click="config.fontFamily = 'sans-serif'">
+                            <span style="font-weight: 700; font-size: 15px; color: #111;">现代黑体</span>
+                            <span class="row-check">✓</span>
+                        </div>
+                        <div class="list-row-item" :class="{ active: config.fontFamily === 'serif' }" @click="config.fontFamily = 'serif'">
+                            <span style="font-weight: 700; font-size: 15px; color: #111; font-family: 'Source Han Serif SC', serif;">思源宋体</span>
+                            <span class="row-check">✓</span>
+                        </div>
+                        <div class="list-row-item" :class="{ active: config.fontFamily === 'custom' }" @click="config.fontFamily = 'custom'">
+                            <div style="display: flex; align-items: center; gap: 12px; width: 100%;">
+                                <span style="font-weight: 700; font-size: 15px; color: #111; font-family: 'UserCustomFont', sans-serif;">外部导入</span>
+                                <span style="font-size: 12px; color: #9CA3AF; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                    {{ config.customFontName ? config.customFontName : '未导入字体' }}
+                                </span>
+                                <button class="badge-attachment" style="margin: 0;" @click.stop="importCustomFont">
+                                    {{ config.customFontName ? '更换' : '导入' }}
+                                </button>
+                                <span class="row-check" style="margin-left: 4px;">✓</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
                 <div class="form-group">
                     <label class="form-label">追踪模式</label>
-                    <div style="display: flex; gap: 12px;">
-                        <label class="custom-radio" :class="{ active: config.trackMode === 'today' }" style="flex: 1; padding: 12px 16px; border: 1.5px solid var(--border-color); border-radius: 10px; cursor: pointer;" :style="{ borderColor: config.trackMode === 'today' ? 'var(--accent-color)' : '', background: config.trackMode === 'today' ? '#F4F8FF' : '' }">
-                            <input type="radio" value="today" v-model="config.trackMode">
-                            <div style="font-weight: 800; font-size: 14px;">当日追踪</div>
-                            <div style="font-size: 11px; color: #6B7280;">仅抓取今日新发布</div>
-                        </label>
-                        <label class="custom-radio" :class="{ active: config.trackMode === 'continuous' }" style="flex: 1; padding: 12px 16px; border: 1.5px solid var(--border-color); border-radius: 10px; cursor: pointer;" :style="{ borderColor: config.trackMode === 'continuous' ? 'var(--accent-color)' : '', background: config.trackMode === 'continuous' ? '#F4F8FF' : '' }">
-                            <input type="radio" value="continuous" v-model="config.trackMode">
-                            <div style="font-weight: 800; font-size: 14px;">持续追踪</div>
-                            <div style="font-size: 11px; color: #6B7280;">自动补抓历史遗漏</div>
-                        </label>
+                    <div class="segmented-control">
+                        <div class="segment-item" :class="{ active: config.trackMode === 'today' }" @click="config.trackMode = 'today'">
+                            当日追踪
+                        </div>
+                        <div class="segment-item" :class="{ active: config.trackMode === 'continuous' }" @click="config.trackMode = 'continuous'">
+                            持续追踪
+                        </div>
+                    </div>
+                    <div style="font-size: 11px; color: #9CA3AF; text-align: center; margin-top: 8px;">
+                        {{ config.trackMode === 'today' ? '仅抓取今日新发布的公文，速度最快' : '自动向下翻页补抓历史遗漏的公文，更严谨' }}
                     </div>
                 </div>
 
@@ -1254,15 +1339,15 @@
             </div>
 
             <div style="display: flex; gap: 16px; position: sticky; bottom: 0; background: linear-gradient(to top, #F3F4F6 60%, transparent); padding: 20px 0;">
-                <button class="action-btn btn-secondary" style="flex: 1; padding: 12px; font-size: 14px;" @click="testConnection">
-                    {{ isTesting ? '测试中...' : '测试连接' }}
+                <button class="action-btn" style="flex: 1; padding: 12px; font-size: 14px; background: white; color: var(--accent-color); border: 1.5px solid var(--accent-color);" @click="testConnection">
+                    {{ isTesting ? '测试中...' : '测试 API 连接' }}
                 </button>
-                <button class="action-btn btn-primary" style="flex: 2; padding: 12px; font-size: 14px; box-shadow: 0 4px 12px rgba(52, 120, 246, 0.3);" @click="saveSettings">
+                <button class="action-btn btn-primary" style="flex: 1; padding: 12px; font-size: 14px; box-shadow: 0 4px 12px rgba(52, 120, 246, 0.3);" @click="saveSettings">
                     保存并应用配置
                 </button>
             </div>
 
-            <div v-if="settingsMsg" class="status-center" style="position: absolute; bottom: 80px; left: 0; right: 0; font-weight: 700; color: var(--accent-color);">
+            <div v-if="settingsMsg" class="floating-toast">
                 {{ settingsMsg }}
             </div>
         </div>
@@ -1355,17 +1440,59 @@
                     muteMode: false,
                     trackMode: 'continuous',
                     fontFamily: 'sans-serif', // 🌟 新增：字体风格，默认黑体
+                    customFontPath: '', // 🌟 新增：外部字体路径
+                    customFontName: '', // 🌟 新增：外部字体原始名称
                     subscribedSources: []  // 🌟 新增：订阅的来源列表
                 });
 
-                // 🌟 动态监听字体配置，将其直接作用于 body 标签
-                watch(() => config.value.fontFamily, (newFont) => {
+                // 🌟 新增：处理导入自定义字体
+                const importCustomFont = async () => {
+                    const res = await pywebview.api.import_custom_font();
+                    if (res.status === 'success') {
+                        config.value.customFontPath = res.font_path;
+                        config.value.customFontName = res.font_name;
+                        config.value.fontFamily = 'custom'; // 自动切换为自定义模式
+                        showSystemToast(`✅ 成功导入字体: ${res.font_name}`, "success");
+                    } else if (res.status === 'error') {
+                        showSystemToast(`❌ 导入失败: ${res.message}`, "error");
+                    }
+                };
+
+                // 🌟 动态监听字体配置，将其直接作用于 body 标签，支持动态外部字体注入
+                watch(() => [config.value.fontFamily, config.value.customFontPath], ([newFont, customPath]) => {
+                    // 清理可能存在的旧自定义样式
+                    const oldStyle = document.getElementById('tongwen-custom-font');
+                    if (oldStyle) oldStyle.remove();
+
+                    document.body.classList.remove('serif-mode', 'custom-font-mode');
+
                     if (newFont === 'serif') {
                         document.body.classList.add('serif-mode');
-                    } else {
-                        document.body.classList.remove('serif-mode');
+                    } else if (newFont === 'custom' && customPath) {
+                        // 🌟 核心修复：将相对路径转换为包含 http://127.0.0.1:port/ 的绝对网络路径
+                        // 这样 html2canvas 在生成 SVG 快照时，才能在无基准域名的沙盒中精准下载到字体
+                        const absoluteFontUrl = new URL(customPath, window.location.href).href;
+
+                        // 动态注入外部字体 CSS
+                        const style = document.createElement('style');
+                        style.id = 'tongwen-custom-font';
+                        style.innerHTML = `
+                            @font-face {
+                                font-family: 'UserCustomFont';
+                                src: url('${absoluteFontUrl}') format('${customPath.endsWith('woff2') ? 'woff2' : customPath.endsWith('woff') ? 'woff' : customPath.endsWith('otf') ? 'opentype' : 'truetype'}');
+                            }
+                            .custom-font-mode,
+                            .custom-font-mode .markdown-body, .custom-font-mode .list-card-title,
+                            .custom-font-mode .detail-title, .custom-font-mode .form-input,
+                            .custom-font-mode .search-input, .custom-font-mode .btn-check,
+                            .custom-font-mode button, .custom-font-mode input {
+                                font-family: 'UserCustomFont', "Helvetica Neue", Helvetica, "Segoe UI", Arial, sans-serif !important;
+                            }
+                        `;
+                        document.head.appendChild(style);
+                        document.body.classList.add('custom-font-mode');
                     }
-                }, { immediate: true }); // immediate: true 确保在软件刚打开、初始配置加载后立刻生效
+                }, { immediate: true, deep: true });
 
                 const showApiKey = ref(false); // 密钥显示/隐藏状态
                 const settingsMsg = ref('');
@@ -2087,7 +2214,7 @@
                 };
 
                 // ------------------------------------------------------------
-                // 保存长图快照 (Snapshot) - 终极护城河版：彻底解绑 viewport 锁定
+                // 保存长图快照 (Snapshot) - 终极护城河版：彻底解绑 viewport 锁定 & Base64字体穿透
                 // ------------------------------------------------------------
                 const takeSnapshot = async (item) => {
                     const oldMsg = statusMsg.value;
@@ -2097,6 +2224,45 @@
                     const scrollContent = document.querySelector('.detail-content');
 
                     if (!targetView || !scrollContent) return;
+
+                    // ============================================================
+                    // 🌟 终极修复：沙盒穿透！将外部字体转化为 Base64 纯文本注入
+                    // ============================================================
+                    let tempBase64Style = null;
+                    if (config.value.fontFamily === 'custom' && config.value.customFontPath) {
+                        try {
+                            statusMsg.value = '📸 正在打包字体资源...';
+                            const fontUrl = new URL(config.value.customFontPath, window.location.href).href;
+                            const response = await fetch(fontUrl);
+                            const blob = await response.blob();
+
+                            // 将字体文件转为 Base64 字符串格式（不再是 URL，而是文本数据）
+                            const base64Data = await new Promise((resolve) => {
+                                const reader = new FileReader();
+                                reader.onloadend = () => resolve(reader.result);
+                                reader.readAsDataURL(blob);
+                            });
+
+                            // 动态创建一个带 Base64 字体的 Style 标签，强制顶替原字体
+                            tempBase64Style = document.createElement('style');
+                            tempBase64Style.id = 'temp-snapshot-font';
+                            // 加上 !important 强制覆盖原本的 URL 字体
+                            tempBase64Style.innerHTML = `
+                                @font-face {
+                                    font-family: 'UserCustomFont';
+                                    src: url(${base64Data}) !important;
+                                }
+                            `;
+                            document.head.appendChild(tempBase64Style);
+
+                            // 停顿 150ms 让浏览器重新排版应用 Base64 字体
+                            await new Promise(resolve => setTimeout(resolve, 150));
+                        } catch (err) {
+                            console.warn('❌ 字体打包为 Base64 失败:', err);
+                        }
+                    }
+
+                    statusMsg.value = '📸 正在生成高清长截图，请稍候...';
 
                     // 1. 记录所有原始样式（包括 body 和 position 属性）
                     const origBodyHeight = document.body.style.height;
@@ -2177,7 +2343,10 @@
 
                         document.body.classList.remove('is-capturing');
 
-                        console.log('🔄 [Snapshot] CSS 布局已恢复正常。');
+                        // 🌟 卸载临时注入的 Base64 字体，释放内存
+                        if (tempBase64Style) tempBase64Style.remove();
+
+                        console.log('🔄 [Snapshot] CSS 布局与字体已恢复正常。');
                         setTimeout(() => statusMsg.value = oldMsg, 3000);
                     }
                 };
@@ -2423,7 +2592,9 @@
                     // 🌟 新增：文件名拆分（中间省略）
                     truncateMiddle, setPrefixRef, setAttNameRef, isPrefixTruncated,
                     // 🌟 新增：附件图标
-                    getAttachmentIcon
+                    getAttachmentIcon,
+                    // 🌟 新增：自定义字体导入
+                    importCustomFont
                 };
             }
         }).mount('#app');

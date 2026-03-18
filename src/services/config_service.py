@@ -20,6 +20,8 @@ class AppConfig:
     mute_mode: bool = False
     track_mode: str = "continuous"
     font_family: str = "sans-serif"  # 🌟 新增：字体风格
+    custom_font_path: str = ""  # 🌟 新增：外部字体路径
+    custom_font_name: str = ""  # 🌟 新增：外部字体原始名称
     subscribed_sources: list = field(default_factory=list)  # 🌟 新增：订阅的来源列表
 
 
@@ -76,6 +78,8 @@ class ConfigService:
                 mute_mode=data.get('muteMode', default.mute_mode),
                 track_mode=data.get('trackMode', default.track_mode),
                 font_family=data.get('fontFamily', default.font_family),  # 🌟 新增
+                custom_font_path=data.get('customFontPath', default.custom_font_path),  # 🌟 新增
+                custom_font_name=data.get('customFontName', default.custom_font_name),  # 🌟 新增
                 subscribed_sources=data.get('subscribedSources', default.subscribed_sources)  # 🌟 新增
             )
             return self._config
@@ -115,6 +119,8 @@ class ConfigService:
                 mute_mode=config_dict.get('muteMode', False),
                 track_mode=config_dict.get('trackMode', 'continuous'),
                 font_family=config_dict.get('fontFamily', 'sans-serif'),  # 🌟 新增
+                custom_font_path=config_dict.get('customFontPath', ''),  # 🌟 新增
+                custom_font_name=config_dict.get('customFontName', ''),  # 🌟 新增
                 subscribed_sources=config_dict.get('subscribedSources', [])  # 🌟 新增
             )
 
@@ -149,6 +155,8 @@ class ConfigService:
             "muteMode": config.mute_mode,
             "trackMode": config.track_mode,
             "fontFamily": config.font_family,  # 🌟 新增
+            "customFontPath": config.custom_font_path,  # 🌟 新增
+            "customFontName": config.custom_font_name,  # 🌟 新增
             "subscribedSources": config.subscribed_sources  # 🌟 新增
         }
 
@@ -174,6 +182,8 @@ class ConfigService:
             'muteMode': 'mute_mode',
             'trackMode': 'track_mode',
             'fontFamily': 'font_family',  # 🌟 新增
+            'customFontPath': 'custom_font_path',  # 🌟 新增
+            'customFontName': 'custom_font_name',  # 🌟 新增
             'subscribedSources': 'subscribed_sources',  # 🌟 新增
         }
 
