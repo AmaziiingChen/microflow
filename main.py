@@ -8,68 +8,56 @@ from PIL import Image, ImageDraw
 from src.api import Api
 
 # ================= 托盘红点管理 =================
-# 全局变量：存储托盘图标实例和原始图标图像
+# 全局变量：存储托盘图标实例
 _tray_icon = None
-_original_icon_image = None
 _has_alert = False
+_base_icon_256 = None  # 存储超清母版，用于后续超采样画红点
 
 def set_tray_alert():
-    """
-    在托盘图标上显示红点提醒
-    """
-    global _has_alert
-    if _tray_icon is None:
+    """在托盘图标上显示红点提醒（超采样抗锯齿版）"""
+    global _has_alert, _tray_icon, _base_icon_256
+    if _tray_icon is None or _base_icon_256 is None:
         return
 
     try:
-        # 读取原始图标
-        icon_path = get_icon_path()
-        if not os.path.exists(icon_path):
-            return
+        # 🌟 修复4：由于 PIL 画圆没有抗锯齿，我们必须在 256x256 的高清母版上画大红点
+        alert_canvas_256 = _base_icon_256.copy()
+        draw = ImageDraw.Draw(alert_canvas_256)
 
-        # 创建带有红点的图标
-        source_img = Image.open(icon_path).convert("RGBA")
+        red_dot_radius = 28
+        center_x = 256 - red_dot_radius - 12
+        center_y = red_dot_radius + 12
 
-        # 缩放到处理尺寸
-        target_canvas_size = 44
-        icon_visual_size = 36
-        resized_icon = source_img.resize((icon_visual_size, icon_visual_size), Image.Resampling.LANCZOS)
-
-        # 创建透明画布并居中贴上图标
-        final_icon = Image.new("RGBA", (target_canvas_size, target_canvas_size), (0, 0, 0, 0))
-        offset = (target_canvas_size - icon_visual_size) // 2
-        final_icon.paste(resized_icon, (offset, offset))
-
-        # 在右上角绘制红点
-        draw = ImageDraw.Draw(final_icon)
-        red_dot_radius = 6
-        red_dot_center = (target_canvas_size - red_dot_radius - 2, red_dot_radius + 2)
         draw.ellipse(
-            [red_dot_center[0] - red_dot_radius, red_dot_center[1] - red_dot_radius,
-             red_dot_center[0] + red_dot_radius, red_dot_center[1] + red_dot_radius],
-            fill='red',
-            outline='darkred',
-            width=1
+            [center_x - red_dot_radius, center_y - red_dot_radius,
+             center_x + red_dot_radius, center_y + red_dot_radius],
+            fill='#FF3B30',
+            outline='#C62828',
+            width=3
         )
 
-        # 更新托盘图标
-        _tray_icon.icon = final_icon
+        # 🌟 超采样缩小：将画满马赛克大红点的 256 画布，使用 LANCZOS 强压到 64x64。
+        # 此时像素级边缘会被完美的子像素抗锯齿算法柔化！
+        final_alert_64 = alert_canvas_256.resize((64, 64), Image.Resampling.LANCZOS)
+
+        _tray_icon.icon = final_alert_64
         _has_alert = True
         print("🔴 托盘红点已显示")
 
     except Exception as e:
         print(f"❌ 设置托盘红点失败: {e}")
-
 def clear_tray_alert():
     """
     清除托盘图标上的红点提醒
     """
     global _has_alert
-    if _tray_icon is None or _original_icon_image is None:
+    if _tray_icon is None or _base_icon_256 is None:
         return
 
     try:
-        _tray_icon.icon = _original_icon_image
+        # 从高清母版重新生成干净的 64x64 图标
+        clean_icon_64 = _base_icon_256.resize((64, 64), Image.Resampling.LANCZOS)
+        _tray_icon.icon = clean_icon_64
         _has_alert = False
         print("⚪ 托盘红点已清除")
     except Exception as e:
@@ -106,41 +94,45 @@ def get_icon_path():
     return os.path.join(base_path, 'frontend', 'icons', 'icon_white.png')
 
 def load_tray_icon():
-    """加载并高质量处理状态栏图标"""
+    """加载并高质量处理状态栏图标（超采样 SSAA 抗锯齿版）"""
     from PIL import Image
     import os
-    
+    global _base_icon_256
+
     icon_path = get_icon_path()
-    
-    # 针对高分屏 (Retina) 优化的标准状态栏尺寸
-    # macOS 推荐 22x22 视网膜对应 44x44，这里使用 32x32 是一个很好的平衡点
-    # 针对 macOS 高分屏的精确尺寸
-    target_canvas_size = 44  # 提供给 macOS 的最终画布尺寸
-    icon_visual_size = 36    # 实际图标的视觉尺寸（留出上下左右各 4 像素的 Padding）
+    target_canvas_size = 256
+    icon_visual_size = 210
 
     if os.path.exists(icon_path):
         try:
             source_img = Image.open(icon_path).convert("RGBA")
-            
-            # 1. 先将原图高质量缩放到较小的"视觉尺寸"
-            resized_icon = source_img.resize((icon_visual_size, icon_visual_size), Image.Resampling.LANCZOS)
-            
-            # 2. 创建一个完全透明的 44x44 终极画布
-            final_icon = Image.new("RGBA", (target_canvas_size, target_canvas_size), (0, 0, 0, 0))
-            
-            # 3. 计算居中偏移量并贴上去
-            offset = (target_canvas_size - icon_visual_size) // 2
-            final_icon.paste(resized_icon, (offset, offset))
-            
-            return final_icon
+
+            # 🌟 修复1：使用 thumbnail 保持比例，且抗锯齿算法更优
+            source_img.thumbnail((icon_visual_size, icon_visual_size), Image.Resampling.LANCZOS)
+
+            canvas_256 = Image.new("RGBA", (target_canvas_size, target_canvas_size), (0, 0, 0, 0))
+
+            offset_x = (target_canvas_size - source_img.width) // 2
+            offset_y = (target_canvas_size - source_img.height) // 2
+
+            # 🌟 修复2：paste 时必须传入第三个参数 source_img 作为 mask，否则透明边缘会发黑发硬！
+            canvas_256.paste(source_img, (offset_x, offset_y), source_img)
+
+            # 存储 256x256 高清母版，供后续画红点使用
+            _base_icon_256 = canvas_256
+
+            # 🌟 修复3：超采样抗锯齿 (SSAA) - 将 256 浓缩成完美的 64x64
+            final_icon_64 = canvas_256.resize((64, 64), Image.Resampling.LANCZOS)
+
+            # 调试探针：覆盖之前的旧探针
+            debug_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'debug_tray_icon.png')
+            final_icon_64.save(debug_path)
+
+            return final_icon_64
         except Exception as e:
             print(f"❌ 托盘图标处理失败: {e}")
-            # 优雅降级：如果失败，生成一个全透明的图块，防止程序直接崩溃
-            # return Image.new("RGBA", (target_size, target_size), (0, 0, 0, 0))
     else:
         print(f"⚠️ 找不到托盘图标文件: {icon_path}")
-        # return Image.new("RGBA", (target_size, target_size), (0, 0, 0, 0))
-
 if __name__ == '__main__':
     # 实例化后端桥接 API
     api = Api()
@@ -211,7 +203,7 @@ if __name__ == '__main__':
     # 🌟 保存到全局变量，供 api.py 调用
     import main as main_module
     main_module._tray_icon = tray_icon
-    main_module._original_icon_image = icon_image
+    # _base_icon_256 已在 load_tray_icon() 中设置
 
     # 3. 在 Webview 启动前，启动后台守护线程与托盘
     # run_detached() 会在独立的线程中跑托盘图标，不阻塞主 UI 线程

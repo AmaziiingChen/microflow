@@ -19,6 +19,7 @@ class AppConfig:
     auto_start: bool = False
     mute_mode: bool = False
     track_mode: str = "continuous"
+    font_family: str = "sans-serif"  # 🌟 新增：字体风格
     subscribed_sources: list = field(default_factory=list)  # 🌟 新增：订阅的来源列表
 
 
@@ -74,6 +75,7 @@ class ConfigService:
                 auto_start=data.get('autoStart', default.auto_start),
                 mute_mode=data.get('muteMode', default.mute_mode),
                 track_mode=data.get('trackMode', default.track_mode),
+                font_family=data.get('fontFamily', default.font_family),  # 🌟 新增
                 subscribed_sources=data.get('subscribedSources', default.subscribed_sources)  # 🌟 新增
             )
             return self._config
@@ -112,6 +114,7 @@ class ConfigService:
                 auto_start=config_dict.get('autoStart', False),
                 mute_mode=config_dict.get('muteMode', False),
                 track_mode=config_dict.get('trackMode', 'continuous'),
+                font_family=config_dict.get('fontFamily', 'sans-serif'),  # 🌟 新增
                 subscribed_sources=config_dict.get('subscribedSources', [])  # 🌟 新增
             )
 
@@ -145,6 +148,7 @@ class ConfigService:
             "autoStart": config.auto_start,
             "muteMode": config.mute_mode,
             "trackMode": config.track_mode,
+            "fontFamily": config.font_family,  # 🌟 新增
             "subscribedSources": config.subscribed_sources  # 🌟 新增
         }
 
@@ -169,6 +173,7 @@ class ConfigService:
             'autoStart': 'auto_start',
             'muteMode': 'mute_mode',
             'trackMode': 'track_mode',
+            'fontFamily': 'font_family',  # 🌟 新增
             'subscribedSources': 'subscribed_sources',  # 🌟 新增
         }
 
