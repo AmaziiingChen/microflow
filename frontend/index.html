@@ -622,10 +622,18 @@
             padding: 0 14px; /* 取消上下内边距，依靠 height 居中 */
             margin-right: 16px; transition: all 0.2s;
             box-sizing: border-box;
+            border: 2px solid transparent;
         }
-        /* 当搜索框被激活时，图标颜色稍微加深一点，增强交互反馈 */
+        /* 🌟 搜索框聚焦时加深颜色，增强交互反馈 */
+        .search-container:focus-within {
+            background: #D1D5DB;
+            border-color: #9CA3AF;
+        }
         .search-container:focus-within .search-svg-icon {
             color: #6B7280;
+        }
+        .search-container:focus-within .search-icon {
+            opacity: 0.7;
         }
         .search-input {
             border: none; background: transparent; outline: none; flex: 1;
@@ -777,8 +785,13 @@
                     <span v-if="progressText" style="font-size: 13px; font-weight: 600; color: #2563EB;">
                         {{ progressText }}
                     </span>
-                    <button class="btn-check" @click="checkUpdates" :disabled="isLoading">
-                        {{ isLoading ? '...' : '更新' }}
+                    <!-- <span v-if="isUpdateDisabled && !isLoading" style="font-size: 12px; color: #9CA3AF;">
+                        {{ updateCooldown }}秒后可更新
+                    </span> -->
+                    <button class="btn-check" @click="checkUpdates" :disabled="isLoading || isUpdateDisabled">
+                        <span v-if="isLoading">...</span>
+                        <span v-else-if="isUpdateDisabled">{{ updateCooldown }}s</span>
+                        <span v-else>更新</span>
                     </button>
                 </div>
             </div>
@@ -1097,6 +1110,11 @@
                 const isLoading = ref(false);
                 const statusMsg = ref('');
                 const progressText = ref(''); // 👈 新增响应式变量
+
+                // 🎯 更新按钮冷却时间相关变量
+                const updateCooldown = ref(0); // 剩余冷却秒数
+                const isUpdateDisabled = ref(false); // 是否禁用更新按钮
+                let cooldownTimer = null; // 冷却计时器
 
                 // 🎯 进度条相关变量
                 const totalTasks = ref(0);
@@ -1530,6 +1548,13 @@
                 };
 
                 const checkUpdates = async () => {
+                    // 🌟 检查是否在冷却时间内
+                    if (isUpdateDisabled.value) {
+                        statusMsg.value = `请等待 ${updateCooldown.value} 秒后再次更新`;
+                        setTimeout(() => statusMsg.value = '', 2000);
+                        return;
+                    }
+
                     isLoading.value = true;
                     statusMsg.value = "";
                     progressText.value = "正在获取列表...";
@@ -1555,9 +1580,13 @@
                                 console.warn('刷新来源列表失败:', e);
                             }
 
-                            // 🌟 修复 undefined 问题：读取后端真正的返回字段 new_count
+                            // 🌟 读取后端返回的 new_count 字段
                             const count = res.new_count || 0;
-                            statusMsg.value = count > 0 ? `更新完成，发现了 ${count} 篇新公文` : "当前已是最新，无新公文";
+                            if (count > 0) {
+                                statusMsg.value = `找到 ${count} 篇新内容，正在由AI总结...`;
+                            } else {
+                                statusMsg.value = "当前已是最新，无新公文";
+                            }
                         } else {
                             // 如果是报错，后端确实会返回 message 字段
                             statusMsg.value = "❌ " + (res.message || "更新失败");
@@ -1567,6 +1596,23 @@
                     } finally {
                         isLoading.value = false;
                         progressText.value = "";
+
+                        // 🌟 启动2分钟（120秒）冷却计时
+                        isUpdateDisabled.value = true;
+                        updateCooldown.value = 120;
+
+                        if (cooldownTimer) clearInterval(cooldownTimer);
+
+                        cooldownTimer = setInterval(() => {
+                            updateCooldown.value--;
+                            if (updateCooldown.value <= 0) {
+                                clearInterval(cooldownTimer);
+                                cooldownTimer = null;
+                                isUpdateDisabled.value = false;
+                                updateCooldown.value = 0;
+                            }
+                        }, 1000);
+
                         setTimeout(() => statusMsg.value = '', 4000);
                     }
                 };
@@ -2136,6 +2182,8 @@
                     currentView, activeArticle, lastArticle, isNavigatingBack, processedArticles, isLoading, statusMsg, tagColors, getTagColor, formatDateTime,
                     checkUpdates, openDetail, backToList, goToLastArticle, renderMarkdown, openBrowser, copyText, downloadFile,scrollToAttachments,takeSnapshot,progressText,page, isLoadingMore, noMoreData, loadMoreArticles,openSettings, backToPrevious, config, showApiKey, settingsMsg, isTesting, isRegenerating,
                     resetPrompt, saveSettings, testConnection,closeAppWindow,searchQuery, handleSearch, clearSearch, regenerateSummary,
+                    // 🌟 更新按钮冷却
+                    isUpdateDisabled, updateCooldown,
                     // 🌟 新增：来源筛选相关
                     sources, activeSource, filterBySource,
                     // 🌟 新增：订阅管理相关
