@@ -6,19 +6,15 @@ import threading
 import re
 from typing import Optional, Dict, Any
 
-logger = logging.getLogger(__name__)
+from src.core.paths import DB_PATH, ensure_data_dir_exists
 
-# 动态获取项目根目录，确保 PyInstaller 打包后也能找到 data 文件夹
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(BASE_DIR, 'data')
-DB_PATH = os.path.join(DATA_DIR, 'tongwen.db')
+logger = logging.getLogger(__name__)
 
 
 class DatabaseManager:
     def __init__(self):
-        # 确保 data 文件夹存在
-        if not os.path.exists(DATA_DIR):
-            os.makedirs(DATA_DIR)
+        # 确保数据目录存在（使用系统级持久化路径）
+        ensure_data_dir_exists()
 
         # 🌟 数据库级别的全局写锁（使用可重入锁，支持同一线程多次获取）
         self._write_lock = threading.RLock()
@@ -29,7 +25,7 @@ class DatabaseManager:
 
     def get_connection(self):
         """获取数据库连接的工厂方法"""
-        conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
         # --- 核心改进：开启 WAL 模式 ---
         conn.execute('PRAGMA journal_mode=WAL;')
         # 增加同步频率，让数据写入更安全（可选）

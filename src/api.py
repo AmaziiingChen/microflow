@@ -26,14 +26,14 @@ from src.llm_service import LLMService
 from src.services import SystemService, DownloadService, ConfigService
 from src.core import DaemonManager, SpiderScheduler, ArticleProcessor
 from src.core.scheduler import SPIDER_REGISTRY
+from src.core.network_utils import check_network_status, NetworkStatus
+from src.core.paths import CONFIG_PATH, ensure_data_dir_exists
 from src.version import __version__
 
 logger = logging.getLogger(__name__)
 
-# 动态定位项目数据目录
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(BASE_DIR, 'data')
-CONFIG_PATH = os.path.join(DATA_DIR, 'config.json')
+# 确保数据目录存在
+ensure_data_dir_exists()
 
 
 class Api:
@@ -49,7 +49,7 @@ class Api:
         # 🌟 服务层：系统交互、文件下载、配置管理
         self.system_service = SystemService()
         self.download_service = DownloadService()
-        self.config_service = ConfigService(CONFIG_PATH, self.llm.system_prompt)
+        self.config_service = ConfigService(str(CONFIG_PATH), self.llm.system_prompt)
 
         # 🌟 核心组件：文章处理器（传入回调函数用于唤醒窗口）
         self.article_processor = ArticleProcessor(
@@ -394,7 +394,7 @@ class Api:
         if self.window:
             self.window.hide()
 
-    def search_articles(self, keyword: str, source_name: str = None) -> dict:
+    def search_articles(self, keyword: str, source_name: str = None) -> dict: #type: ignore
         """全局搜索（支持按来源筛选）"""
         try:
             if not keyword or not keyword.strip():
@@ -557,3 +557,149 @@ class Api:
         except Exception as e:
             logger.error(f"检查更新失败: {e}")
             return {"has_update": False, "error": str(e)}
+
+    def perform_startup_check(self) -> Dict[str, Any]:
+        """
+        启动时执行的安全检查
+
+        检查步骤：
+        1. 检查本地锁定状态（is_locked）
+        2. 检查网络环境（必须是校园网）
+        3. 请求远程 version.json，检查 is_active 字段
+        4. 如果 is_active 为 False，执行自毁逻辑
+
+        Returns:
+            {
+                "status": "success" | "locked" | "network_error",
+                "reason": str,  # 失败原因
+                "has_update": bool,  # 是否有更新
+                "latest_version": str,  # 最新版本号
+                "download_url": str  # 下载链接
+            }
+        """
+        # 🌟 步骤 1：检查本地锁定状态
+        if self.config_service.get('isLocked', False):
+            logger.warning("🚫 启动检查：软件已被锁定")
+            return {
+                "status": "locked",
+                "reason": "该软件已被永久禁用"
+            }
+
+        # 🌟 步骤 2：检查网络环境
+        network_status = check_network_status()
+        if network_status != NetworkStatus.PUBLIC_AND_INTRANET:
+            logger.warning(f"🚫 启动检查：网络环境不符合要求 ({network_status.value})")
+            return {
+                "status": "network_error",
+                "reason": "请连接深圳技术大学校园网后使用"
+            }
+
+        # 🌟 步骤 3：请求远程 version.json
+        version_url = "https://microflow-1412347033.cos.ap-guangzhou.myqcloud.com/version.json"
+
+        try:
+            response = requests.get(version_url, timeout=5, verify=False)
+
+            if response.status_code != 200:
+                # 网络请求失败，默认放行（避免误杀）
+                logger.warning(f"启动检查：无法获取远程配置 (HTTP {response.status_code})，默认放行")
+                return self._build_success_response({})
+
+            data = response.json()
+
+            # 🌟 步骤 4：检查 is_active 字段
+            is_active = data.get('is_active', True)  # 默认为 True，避免误杀
+
+            if is_active is False:
+                # 执行自毁逻辑
+                kill_reason = data.get('kill_reason', '该软件已被禁用')
+                logger.warning(f"🚫 启动检查：远程配置标记为不可用，原因: {kill_reason}")
+
+                # 执行自毁
+                self._execute_self_destruct(kill_reason)
+
+                return {
+                    "status": "locked",
+                    "reason": kill_reason
+                }
+
+            # 🌟 步骤 5：一切正常，返回成功响应和更新信息
+            return self._build_success_response(data)
+
+        except requests.exceptions.Timeout:
+            # 超时默认放行（避免误杀）
+            logger.warning("启动检查：请求超时，默认放行")
+            return self._build_success_response({})
+
+        except requests.exceptions.RequestException as e:
+            # 网络错误默认放行
+            logger.warning(f"启动检查：网络请求失败 ({e})，默认放行")
+            return self._build_success_response({})
+
+        except json.JSONDecodeError as e:
+            # JSON 解析失败默认放行
+            logger.warning(f"启动检查：JSON 解析失败 ({e})，默认放行")
+            return self._build_success_response({})
+
+        except Exception as e:
+            # 其他异常默认放行
+            logger.error(f"启动检查：未知错误 ({e})，默认放行")
+            return self._build_success_response({})
+
+    def _execute_self_destruct(self, reason: str) -> None:
+        """
+        执行自毁逻辑：将配置锁定，禁止软件运行
+
+        Args:
+            reason: 禁用原因
+        """
+        logger.critical(f"🔒 执行自毁逻辑，原因: {reason}")
+
+        # 锁定配置文件
+        try:
+            current_config = self.config_service.to_dict()
+            current_config['isLocked'] = True
+            self.config_service.save(current_config)
+            logger.info("✅ 已将配置标记为锁定")
+        except Exception as e:
+            logger.error(f"锁定配置失败: {e}")
+
+    def _build_success_response(self, version_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        构建成功响应，包含版本更新信息
+
+        Args:
+            version_data: 从远程获取的版本数据
+
+        Returns:
+            成功响应字典
+        """
+        import platform
+
+        response: Dict[str, Any] = {"status": "success", "has_update": False}
+
+        # 检查版本更新
+        latest_version = version_data.get("version", "")
+
+        if latest_version and latest_version > self.CURRENT_VERSION:
+            downloads = version_data.get("downloads", {})
+            current_system = platform.system().lower()
+
+            if current_system == "windows":
+                download_url = downloads.get("windows", "")
+            elif current_system == "darwin":
+                download_url = downloads.get("macos", "")
+            else:
+                download_url = ""
+
+            release_date = version_data.get("release_date", "")
+            notes = f"发布时间: {release_date}" if release_date else "有新版本可用"
+
+            response["has_update"] = True
+            response["latest_version"] = latest_version
+            response["download_url"] = download_url
+            response["notes"] = notes
+        else:
+            response["has_update"] = False
+
+        return response

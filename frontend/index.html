@@ -1129,6 +1129,17 @@
     </style>
 </head>
 <body>
+    <!-- 🚫 安全检查遮罩层 -->
+    <div id="kill-switch-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: #1a1a1a; z-index: 999999; flex-direction: column; justify-content: center; align-items: center; color: #ff4d4f; font-family: sans-serif; user-select: none;">
+        <svg viewBox="0 0 24 24" width="80" height="80" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 20px;">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="15" y1="9" x2="9" y2="15"></line>
+            <line x1="9" y1="9" x2="15" y2="15"></line>
+        </svg>
+        <h2 style="font-size: 24px; margin-bottom: 10px;">访问受限</h2>
+        <p id="kill-switch-reason" style="font-size: 16px; color: #a6a6a6; max-width: 80%; text-align: center; line-height: 1.5;"></p>
+    </div>
+
     <div id="app" style="display: flex; flex-direction: column; height: 100%;">
 
         <div v-show="currentView === 'list'" class="list-view">
@@ -2234,6 +2245,37 @@
                     });
 
                     window.addEventListener('pywebviewready', async () => {
+                        // 🚫 第一优先级：启动安全检查
+                        try {
+                            const checkResult = await pywebview.api.perform_startup_check();
+
+                            if (checkResult.status === "locked" || checkResult.status === "network_error") {
+                                // 触发阻断
+                                const overlay = document.getElementById('kill-switch-overlay');
+                                const reasonText = document.getElementById('kill-switch-reason');
+
+                                overlay.style.display = 'flex';
+                                reasonText.innerText = checkResult.reason;
+
+                                // 防御性清除：一旦被锁定，强行删掉页面的其他主内容
+                                const mainContent = document.getElementById('app');
+                                if (mainContent) {
+                                    mainContent.innerHTML = '';
+                                }
+                                return; // 强制终止后续正常初始化流程
+                            }
+
+                            // 检查是否有新版本更新
+                            if (checkResult.has_update) {
+                                updateInfo.value = checkResult;
+                                console.log(`发现新版本: ${checkResult.latest_version}`);
+                            }
+                        } catch (e) {
+                            console.warn('启动安全检查失败，采取默认放行策略:', e);
+                        }
+
+                        // --- 以下是正常的初始化流程 ---
+
                         // 🌟 新增：异步拉取云端配置（不阻塞主流程）
                         fetchSystemConfig().catch(err => console.warn('云端配置拉取异常:', err));
 

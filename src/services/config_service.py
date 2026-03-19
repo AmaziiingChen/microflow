@@ -24,6 +24,7 @@ class AppConfig:
     custom_font_name: str = ""  # 🌟 新增：外部字体原始名称
     subscribed_sources: list = field(default_factory=list)  # 🌟 新增：订阅的来源列表
     polling_interval: int = 900  # 🌟 新增：守护进程轮询间隔（秒），默认 15 分钟
+    is_locked: bool = False  # 🌟 新增：配置锁定状态（用于防止修改）
 
 
 class ConfigService:
@@ -82,7 +83,8 @@ class ConfigService:
                 custom_font_path=data.get('customFontPath', default.custom_font_path),  # 🌟 新增
                 custom_font_name=data.get('customFontName', default.custom_font_name),  # 🌟 新增
                 subscribed_sources=data.get('subscribedSources', default.subscribed_sources),  # 🌟 新增
-                polling_interval=data.get('pollingInterval', default.polling_interval)  # 🌟 新增
+                polling_interval=data.get('pollingInterval', default.polling_interval),  # 🌟 新增
+                is_locked=data.get('isLocked', default.is_locked)  # 🌟 新增：配置锁定状态
             )
             return self._config
 
@@ -124,7 +126,8 @@ class ConfigService:
                 custom_font_path=config_dict.get('customFontPath', ''),  # 🌟 新增
                 custom_font_name=config_dict.get('customFontName', ''),  # 🌟 新增
                 subscribed_sources=config_dict.get('subscribedSources', []),  # 🌟 新增
-                polling_interval=config_dict.get('pollingInterval', 900)  # 🌟 新增
+                polling_interval=config_dict.get('pollingInterval', 900),  # 🌟 新增
+                is_locked=config_dict.get('isLocked', False)  # 🌟 新增：配置锁定状态
             )
 
             logger.info("配置已成功保存")
@@ -161,7 +164,8 @@ class ConfigService:
             "customFontPath": config.custom_font_path,  # 🌟 新增
             "customFontName": config.custom_font_name,  # 🌟 新增
             "subscribedSources": config.subscribed_sources,  # 🌟 新增
-            "pollingInterval": config.polling_interval  # 🌟 新增
+            "pollingInterval": config.polling_interval,  # 🌟 新增
+            "isLocked": config.is_locked  # 🌟 新增：配置锁定状态
         }
 
     def get(self, key: str, default: Any = None) -> Any:
@@ -190,6 +194,7 @@ class ConfigService:
             'customFontName': 'custom_font_name',  # 🌟 新增
             'subscribedSources': 'subscribed_sources',  # 🌟 新增
             'pollingInterval': 'polling_interval',  # 🌟 新增
+            'isLocked': 'is_locked',  # 🌟 新增：配置锁定状态
         }
 
         # 转换键名

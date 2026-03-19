@@ -8,12 +8,10 @@
 """
 
 import logging
-import os
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
-# 日志文件路径
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LOG_FILE = os.path.join(BASE_DIR, 'data', 'microflow.log')
+from src.core.paths import LOG_PATH
 
 # 日志格式
 LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -36,9 +34,7 @@ def setup_logging(level: int = logging.INFO) -> None:
         return
 
     # 确保日志目录存在
-    log_dir = os.path.dirname(LOG_FILE)
-    if log_dir and not os.path.exists(log_dir):
-        os.makedirs(log_dir, exist_ok=True)
+    LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     # 获取根日志器
     root_logger = logging.getLogger()
@@ -58,7 +54,7 @@ def setup_logging(level: int = logging.INFO) -> None:
 
     # 2. 文件处理器（轮转）
     file_handler = RotatingFileHandler(
-        LOG_FILE,
+        str(LOG_PATH),
         maxBytes=5 * 1024 * 1024,  # 5MB
         backupCount=3,
         encoding='utf-8'
@@ -72,7 +68,7 @@ def setup_logging(level: int = logging.INFO) -> None:
     # 记录启动日志
     logging.info("=" * 50)
     logging.info("MicroFlow 日志系统已启动")
-    logging.info(f"日志文件: {LOG_FILE}")
+    logging.info(f"日志文件: {LOG_PATH}")
     logging.info("=" * 50)
 
 

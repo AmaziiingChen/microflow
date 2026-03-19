@@ -1,5 +1,79 @@
-.venv/
-data/
+# ============================================================
+# MicroFlow .gitignore
+# ============================================================
+
+# === macOS ===
+.DS_Store
+**/.DS_Store
+.AppleDouble
+.LSOverride
+
+# === Windows ===
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# === Python ===
 __pycache__/
-*.db
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+*.egg
+
+# === PyInstaller ===
+*.manifest
+*.spec
+
+# === 虚拟环境 ===
+.venv/
+venv/
+ENV/
+env/
+
+# === 环境变量 ===
 .env
+.env.local
+.env.*.local
+
+# === IDE ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# === Claude Code ===
+.claude/
+
+# === 数据与日志 ===
+data/
+*.db
+*.log
+*.sqlite
+*.sqlite3
+
+# === 前端 ===
+frontend/fonts/custom_font.ttf
+frontend/fonts/custom_font.otf
+frontend/fonts/custom_font.woff
+frontend/fonts/custom_font.woff2
+
+# === 测试与覆盖率 ===
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/

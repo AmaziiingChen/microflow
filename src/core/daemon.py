@@ -9,12 +9,12 @@ import datetime
 from typing import Callable, Optional, Dict, Any
 
 from src.core.network_utils import check_network_status, NetworkStatus, get_network_description
+from src.core.paths import LAST_FETCH_TIME_PATH, ensure_data_dir_exists
 
 logger = logging.getLogger(__name__)
 
-# 持久化冷却文件路径
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-LAST_FETCH_TIME_FILE = os.path.join(BASE_DIR, 'data', '.last_fetch_time')
+# 确保数据目录存在
+ensure_data_dir_exists()
 
 
 class DaemonManager:
@@ -63,10 +63,9 @@ class DaemonManager:
     def _save_last_fetch_time(self) -> None:
         """将当前时间戳持久化到文件"""
         try:
-            # 确保目录存在
-            os.makedirs(os.path.dirname(LAST_FETCH_TIME_FILE), exist_ok=True)
-            with open(LAST_FETCH_TIME_FILE, 'w', encoding='utf-8') as f:
-                f.write(str(time.time()))
+            # 确保目录存在（paths 模块已处理，这里双重保险）
+            LAST_FETCH_TIME_PATH.parent.mkdir(parents=True, exist_ok=True)
+            LAST_FETCH_TIME_PATH.write_text(str(time.time()), encoding='utf-8')
             logger.debug(f"💾 已保存抓取时间戳")
         except Exception as e:
             logger.warning(f"保存抓取时间戳失败: {e}")
@@ -74,9 +73,8 @@ class DaemonManager:
     def _get_last_fetch_time(self) -> float:
         """从文件读取上次抓取时间戳，失败返回 0.0"""
         try:
-            if os.path.exists(LAST_FETCH_TIME_FILE):
-                with open(LAST_FETCH_TIME_FILE, 'r', encoding='utf-8') as f:
-                    return float(f.read().strip())
+            if LAST_FETCH_TIME_PATH.exists():
+                return float(LAST_FETCH_TIME_PATH.read_text(encoding='utf-8').strip())
         except Exception as e:
             logger.debug(f"读取抓取时间戳失败: {e}")
         return 0.0

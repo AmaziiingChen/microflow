@@ -19,7 +19,7 @@ class NetworkStatus(Enum):
 
 def check_network_status(
     public_timeout: float = 3.0,
-    intranet_timeout: float = 2.0
+    intranet_timeout: float = 5.0
 ) -> NetworkStatus:
     """
     检测当前网络环境状态
@@ -84,34 +84,57 @@ def _check_public_network(timeout: float = 3.0) -> bool:
         return False
 
 
-def _check_intranet(timeout: float = 2.0) -> bool:
+def _check_intranet(timeout: float = 3.0) -> bool:
     """
     测试校园网内网连通性
 
-    通过 HTTP HEAD 请求公文通网站判断是否在校园网内
+    只需能成功访问公文通网站即可判定为校园网环境
 
     Args:
-        timeout: 超时时间（秒）
+        timeout: 超时时间（秒），默认 3 秒
 
     Returns:
-        True 如果内网可达
+        True 如果能访问公文通网站
     """
     # 公文通网站（仅校园网可访问）
-    intranet_url = "https://nbw.sztu.edu.cn"
+    intranet_url = "https://nbw.sztu.edu.cn/list.jsp?urltype=tree.TreeTempUrl&wbtreeid=1029"
 
     try:
         request = urllib.request.Request(
             intranet_url,
-            method="HEAD"
+            method="GET"
         )
-        request.add_header("User-Agent", "Mozilla/5.0")
+        request.add_header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
 
         with urllib.request.urlopen(request, timeout=timeout) as response:
-            # 任何响应（包括重定向）都说明内网可达
-            return response.status in (200, 301, 302, 303, 307, 308)
+            status_code = response.status if hasattr(response, 'status') else response.getcode()
 
-    except (urllib.error.URLError, urllib.error.HTTPError, socket.timeout, OSError) as e:
-        logger.debug(f"内网测试失败: {e}")
+            # 只要能成功访问（200 或重定向），就说明在校园网内
+            if status_code == 200:
+                logger.debug("内网测试成功：能访问公文通网站")
+                return True
+
+            logger.debug(f"内网测试返回状态码: {status_code}")
+            return False
+
+    except urllib.error.HTTPError as e:
+        # 某些情况下 302 重定向会触发 HTTPError，但说明服务器响应了
+        if e.code in (301, 302, 303, 307, 308):
+            logger.debug("内网测试成功：服务器返回重定向")
+            return True
+        logger.debug(f"内网测试 HTTP 错误: {e.code} {e.reason}")
+        return False
+    except urllib.error.URLError as e:
+        logger.debug(f"内网测试 URL 错误: {e.reason}")
+        return False
+    except socket.timeout:
+        logger.debug("内网测试超时")
+        return False
+    except OSError as e:
+        logger.debug(f"内网测试网络错误: {e}")
+        return False
+    except Exception as e:
+        logger.warning(f"内网测试未知错误: {e}")
         return False
 
 
