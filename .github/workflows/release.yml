@@ -39,19 +39,14 @@ jobs:
         run: |
           ${{ matrix.build_cmd }}
 
-      # 【核心大招】弃用手写 Python，换用腾讯云官方 CLI 工具跨国强传
-      - name: Upload to Tencent Cloud COS via Official CLI
-        shell: bash   # <--- 【就是加这一行！】强制 Windows 使用 bash 执行脚本
+      # 【数据面】安装包秒传给 GitHub Releases，绝不卡顿
+      - name: Upload to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: ${{ matrix.artifact_name }}
         env:
-          SECRET_ID: ${{ secrets.COS_SECRET_ID }}
-          SECRET_KEY: ${{ secrets.COS_SECRET_KEY }}
-          BUCKET: ${{ secrets.COS_BUCKET }}
-          REGION: ${{ secrets.COS_REGION }}
-          ARTIFACT: ${{ matrix.artifact_name }}
-        run: |
-          pip install coscmd
-          coscmd config -a $SECRET_ID -s $SECRET_KEY -b $BUCKET -r $REGION
-          coscmd upload -rs $ARTIFACT /
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # 依然由 Ubuntu 节点最后生成配置
   update-version-json:
@@ -119,9 +114,8 @@ jobs:
                   'content': '亲爱的同学/老师，欢迎使用 MicroFlow！<br><br>为了让 AI 能够为您智能总结长篇公文，您需要先配置 AI 的 API 密钥。<br><br>👉 **配置方法**：请点击本界面**左上角的「设置/齿轮」图标**，在弹出的面板中填入您的 API 信息。<br><br>配置完成后，您就可以体验极速的公文摘要功能了。'
               },
               'downloads': {
-                  'windows': f'{base_url}/microflow_win.exe',
-                  'macos': f'{base_url}/microflow_mac.zip',
-                  'github': f'https://github.com/{repo}/releases/tag/{tag_name}'
+                  'github': f'https://github.com/{repo}/releases/tag/{tag_name}',
+                  'netdisk': '这里未来可以填入国内网盘链接兜底'
               }
           }
 
