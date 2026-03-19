@@ -231,7 +231,57 @@ class DatabaseManager:
 
             # 执行查询
             cursor.execute(query, tuple(params))
-            return [dict(row) for row in cursor.fetchall()]
+
+            # --- 🌟 结果后处理：动态上下文摘录 ---
+            rows = cursor.fetchall()
+            results = []
+
+            # 提取所有独立的搜索关键词（过滤掉 and, or, 空格）
+            raw_terms = re.split(r'\s+', keyword)
+            terms = [t for t in raw_terms if t.lower() not in ('and', 'or') and t.strip()]
+
+            for row in rows:
+                item = dict(row)
+                summary = item.get('summary') or ""
+                title = item.get('title') or ""
+                raw_text = item.get('raw_text') or ""
+
+                missed_in_ui = [
+                    t for t in terms
+                    if t.lower() not in summary.lower() and t.lower() not in title.lower()
+                ]
+
+                if missed_in_ui and raw_text:
+                    snippets = []
+                    for t in missed_in_ui:
+                        idx = raw_text.lower().find(t.lower())
+                        if idx != -1:
+                            start = max(0, idx - 20)
+                            end = min(len(raw_text), idx + len(t) + 30)
+                            prefix = "..." if start > 0 else ""
+                            suffix = "..." if end < len(raw_text) else ""
+
+                            snippet_text = raw_text[start:end].replace('\n', ' ')
+                            # 🌟 核心改变：不再用 **加粗**，而是直接套用 strong 标签，方便我们用 CSS 做荧光笔效果
+                            snippet_text = re.sub(f"({re.escape(t)})", r"<strong>\1</strong>", snippet_text, flags=re.IGNORECASE)
+                            snippets.append(f"{prefix}{snippet_text}{suffix}")
+
+                    if snippets:
+                        snippets_html = "<br><br>".join(snippets)
+                        # 🌟 拼装专属的 HTML 卡片结构
+                        html_block = f"""
+<div class="search-snippet-box">
+    <div class="snippet-header">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        原文内容
+    </div>
+    <div class="snippet-content">{snippets_html}</div>
+</div>"""
+                        item['summary'] = summary + "\n\n" + html_block
+
+                results.append(item)
+
+            return results
 
     def get_all_sources(self) -> list:
         """获取所有数据来源列表"""

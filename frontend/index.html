@@ -540,6 +540,53 @@
             border-bottom-color: #3B82F6; /* 鼠标悬停时显示下划线 */
         }
 
+        /* ================= 新增：搜索摘录档案卡片 ================= */
+        .search-snippet-box {
+            margin-top: 24px;
+            background: #F8FAFC; /* 极浅的蓝灰色，区别于主背景的纯白 */
+            border: 1px solid #E2E8F0;
+            border-radius: 8px;
+            overflow: hidden;
+            /* 增加一点内阴影，让它看起来像一个凹下去的代码框 */
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02);
+        }
+
+        .snippet-header {
+            background: #F1F5F9;
+            padding: 8px 12px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #64748B;
+            border-bottom: 1px dashed #CBD5E1; /* 虚线更有原始文档的感觉 */
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .snippet-header svg {
+            width: 14px;
+            height: 14px;
+            color: #94A3B8;
+        }
+
+        .snippet-content {
+            padding: 12px 14px;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #475569;
+            font-family: "SF Mono", Consolas, "Liberation Mono", Menlo, monospace; /* 使用等宽代码字体，凸显原始感 */
+        }
+
+        /* 🌟 荧光笔高亮特效：这会让匹配到的关键词在灰色文字中极其耀眼 */
+        .snippet-content strong {
+            background-color: #FEF08A; /* 荧光黄 */
+            color: #854D0E;            /* 深焦糖色文字，保证高对比度 */
+            padding: 0 4px;
+            border-radius: 4px;
+            font-weight: 800;
+            border-bottom: 2px solid #FDE047; /* 底部加粗一条线，增强荧光笔质感 */
+        }
+
         /* 底部悬浮栏 */
         .detail-footer { padding: 12px 24px; background: #fafafa; border-top: 1px solid var(--border-color); flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; }
         .disclaimer { font-size: 11px; color: #aeb3bd; line-height: 1.6; display: flex; flex-direction: column; transition: color 0.3s ease; /* 新增平滑过渡 */}
