@@ -83,7 +83,7 @@ jobs:
           python -c "
           import os
           import json
-          from datetime import datetime
+          from datetime import datetime, timedelta, timezone
           from qcloud_cos import CosConfig
           from qcloud_cos import CosS3Client
 
@@ -102,16 +102,19 @@ jobs:
 
           base_url = f'https://{bucket}.cos.{region}.myqcloud.com'
 
+          # 🌟 东八区（北京时间）
+          bj_time = datetime.now(timezone(timedelta(hours=8)))
+
           version_info = {
               'version': tag_name,
-              'release_date': datetime.now().isoformat(),
+              'release_date': bj_time.strftime('%Y-%m-%d %H:%M'),
               'is_active': True,
               'kill_message': '由于合规性要求，MicroFlow 已永久停止服务。感谢您的使用。',
               'announcement': {
                   'id': f'notice_{tag_name}',
                   'title': f'MicroFlow {tag_name} 更新公告',
                   'version': tag_name,
-                  'publish_time': datetime.now().strftime('%Y年%m月%d日'),
+                  'publish_time': bj_time.strftime('%Y年%m月%d日'),
                   'department': '系统公告',
                   'tags': ['系统通知', tag_name],
                   'summary': '初次见面！为了让 AI 能够为您智能总结公文，请先配置您的 API 密钥。',
