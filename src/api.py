@@ -14,6 +14,10 @@ import json
 import shutil
 import requests
 import urllib3
+import tempfile
+import platform
+import subprocess
+import base64
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from typing import Dict, Any, Optional
 import time
@@ -280,6 +284,42 @@ class Api:
     def save_snapshot(self, b64_data: str, title: str) -> dict:
         """保存快照图片"""
         return self.download_service.save_snapshot(b64_data, title)
+
+    def copy_image_to_clipboard(self, b64_data: str) -> dict:
+        """接收 Base64 图片并调用操作系统底层接口暴力写入剪贴板（无需第三方库）"""
+        try:
+            # 1. 解码前端传来的 Base64 数据并存入临时文件
+            if ',' in b64_data:
+                b64_data = b64_data.split(',')[1]
+            img_data = base64.b64decode(b64_data)
+
+            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+                temp_path = f.name
+                f.write(img_data)
+
+            # 2. 根据不同操作系统，调用原生底层脚本注入剪贴板
+            system = platform.system().lower()
+            if system == 'darwin':
+                # macOS: 使用内置的 AppleScript (osascript) 强行写入图像
+                script = f'set the clipboard to (read (POSIX file "{temp_path}") as TIFF picture)'
+                subprocess.run(['osascript', '-e', script], check=True)
+            elif system == 'windows':
+                # Windows: 使用内置的 PowerShell 调用 .NET 的剪贴板接口
+                # 隐藏 PowerShell 弹窗黑框
+                creation_flags = 0x08000000 if os.name == 'nt' else 0
+                script = f'Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Clipboard]::SetImage([System.Drawing.Image]::FromFile("{temp_path}"))'
+                subprocess.run(["powershell", "-command", script], check=True, creationflags=creation_flags)
+            else:
+                return {"status": "error", "message": "当前系统暂不支持一键复制图片"}
+
+            # 3. 延迟一小会儿后删除临时文件，防止剪贴板还没读取完文件就被删了
+            time.sleep(0.5)
+            os.remove(temp_path)
+
+            return {"status": "success"}
+        except Exception as e:
+            logger.error(f"写入剪贴板失败: {e}")
+            return {"status": "error", "message": str(e)}
 
     def popup_new_article(self, article_dict: dict):
         """弹窗展示新文章"""

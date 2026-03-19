@@ -616,6 +616,10 @@
             transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); 
             /* 默认带一点极细微的阴影，增加实体感 */
             box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            /* 🌟 核心修复 1：无论如何挤压，文字绝对不允许换行 */
+            white-space: nowrap; 
+            /* 🌟 核心修复 2：在 Flex 布局中，宁愿撑破父元素，也绝对不允许被压缩 */
+            flex-shrink: 0;
         }
 
         /* 按下时的微缩放物理反馈 */
@@ -2588,7 +2592,7 @@
                 // ------------------------------------------------------------
                 const takeSnapshot = async (item) => {
                     const oldMsg = statusMsg.value;
-                    statusMsg.value = '📸 正在生成高清长截图，请稍候...';
+                    statusMsg.value = '正在生成高清长截图，请稍候...';
 
                     const targetView = document.querySelector('.detail-view');
                     const scrollContent = document.querySelector('.detail-content');
@@ -2601,7 +2605,7 @@
                     let tempBase64Style = null;
                     if (config.value.fontFamily === 'custom' && config.value.customFontPath) {
                         try {
-                            statusMsg.value = '📸 正在打包字体资源...';
+                            statusMsg.value = '正在打包字体资源...';
                             const fontUrl = new URL(config.value.customFontPath, window.location.href).href;
                             const response = await fetch(fontUrl);
                             const blob = await response.blob();
@@ -2632,7 +2636,7 @@
                         }
                     }
 
-                    statusMsg.value = '📸 正在生成高清长截图，请稍候...';
+                    statusMsg.value = '正在生成高清长截图，请稍候...';
 
                     // 1. 记录所有原始样式（包括 body 和 position 属性）
                     const origBodyHeight = document.body.style.height;
@@ -2643,6 +2647,8 @@
                     const origHeight = targetView.style.height;
                     const origViewOverflow = targetView.style.overflow;
                     const origBg = targetView.style.backgroundColor;
+                    // 🌟 新增：记录原始宽度
+                    const origWidth = targetView.style.width;
 
                     const origContentOverflow = scrollContent.style.overflowY;
                     const origContentFlex = scrollContent.style.flex;
@@ -2651,6 +2657,8 @@
                     document.body.style.height = 'auto';
                     document.body.style.overflow = 'visible';
 
+                    // 🌟 核心修复 3：在解除 fixed 之前，强行把现在的像素宽度“焊死”在行内样式上
+                    targetView.style.width = targetView.offsetWidth + 'px';
                     targetView.style.position = 'absolute'; // 👈 挣脱 fixed 定位
                     targetView.style.bottom = 'auto';       // 👈 解除底部锁定
                     targetView.style.height = 'auto';
@@ -2686,8 +2694,17 @@
                         const res = await window.pywebview.api.save_snapshot(base64image, item.title);
 
                         if (res && res.status === 'success') {
-                            console.log('✅ [Snapshot] 保存成功');
-                            statusMsg.value = '✅ 快照保存成功！';
+                            console.log('✅ [Snapshot] 文件保存成功，正在写入剪贴板...');
+
+                            // 🌟 核心修改：在保存成功后，追加调用剪贴板 API
+                            const copyRes = await window.pywebview.api.copy_image_to_clipboard(base64image);
+
+                            if (copyRes && copyRes.status === 'success') {
+                                statusMsg.value = '✅ 快照保存成功，并已复制到剪贴板！';
+                            } else {
+                                statusMsg.value = '✅ 快照已保存 (但复制到剪贴板失败)';
+                            }
+
                         } else if (res && res.status === 'cancelled') {
                             statusMsg.value = '';
                         } else {
@@ -2707,6 +2724,8 @@
                         targetView.style.height = origHeight;
                         targetView.style.overflow = origViewOverflow;
                         targetView.style.backgroundColor = origBg;
+                        // 🌟 恢复原始宽度
+                        targetView.style.width = origWidth;
 
                         scrollContent.style.overflowY = origContentOverflow;
                         scrollContent.style.flex = origContentFlex;
