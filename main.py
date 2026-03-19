@@ -6,6 +6,11 @@ from PIL import Image, ImageDraw
 import requests
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# 🌟 初始化全局日志系统（必须在其他模块导入之前）
+from src.logger import setup_logging
+setup_logging()
+
 # 引入我们的"总调度室"
 from src.api import Api
 
@@ -96,9 +101,6 @@ def get_html_path():
 
 def get_icon_path():
     """获取本地 png 图标的绝对路径"""
-    import sys
-    import os
-
     # 采用 PyInstaller 打包后的路径兼容方案
     meipass = getattr(sys, '_MEIPASS', None)
     base_path = meipass if meipass else os.path.dirname(os.path.abspath(__file__))
@@ -108,8 +110,6 @@ def get_icon_path():
 
 def load_tray_icon():
     """加载并高质量处理状态栏图标（超采样 SSAA 抗锯齿版）"""
-    from PIL import Image
-    import os
     global _base_icon_256
 
     icon_path = get_icon_path()
@@ -137,10 +137,6 @@ def load_tray_icon():
             # 🌟 修复3：超采样抗锯齿 (SSAA) - 将 256 浓缩成完美的 64x64
             final_icon_64 = canvas_256.resize((64, 64), Image.Resampling.LANCZOS)
 
-            # 调试探针：覆盖之前的旧探针
-            debug_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'debug_tray_icon.png')
-            final_icon_64.save(debug_path)
-
             return final_icon_64
         except Exception as e:
             print(f"❌ 托盘图标处理失败: {e}")
@@ -164,7 +160,7 @@ if __name__ == '__main__':
     # 网络校验通过，正常启动原本的微流 Microflow逻辑...
     # 实例化后端桥接 API
     api = Api()
-    
+
     # 获取前端页面路径
     # 移除 file:// 协议，让 pywebview 启用本地 HTTP 服务器，彻底绕过字体跨域拦截
     html_url = get_html_path()
@@ -177,14 +173,14 @@ if __name__ == '__main__':
         title='Microflow',
         url=html_url,
         js_api=api,
-        width=465,
+        width=470,
         height=750,
-        min_size=(450, 650),   # 限制最小宽高
+        min_size=(470, 750),   # 限制最小宽高
         frameless=False,       # 使用原生系统边框
-        easy_drag=False,       
+        easy_drag=False,
         transparent=False,     # 关闭透明，让原生窗口更加稳定
         background_color='#FFFFFF',
-        hidden="--minimized" in sys.argv  # 👈 核心：如果是自启则初始隐藏
+        hidden=start_minimized  # 👈 核心：如果是自启则初始隐藏
     )
 
     api.window = window
@@ -236,19 +232,12 @@ if __name__ == '__main__':
     # 3. 在 Webview 启动前，启动后台守护线程与托盘
     # run_detached() 会在独立的线程中跑托盘图标，不阻塞主 UI 线程
     tray_icon.run_detached()
-    
-    # 开启后台每 15 分钟一次的抓取轮询 (这里调用了你在 src/api.py 中新写的 start_daemon 方法)
-    api.start_daemon(debug_seconds=300)
-    # api.start_daemon(interval_minutes=1)
-    # # 生产环境（默认 15 分钟）
-    # api.start_daemon() 
 
-    # # 极限开发测试环境（每隔 5 秒抓取一次）
-    # api.start_daemon(debug_seconds=5)
+    # 🌟 开启后台轮询抓取（间隔由配置文件动态决定，支持热重载）
+    api.start_daemon()
     # ====================================================================
 
     # 启动应用
-    # 👇 新增：强制获取焦点的启动回调函数
     # 👇 新增：强制获取焦点的启动回调函数
     def on_app_start():
         # 如果不是开机静默自启，则强制向 macOS 索要窗口焦点和鼠标点击权限

@@ -167,7 +167,7 @@ class GwtSpider(BaseSpider):
             'exact_time': exact_time
         }
 
-    def _extract_attachments(self, soup: BeautifulSoup, base_url: str) -> List[Dict[str, str]]:
+    def _extract_attachments(self, soup: BeautifulSoup, base_url: str) -> List[Dict[str, str]]: #type: ignore
         """
         提取附件列表
 

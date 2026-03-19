@@ -33,6 +33,16 @@
             font-style: normal;
         }
 
+        .list-date {
+            margin-left: auto;       /* 核心：在 flex 容器中把元素推向最右边 */
+            font-weight: 700;        /* 加粗 */
+            color: #959aa4;          /* 中灰色 */
+            font-size: 12px;
+            display: flex;
+            align-items: center;     /* 保证和前面的标签完美水平居中对齐 */
+            flex-shrink: 0;          /* 防止在小屏幕下时间被挤压换行 */
+        }
+
         /* 衬线体模式：全局覆盖字体 */
         .serif-mode {
             font-family: 'Source Han Serif SC', "Songti SC", "Noto Serif SC", "SimSun", serif !important;
@@ -199,20 +209,6 @@
             display: flex;
             align-items: center;
         }
-        /* 来源项：弹性撑开 */
-        .meta-source {
-            flex: 1;
-            min-width: 0;
-        }
-        /* 时间项：靠右显示 */
-        .meta-time {
-            margin-left: auto;
-            margin-right: 0;
-            /* 🌟 新增：行高约束 */
-            line-height: 1;
-            display: flex;
-            align-items: center;
-        }
 
         /* 通用灰色标签 - 列表页和详情页共用 */
         .meta-tag-gray {
@@ -229,18 +225,6 @@
             align-items: center;
             justify-content: center;
             line-height: 1;
-        }
-
-        /* 列表页日期时间：中灰色，右对齐，适当加粗 */
-        .list-date {
-            color: #9ca3af;
-            font-size: 12px;
-            font-weight: 500;
-            margin-left: auto;
-            /* 🌟 新增：消除纯文本的基线偏移 */
-            line-height: 1;
-            display: flex;
-            align-items: center;
         }
 
         /* 已读卡片元数据行：整体变淡 */
@@ -342,6 +326,23 @@
             border-color: #A6D4FF;
         }
         .badge-home:active {
+            transform: scale(0.95);
+        }
+
+        /* 清空按钮 - 红色系 */
+        .badge-clear {
+            display: inline-flex; align-items: center; gap: 4px;
+            color: #BE123C; background: #FFF1F2;
+            padding: 4px 8px; border-radius: 6px; border: 1px solid #FECDD3;
+            font-size: 11px; font-weight: 700;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s;
+        }
+        .badge-clear:hover {
+            background: #FFE4E6;   /* 悬浮时背景加深一点 */
+            border-color: #FDA4AF; /* 悬浮时边框加深一点 */
+        }
+        .badge-clear:active {
             transform: scale(0.95);
         }
 
@@ -541,19 +542,63 @@
 
         /* 底部悬浮栏 */
         .detail-footer { padding: 12px 24px; background: #fafafa; border-top: 1px solid var(--border-color); flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; }
-        .disclaimer { font-size: 11px; color: #aeb3bd; line-height: 1.6; display: flex; flex-direction: column; }
+        .disclaimer { font-size: 11px; color: #aeb3bd; line-height: 1.6; display: flex; flex-direction: column; transition: color 0.3s ease; /* 新增平滑过渡 */}
+        .disclaimer:hover {color: #6B7280; /* 鼠标放上去时，颜色稍微变深一点，提升可读性 */}
+        /* 让免责声明的每一行内部实现 Flex 居中对齐 */
+        .disclaimer span {
+            display: flex;
+            align-items: center;
+            gap: 6px; /* 控制 SVG 图标和文字之间的间距 */
+        }
+
+        /* 保护 SVG 不会在小屏幕下被文字挤压变形 */
+        .disclaimer-icon {
+            flex-shrink: 0;
+        }
         .btn-group { display: flex; gap: 10px; }
-        .action-btn { padding: 8px 16px; border: none; color: white; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; transition: 0.1s; }
-        .action-btn:active { transform: scale(0.96); }
-        .btn-snapshot { background: #8B5CF6; }
-        .btn-copy { background: #34C759; } 
-        .btn-copy:hover { background: #2EAF4E; } /* 绿色变深 */
+        /* ================= 底部操作按钮 (macOS 红绿灯风格) ================= */
+        .action-btn { 
+            padding: 8px 16px; 
+            border: none; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            font-size: 13px; 
+            font-weight: 600; 
+            color: white;
+            /* 🌟 核心修复：引入 macOS 经典的丝滑物理缓动函数 */
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); 
+            /* 默认带一点极细微的阴影，增加实体感 */
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
 
-        .btn-view { background: #FAC800; } 
-        .btn-view:hover { background: #E0B400; } /* 黄色变深 */
+        /* 按下时的微缩放物理反馈 */
+        .action-btn:active { 
+            transform: scale(0.95); 
+            box-shadow: none; 
+        }
 
-        .btn-back { background: #FF5C5F; } 
-        .btn-back:hover { background: #E55356; } /* 红色变深 */
+        /* 🟢 复制全文 (macOS 绿: #34C759) */
+        .btn-copy { background: #65C466; } 
+        .btn-copy:hover { 
+            background: #54A255; 
+            /* 悬浮时增加同色系的柔和发光投影，质感拉满 */
+            /* box-shadow: 0 4px 12px rgba(52, 199, 89, 0.25);  */
+        }
+
+        /* 🟡 查看原文 (macOS 橘: #FF9F0A) 
+        注：Apple 在需要配白字时，会用更深的 Amber(橘黄) 替代纯黄，以保证可读性 */
+        .btn-view { background: #F2CA44; } 
+        .btn-view:hover { 
+            background: #C9A738; 
+            /* box-shadow: 0 4px 12px rgba(255, 159, 10, 0.25);  */
+        }
+
+        /* 🔴 关闭窗口 (macOS 红: #FF3B30) */
+        .btn-back { background: #EC6765; } 
+        .btn-back:hover { 
+            background: #C45554; /* 悬浮时变为更深的 Apple 警告红 */
+            /* box-shadow: 0 4px 12px rgba(255, 59, 48, 0.25);  */
+        }
 
         .status-center { text-align: center; color: var(--text-sub); font-size: 13px; margin-top: 10px; }
         /* 底部独立附件区样式 */
@@ -675,15 +720,6 @@
         .btn-secondary:hover { background: #E5E7EB; }
         .btn-primary { background: var(--accent-color); color: white; }
         .btn-primary:hover { background: #1D4ED8; }
-        /* ================= 新增：返回主页按钮样式 ================= */
-        .badge-home {
-            background: #E0E7FF; color: #4338CA; padding: 4px 10px; 
-            border-radius: 6px; font-size: 12px; font-weight: 800; 
-            cursor: pointer; border: 1px solid #C7D2FE; 
-            transition: all 0.2s; display: inline-flex; align-items: center; gap: 4px;
-        }
-        .badge-home:hover { background: #C7D2FE;  }
-        .badge-home:active { transform: scale(0.95); }
 
         /* ================= 新增：搜索框样式 ================= */
         .search-container {
@@ -1060,12 +1096,6 @@
                 </div>
                 
                 <div style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
-                    <span v-if="progressText" style="font-size: 13px; font-weight: 600; color: #2563EB;">
-                        {{ progressText }}
-                    </span>
-                    <!-- <span v-if="isUpdateDisabled && !isLoading" style="font-size: 12px; color: #9CA3AF;">
-                        {{ updateCooldown }}秒后可更新
-                    </span> -->
                     <button class="btn-check" @click="checkUpdates" :disabled="isLoading || isUpdateDisabled">
                         <span v-if="isLoading">...</span>
                         <span v-else-if="isUpdateDisabled">{{ updateCooldown }}s</span>
@@ -1301,8 +1331,18 @@
                                 </div>
                             </div> </div> </div> </div> </div> <div class="detail-footer">
                 <div class="disclaimer">
-                    <span>✨ 内容由AI生成 仅供参考</span>
-                    <span>🌙 具体请以原文为准</span>
+                    <span>
+                        <svg class="disclaimer-icon" opacity="0.5" viewBox="0 0 1024 1024" width="14" height="14" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M576.4 203.3c46.7 90.9 118.6 145.5 215.7 163.9 97.1 18.4 111.5 64.9 43.3 139.5s-95.6 162.9-82.3 265.2c13.2 102.3-24.6 131-113.4 86.2s-177.7-44.8-266.6 0-126.6 16-113.4-86.2c13.2-102.3-14.2-190.7-82.4-265.2-68.2-74.6-53.7-121.1 43.3-139.5 97.1-18.4 169-73 215.7-163.9 46.6-90.9 93.4-90.9 140.1 0z" fill="currentColor"></path>
+                        </svg>
+                        本文由 AI 简化生成 仅供参考
+                    </span>
+                    <span>
+                        <svg class="disclaimer-icon" opacity="0.5" viewBox="0 0 1024 1024" width="14" height="14" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M505.4 878.6c-196.7 0-358-150.9-374.9-343.1 1-18.6 16.1-33.4 34.9-33.4 10.8 0 20.5 4.8 26.9 12.4 0.2 0.3 0.5 0.1 0.5-0.7 41.6 44.2 100.5 71.9 166.1 71.9 127.1 0 230.1-103 230.1-230.1 0-66.1-28-125.1-72.6-166.8 0.1-0.1 0.5-0.1 0.3-0.3-7-6.5-11.4-15.7-11.4-26.1 0-19 14.9-34.1 33.7-35.3 192.1 17.1 342.9 178.3 342.9 375 0 208-168.5 376.5-376.5 376.5z" fill="currentColor"></path>
+                        </svg>
+                        最终解释权归原发文单位所有
+                    </span>
                 </div>
                 <div class="btn-group">
                     <button class="action-btn btn-copy" @click="copyText(activeArticle)">复制全文</button>
@@ -1388,6 +1428,23 @@
                     </div>
                 </div>
 
+                <div class="form-group" style="padding-top: 16px; border-top: 1px solid #F3F4F6;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <div>
+                            <div style="font-weight: 700; font-size: 14px; color: #111;">后台巡检频率</div>
+                            <div style="font-size: 11px; color: #6B7280;">设置自动检查新公文的基准时间间隔</div>
+                        </div>
+                        <div style="font-size: 14px; font-weight: 800; color: var(--accent-color);">
+                            {{ config.pollingInterval || 60 }} 分钟
+                        </div>
+                    </div>
+                    <input type="range" min="15" max="240" step="15" v-model.number="config.pollingInterval" style="width: 100%; accent-color: var(--accent-color); cursor: pointer;">
+                    <div style="display: flex; justify-content: space-between; font-size: 11px; color: #9CA3AF; margin-top: 6px; font-weight: 500;">
+                        <span>15分钟 (紧凑)</span>
+                        <span>240分钟 (省电)</span>
+                    </div>
+                </div>
+
                 <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 16px; border-top: 1px solid #F3F4F6;">
                     <div>
                         <div style="font-weight: 700; font-size: 14px; color: #111;">开机自启动</div>
@@ -1405,18 +1462,26 @@
                 </div>
             </div>
 
-            <div class="settings-section-title">数据订阅管理</div>
-            <div class="settings-card" style="margin-bottom: 40px;">
-                <div style="display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-right: 4px;">
+                <div class="settings-section-title" style="margin: 0 0 0 4px;">数据订阅管理</div>
+                <div style="display: flex; gap: 8px;">
                     <span class="badge-attachment" @click="selectAllSources">全选</span>
-                    <span class="badge-home" @click="deselectAllSources" style="background:#FFF1F2; color:#BE123C; border-color:#FECDD3;">清空</span>
+                    <span class="badge-clear" @click="deselectAllSources">清空</span>
                 </div>
-                <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+            </div>
+
+            <div class="settings-card" style="margin-bottom: 40px;">
+                <div style="display: flex; flex-direction: column; gap: 10px;">
                     <label v-for="(source, index) in allAvailableSources" :key="source"
                            class="subs-chip"
+                           style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px;"
                            :class="(config.subscribedSources || []).includes(source) ? 'active-morandi-' + (index % 8) : ''">
+                        
+                        <span style="font-size: 14px;">{{ source }}</span>
+                        
                         <input type="checkbox" :value="source" v-model="config.subscribedSources">
-                        {{ source }}
+                        
+                        <span v-show="(config.subscribedSources || []).includes(source)" style="font-weight: 900; opacity: 0.8; font-size: 15px;">✓</span>
                     </label>
                 </div>
             </div>
@@ -1474,12 +1539,32 @@
                 const isLoading = ref(false);
                 const statusMsg = ref('');
                 const updateInfo = ref(null); // 🌟 新增：存储新版本信息
-                const progressText = ref(''); // 👈 新增响应式变量
 
                 // 🎯 更新按钮冷却时间相关变量
                 const updateCooldown = ref(0); // 剩余冷却秒数
                 const isUpdateDisabled = ref(false); // 是否禁用更新按钮
                 let cooldownTimer = null; // 冷却计时器
+
+                // 🎯 冷却倒计时函数（支持持久化恢复）
+                const COOLDOWN_SECONDS = 120; // 冷却时间常量
+                const startCooldown = (remainingSeconds) => {
+                    isUpdateDisabled.value = true;
+                    updateCooldown.value = remainingSeconds;
+
+                    if (cooldownTimer) clearInterval(cooldownTimer);
+
+                    cooldownTimer = setInterval(() => {
+                        updateCooldown.value--;
+                        if (updateCooldown.value <= 0) {
+                            clearInterval(cooldownTimer);
+                            cooldownTimer = null;
+                            isUpdateDisabled.value = false;
+                            updateCooldown.value = 0;
+                            // 冷却结束，清理 localStorage
+                            localStorage.removeItem('lastManualUpdateTime');
+                        }
+                    }, 1000);
+                };
 
                 // 🎯 进度条相关变量
                 const totalTasks = ref(0);
@@ -1599,7 +1684,8 @@
                     fontFamily: 'sans-serif', // 🌟 新增：字体风格，默认黑体
                     customFontPath: '', // 🌟 新增：外部字体路径
                     customFontName: '', // 🌟 新增：外部字体原始名称
-                    subscribedSources: []  // 🌟 新增：订阅的来源列表
+                    subscribedSources: [],  // 🌟 新增：订阅的来源列表
+                    pollingInterval: 60  // 🌟 新增：后台巡检频率（分钟），默认 1 小时
                 });
 
                 // 🌟 新增：处理导入自定义字体
@@ -1706,14 +1792,15 @@
                     clearTimeout(searchTimeout);
                     searchTimeout = setTimeout(async () => {
                         const keyword = searchQuery.value.trim();
+                        // 🌟 修复 1：提取当前的来源参数
+                        const sourceParam = activeSource.value !== '全部' ? activeSource.value : null;
 
                         // 如果用户清空了搜索框，恢复正常的分页列表
                         if (!keyword) {
                             isSearching.value = false;
                             page.value = 1;
                             noMoreData.value = false;
-                            // 🌟 修复：恢复列表时也考虑当前的来源筛选
-                            const sourceParam = activeSource.value !== '全部' ? activeSource.value : null;
+
                             const res = await pywebview.api.get_history_paged(1, 20, sourceParam);
                             if (res.status === 'success') {
                                 articles.value = res.data;
@@ -1723,7 +1810,8 @@
 
                         // 开始执行搜索
                         isSearching.value = true;
-                        const res = await pywebview.api.search_articles(keyword);
+                        // 🌟 修复 2：将搜索词和来源参数一起发给后端
+                        const res = await pywebview.api.search_articles(keyword, sourceParam);
                         if (res.status === 'success') {
                             articles.value = res.data; // 替换列表内容为搜索结果
                         }
@@ -1977,22 +2065,43 @@
                     noMoreData.value = false;
 
                     const sourceParam = source !== '全部' ? source : null;
-                    const res = await pywebview.api.get_history_paged(1, 20, sourceParam);
-                    if (res.status === 'success') {
-                        articles.value = res.data;
-                        if (res.data.length < 20) noMoreData.value = true;
+
+                    // 🌟 修复 3：如果搜索框里有内容，切换来源时应该在【当前搜索词】下进行过滤，而不是重置列表
+                    if (isSearching.value || searchQuery.value.trim()) {
+                        const keyword = searchQuery.value.trim();
+                        const res = await pywebview.api.search_articles(keyword, sourceParam);
+                        if (res.status === 'success') {
+                            articles.value = res.data;
+                        }
+                    } else {
+                        // 正常无搜索时的切换逻辑
+                        const res = await pywebview.api.get_history_paged(1, 20, sourceParam);
+                        if (res.status === 'success') {
+                            articles.value = res.data;
+                            if (res.data.length < 20) noMoreData.value = true;
+                        }
                     }
                 };
 
                 onMounted(() => {
-                    console.log('Vue onMounted 触发');
-                    // debugEl.innerHTML += '<br>✅ onMounted 触发 | 等待 pywebview...';
+                    // 🎯 冷却时间恢复：检查 localStorage 中是否有未完成的冷却
+                    const lastTime = localStorage.getItem('lastManualUpdateTime');
+                    if (lastTime) {
+                        const elapsedSeconds = Math.floor((Date.now() - parseInt(lastTime)) / 1000);
+                        if (elapsedSeconds < COOLDOWN_SECONDS) {
+                            // 还在冷却期内，继续未完成的倒计时
+                            startCooldown(COOLDOWN_SECONDS - elapsedSeconds);
+                            console.log(`🔄 恢复冷却倒计时: 剩余 ${COOLDOWN_SECONDS - elapsedSeconds} 秒`);
+                        } else {
+                            // 已经过期，清理掉
+                            localStorage.removeItem('lastManualUpdateTime');
+                        }
+                    }
 
-                    // 👇 新增：全局快捷键劫持 (支持 macOS 的 Cmd+Q 和 Windows 的 Ctrl+Q)
+                    // 👇 全局快捷键劫持 (支持 macOS 的 Cmd+Q 和 Windows 的 Ctrl+Q)
                     window.addEventListener('keydown', (e) => {
                         if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'q') {
                             e.preventDefault(); // 阻止浏览器默认行为
-                            console.log("触发退出快捷键");
                             if (window.pywebview && window.pywebview.api && window.pywebview.api.force_quit) {
                                 window.pywebview.api.force_quit();
                             }
@@ -2000,9 +2109,6 @@
                     });
 
                     window.addEventListener('pywebviewready', async () => {
-                        console.log('pywebviewready 事件触发');
-                        // debugEl.innerHTML += '<br>✅ pywebviewready 触发 | 加载数据...';
-
                         // 🌟 新增：异步拉取云端配置（不阻塞主流程）
                         fetchSystemConfig().catch(err => console.warn('云端配置拉取异常:', err));
 
@@ -2014,6 +2120,17 @@
                             }
                         } catch (e) {
                             console.warn('加载配置失败:', e);
+                        }
+
+                        // 🌟 新增：从后端同步真实的冷却时间（物理级防穿透）
+                        try {
+                            const cooldownRes = await pywebview.api.get_update_cooldown();
+                            if (cooldownRes && cooldownRes.status === 'cooling' && cooldownRes.remaining > 0) {
+                                console.log(`🔄 从后端恢复真实的冷却倒计时: 剩余 ${cooldownRes.remaining} 秒`);
+                                startCooldown(cooldownRes.remaining);
+                            }
+                        } catch (e) {
+                            console.warn('同步冷却时间失败:', e);
                         }
 
                         // 👇 附加：静默检查软件更新
@@ -2029,8 +2146,6 @@
                         // 1. 软件打开时，先只拉取第 1 页的数据
                         try {
                             const res = await pywebview.api.get_history_paged(page.value, 20, null);
-                            console.log('API 返回:', res);
-                            // debugEl.innerHTML += '<br>✅ 数据加载完成 | ' + res.data.length + ' 条记录';
 
                             if (res.status === 'success') {
                                 articles.value = res.data;
@@ -2038,7 +2153,6 @@
                             }
                         } catch (e) {
                             console.error('API 调用失败:', e);
-                            // debugEl.innerHTML += '<br>❌ API 错误: ' + e.message;
                         }
 
                         // 2. 数据渲染上墙后，派出"探子"开始监听锚点
@@ -2091,21 +2205,24 @@
                     progressDetailText.value = currentTitle ? `正在由 AI 总结: ${currentTitle}` : '正在处理...';
                 };
 
-                const checkUpdates = async () => {
-                    // 🌟 检查是否在冷却时间内
-                    if (isUpdateDisabled.value) {
-                        statusMsg.value = `请等待 ${updateCooldown.value} 秒后再次更新`;
-                        setTimeout(() => statusMsg.value = '', 2000);
-                        return;
-                    }
+                // 🌟 后台自动巡检完成通知：锁定按钮并同步冷却状态
+                window.triggerAutoFetchCooldown = () => {
+                    console.log("🔔 收到后台自动巡检完成通知，锁定按钮");
+                    statusMsg.value = "已自动执行开机/后台巡检，120s内无需重复刷新";
+                    setTimeout(() => statusMsg.value = '', 5000); // 5秒后提示消失
+                    startCooldown(120);
+                    // 同步更新 localStorage，防止重启失效
+                    localStorage.setItem('lastManualUpdateTime', Date.now().toString());
+                };
 
+                const checkUpdates = async () => {
+                    if (isUpdateDisabled.value) { return; }
                     isLoading.value = true;
                     statusMsg.value = "";
-                    progressText.value = "正在获取列表...";
-                    // 重置进度条变量
-                    totalTasks.value = 0;
-                    completedTasks.value = 0;
-                    progressDetailText.value = "";
+                    totalTasks.value = 0; completedTasks.value = 0; progressDetailText.value = "";
+
+                    let cooldownRemaining = 120; // 默认冷却
+                    let shouldStartCooldown = false;
 
                     try {
                         const res = await pywebview.api.check_updates(true);
@@ -2124,40 +2241,35 @@
                                 console.warn('刷新来源列表失败:', e);
                             }
 
-                            // 🌟 读取后端返回的 submitted_count 字段
                             const count = res.submitted_count || 0;
                             if (count > 0) {
                                 statusMsg.value = `找到 ${count} 篇新内容，正在由AI总结...`;
-                                // 有新内容时保持提示，不自动清除
                             } else {
                                 statusMsg.value = "当前已是最新，无新公文";
                                 setTimeout(() => statusMsg.value = '', 4000);
                             }
+                            shouldStartCooldown = true;
+                        } else if (res.status === 'cooldown') {
+                            // 🌟 拦截成功：使用后端返回的真实剩余时间
+                            statusMsg.value = "⏳ " + res.message;
+                            setTimeout(() => statusMsg.value = '', 3000);
+                            cooldownRemaining = res.remaining;
+                            shouldStartCooldown = true;
                         } else {
-                            // 如果是报错，后端确实会返回 message 字段
                             statusMsg.value = "❌ " + (res.message || "更新失败");
+                            setTimeout(() => statusMsg.value = '', 3000);
                         }
                     } catch (e) {
                         statusMsg.value = "❌ 连接异常或超时";
+                        setTimeout(() => statusMsg.value = '', 3000);
                     } finally {
                         isLoading.value = false;
-                        progressText.value = "";
-
-                        // 🌟 启动2分钟（120秒）冷却计时
-                        isUpdateDisabled.value = true;
-                        updateCooldown.value = 120;
-
-                        if (cooldownTimer) clearInterval(cooldownTimer);
-
-                        cooldownTimer = setInterval(() => {
-                            updateCooldown.value--;
-                            if (updateCooldown.value <= 0) {
-                                clearInterval(cooldownTimer);
-                                cooldownTimer = null;
-                                isUpdateDisabled.value = false;
-                                updateCooldown.value = 0;
-                            }
-                        }, 1000);
+                        if (shouldStartCooldown) {
+                            startCooldown(cooldownRemaining);
+                            // 🌟 动态计算伪造的起始时间，确保存入 localStorage 的时间戳是精准对齐的
+                            const simulatedStartTime = Date.now() - ((120 - cooldownRemaining) * 1000);
+                            localStorage.setItem('lastManualUpdateTime', simulatedStartTime.toString());
+                        }
                     }
                 };
 
@@ -2792,7 +2904,7 @@
 
                 return {
                     currentView, activeArticle, lastArticle, isNavigatingBack, processedArticles, isLoading, statusMsg, updateInfo, tagColors, getTagColor, formatDateTime,
-                    checkUpdates, openDetail, backToList, goToLastArticle, renderMarkdown, openBrowser, copyText, downloadFile,scrollToAttachments,takeSnapshot,progressText,page, isLoadingMore, noMoreData, loadMoreArticles,openSettings, backToPrevious, config, showApiKey, settingsMsg, isTesting, isRegenerating,
+                    checkUpdates, openDetail, backToList, goToLastArticle, renderMarkdown, openBrowser, copyText, downloadFile,scrollToAttachments,takeSnapshot,page, isLoadingMore, noMoreData, loadMoreArticles,openSettings, backToPrevious, config, showApiKey, settingsMsg, isTesting, isRegenerating,
                     resetPrompt, saveSettings, testConnection,closeAppWindow,searchQuery, handleSearch, clearSearch, regenerateSummary,
                     // 🌟 更新按钮冷却
                     isUpdateDisabled, updateCooldown,
@@ -2812,18 +2924,10 @@
             }
         }).mount('#app');
 
-            // debugEl.innerHTML += '<br>✅ Vue App 挂载成功';
-
-            // // 新增：如果一切顺利，500毫秒后把这个黑框藏起来
-            // setTimeout(() => { 
-            //     if(debugEl) debugEl.style.display = 'none'; 
-            // }, 500);
-
-        } catch (e) {
-            // debugEl.innerHTML += '<br><span style="color:#ff6b6b;">❌ Vue 初始化错误: ' + e.message + '</span>';
-            console.error('Vue 初始化失败:', e);
-        }
-    </script>
+    } catch (e) {
+        console.error('Vue 初始化失败:', e);
+    }
+</script>
 </body>
 </html>
 

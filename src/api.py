@@ -16,12 +16,13 @@ import requests
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from typing import Dict, Any, Optional
-
+import time
 from src.database import db
 from src.llm_service import LLMService
 from src.services import SystemService, DownloadService, ConfigService
 from src.core import DaemonManager, SpiderScheduler, ArticleProcessor
 from src.core.scheduler import SPIDER_REGISTRY
+from src.version import __version__
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +36,8 @@ class Api:
     """V2 多源调度引擎 - 门面层"""
 
     def __init__(self):
-        # 当前软件版本号
-        self.CURRENT_VERSION = "v1.0.0"
+        # 当前软件版本号（从 version.py 统一导入）
+        self.CURRENT_VERSION = __version__
 
         # 大模型服务
         self.llm = LLMService()
@@ -131,6 +132,14 @@ class Api:
         Returns:
             {"status": "success/error", "submitted_count": int, "queue_size": int, "data": list}
         """
+        # 🌟 终极防御：如果前端的锁失效了，后端在这里强行拦截
+        if is_manual:
+            last_fetch = self.daemon_manager._get_last_fetch_time()
+            remaining = 120 - (time.time() - last_fetch)
+            if remaining > 0:
+                logger.warning(f"拦截高频手动刷新，剩余冷却 {remaining:.1f} 秒")
+                return {"status": "cooldown", "remaining": int(remaining), "message": f"刷新太快啦，请等待 {int(remaining)} 秒"}
+
         mode = self.config_service.get('trackMode', 'continuous')
 
         # 获取用户订阅的来源列表
@@ -148,8 +157,20 @@ class Api:
         if result.get("status") == "error" and result.get("message"):
             return result
 
+        # 🌟 手动更新成功后，记录时间戳（与守护进程共享冷却状态）
+        if is_manual and result.get("status") == "success":
+            self.daemon_manager.record_manual_update()
+
         # 获取最新数据
         all_articles = db.get_articles_paged(limit=20, offset=0)
+
+        # 🌟 核心联动：如果不是手动更新（即后台 daemon 触发的），且执行成功，主动通知前端锁定按钮
+        if not is_manual and result.get("status") == "success":
+            try:
+                if webview.windows:
+                    webview.windows[0].evaluate_js("if(window.triggerAutoFetchCooldown) window.triggerAutoFetchCooldown();")
+            except Exception as e:
+                logger.debug(f"通知前端锁定按钮失败: {e}")
 
         return {
             "status": "success",
@@ -158,6 +179,16 @@ class Api:
             "data": all_articles,
             "warnings": result.get("warnings")
         }
+
+    def get_update_cooldown(self) -> Dict[str, Any]:
+        """获取真实的剩余更新冷却时间（秒）"""
+        last_fetch = self.daemon_manager._get_last_fetch_time()
+        elapsed = time.time() - last_fetch
+        remaining = int(120 - elapsed)
+
+        if remaining > 0:
+            return {"status": "cooling", "remaining": remaining}
+        return {"status": "ready", "remaining": 0}
 
     def get_processing_stats(self) -> Dict[str, Any]:
         """获取后台处理任务的统计信息"""
@@ -217,7 +248,6 @@ class Api:
 
     def start_daemon(self, interval_minutes: int = 15, debug_seconds: int = None):# type: ignore
         """启动后台守护线程"""
-        wait_seconds = debug_seconds if debug_seconds else (interval_minutes * 60)
         debug_mode = debug_seconds is not None
 
         def on_new_articles(count: int, result: dict):
@@ -226,9 +256,15 @@ class Api:
             # 这里只做日志记录
             logger.info(f"守护进程检测到 {count} 篇新文章，正在后台处理...")
 
+        # 🌟 热重载 Getter：动态读取配置，带安全边界（最小 15 分钟）
+        def get_interval_seconds() -> int:
+            polling_minutes = self.config_service.get('pollingInterval', 60)
+            # 防御性转换：确保最小 900 秒（15 分钟）
+            return max(int(polling_minutes) * 60, 900)
+
         self.daemon_manager.start(
             task_callback=self.check_updates,
-            interval_seconds=wait_seconds,
+            interval_getter=get_interval_seconds,
             on_new_articles=on_new_articles,
             debug_mode=debug_mode
         )
@@ -318,13 +354,16 @@ class Api:
         if self.window:
             self.window.hide()
 
-    def search_articles(self, keyword: str) -> dict:
-        """全局搜索"""
+    def search_articles(self, keyword: str, source_name: str = None) -> dict:
+        """全局搜索（支持按来源筛选）"""
         try:
             if not keyword or not keyword.strip():
-                articles = db.get_articles_paged(limit=20, offset=0)
+                # 如果搜索词为空，相当于直接获取分页列表
+                articles = db.get_articles_paged(limit=20, offset=0, source_name=source_name)
                 return {"status": "success", "data": articles}
-            data = db.search_articles(keyword.strip(), limit=50)
+
+            # 将 source_name 传递给底层的数据库方法
+            data = db.search_articles(keyword.strip(), limit=50, source_name=source_name)
             return {"status": "success", "data": data}
         except Exception as e:
             logger.error(f"搜索失败: {e}")

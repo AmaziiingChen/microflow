@@ -3,6 +3,7 @@ import os
 import hashlib
 import logging
 import threading
+import re
 from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
@@ -166,28 +167,70 @@ class DatabaseManager:
             cursor.execute("UPDATE articles SET is_read = 1 WHERE url = ?", (url,))
             conn.commit()
 
-    def search_articles(self, keyword: str, limit: int = 50) -> list:
+    def search_articles(self, keyword: str, limit: int = 50, source_name: str = None) -> list: # type: ignore
         """
-        全局搜索接口：支持在标题、日期、正文和摘要中进行模糊匹配
+        全局搜索接口：支持多关键词布尔搜索 (空格/and 表示 AND，or 表示 OR)
+        示例: "校园 附件 or 放假" 会被解析为 (校园 AND 附件) OR (放假)
         """
         with self.get_connection() as conn:
-            # 确保返回字典格式
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
 
-            # 使用 LIKE 语法进行全字段模糊匹配
-            query = """
-            SELECT * FROM articles
-            WHERE title LIKE ? OR date LIKE ? OR raw_text LIKE ? OR summary LIKE ?
-            ORDER BY exact_time DESC, date DESC
-            LIMIT ?
-            """
+            # --- 🌟 核心逻辑：解析布尔搜索语法 ---
+            # 1. 以 " or " 为界限切分 OR 组 (忽略大小写)
+            or_groups = [g.strip() for g in re.split(r'\s+or\s+', keyword, flags=re.IGNORECASE)]
 
-            # SQLite 的 LIKE 需要包裹 % 符号
-            like_keyword = f"%{keyword}%"
-            cursor.execute(query, (like_keyword, like_keyword, like_keyword, like_keyword, limit))
+            sql_or_conditions = []
+            params = []
 
-            # 将 Row 对象转换为标准的 dict 列表返回
+            for group in or_groups:
+                # 2. 将 " and " 替换为空格，统一处理 AND 逻辑
+                group = re.sub(r'\s+and\s+', ' ', group, flags=re.IGNORECASE)
+                # 3. 以空格切分 AND 关键词
+                and_terms = [t.strip() for t in group.split() if t.strip()]
+
+                if not and_terms:
+                    continue
+
+                and_conditions = []
+                for term in and_terms:
+                    like_term = f"%{term}%"
+                    # 对每个关键词，要求在标题、日期、正文或摘要中至少命中一个
+                    term_cond = "(title LIKE ? OR date LIKE ? OR raw_text LIKE ? OR summary LIKE ?)"
+                    and_conditions.append(term_cond)
+                    params.extend([like_term] * 4)
+
+                # 同一个 OR 组内的词，必须全部命中 (AND)
+                sql_or_conditions.append("(" + " AND ".join(and_conditions) + ")")
+
+            # 如果解析后没有有效查询条件，退化为无条件查询
+            if not sql_or_conditions:
+                base_condition = "1=1"
+            else:
+                # 把所有的 OR 组连接起来
+                base_condition = "(" + " OR ".join(sql_or_conditions) + ")"
+
+            # 🌟 动态拼装最终 SQL 语句
+            if source_name:
+                query = f"""
+                SELECT * FROM articles
+                WHERE {base_condition} AND source_name = ?
+                ORDER BY exact_time DESC, date DESC
+                LIMIT ?
+                """
+                params.append(source_name)
+            else:
+                query = f"""
+                SELECT * FROM articles
+                WHERE {base_condition}
+                ORDER BY exact_time DESC, date DESC
+                LIMIT ?
+                """
+
+            params.append(limit)
+
+            # 执行查询
+            cursor.execute(query, tuple(params))
             return [dict(row) for row in cursor.fetchall()]
 
     def get_all_sources(self) -> list:

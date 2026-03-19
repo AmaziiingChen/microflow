@@ -23,6 +23,7 @@ class AppConfig:
     custom_font_path: str = ""  # 🌟 新增：外部字体路径
     custom_font_name: str = ""  # 🌟 新增：外部字体原始名称
     subscribed_sources: list = field(default_factory=list)  # 🌟 新增：订阅的来源列表
+    polling_interval: int = 900  # 🌟 新增：守护进程轮询间隔（秒），默认 15 分钟
 
 
 class ConfigService:
@@ -80,7 +81,8 @@ class ConfigService:
                 font_family=data.get('fontFamily', default.font_family),  # 🌟 新增
                 custom_font_path=data.get('customFontPath', default.custom_font_path),  # 🌟 新增
                 custom_font_name=data.get('customFontName', default.custom_font_name),  # 🌟 新增
-                subscribed_sources=data.get('subscribedSources', default.subscribed_sources)  # 🌟 新增
+                subscribed_sources=data.get('subscribedSources', default.subscribed_sources),  # 🌟 新增
+                polling_interval=data.get('pollingInterval', default.polling_interval)  # 🌟 新增
             )
             return self._config
 
@@ -121,7 +123,8 @@ class ConfigService:
                 font_family=config_dict.get('fontFamily', 'sans-serif'),  # 🌟 新增
                 custom_font_path=config_dict.get('customFontPath', ''),  # 🌟 新增
                 custom_font_name=config_dict.get('customFontName', ''),  # 🌟 新增
-                subscribed_sources=config_dict.get('subscribedSources', [])  # 🌟 新增
+                subscribed_sources=config_dict.get('subscribedSources', []),  # 🌟 新增
+                polling_interval=config_dict.get('pollingInterval', 900)  # 🌟 新增
             )
 
             logger.info("配置已成功保存")
@@ -136,7 +139,7 @@ class ConfigService:
         """获取当前配置（如果未加载则先加载）"""
         if self._config is None:
             self.load()
-        return self._config
+        return self._config # type: ignore
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -157,7 +160,8 @@ class ConfigService:
             "fontFamily": config.font_family,  # 🌟 新增
             "customFontPath": config.custom_font_path,  # 🌟 新增
             "customFontName": config.custom_font_name,  # 🌟 新增
-            "subscribedSources": config.subscribed_sources  # 🌟 新增
+            "subscribedSources": config.subscribed_sources,  # 🌟 新增
+            "pollingInterval": config.polling_interval  # 🌟 新增
         }
 
     def get(self, key: str, default: Any = None) -> Any:
@@ -185,6 +189,7 @@ class ConfigService:
             'customFontPath': 'custom_font_path',  # 🌟 新增
             'customFontName': 'custom_font_name',  # 🌟 新增
             'subscribedSources': 'subscribed_sources',  # 🌟 新增
+            'pollingInterval': 'polling_interval',  # 🌟 新增
         }
 
         # 转换键名

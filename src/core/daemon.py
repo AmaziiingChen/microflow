@@ -1,13 +1,20 @@
 """守护进程管理器 - 负责后台定时任务的调度"""
 
+import os
 import time
 import threading
 import logging
+import random
+import datetime
 from typing import Callable, Optional, Dict, Any
 
 from src.core.network_utils import check_network_status, NetworkStatus, get_network_description
 
 logger = logging.getLogger(__name__)
+
+# 持久化冷却文件路径
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+LAST_FETCH_TIME_FILE = os.path.join(BASE_DIR, 'data', '.last_fetch_time')
 
 
 class DaemonManager:
@@ -18,17 +25,29 @@ class DaemonManager:
         daemon = DaemonManager()
         daemon.start(
             task_callback=self.check_updates,
-            interval_seconds=900,
+            interval_getter=lambda: 900,
             on_new_articles=self._on_new_articles
         )
 
     特性：
-    - 智能休眠：每 2 秒检查一次网络状态
-    - 断线补偿：网络恢复后立即触发补偿抓取
+    - 固定间隔 + 边界抖动 + 夜间模式
+    - 早8点/晚8点抖动抓取（0-30分钟随机延迟）
+    - 深夜静默（20:00-08:00）
+    - 断网退避与断线补偿
+    - 后端持久化冷却（防止重启绕过）
     """
 
     # 断线补偿阈值（秒）：网络恢复后，如果距离上次成功抓取超过此时间，触发补偿
     COMPENSATION_THRESHOLD = 300  # 5 分钟
+
+    # 断网退避最大间隔（秒）
+    MAX_BACKOFF_INTERVAL = 3600  # 1 小时
+
+    # 最小执行间隔（秒）：防止连续触发
+    MIN_RUN_INTERVAL = 600  # 10 分钟
+
+    # 🌟 手动更新冷却时间（秒）
+    MANUAL_UPDATE_COOLDOWN = 120  # 2 分钟
 
     def __init__(self):
         self._stop_event = threading.Event()
@@ -38,7 +57,40 @@ class DaemonManager:
         # 网络状态追踪
         self._last_network_status: Optional[NetworkStatus] = None
         self._last_successful_run: float = 0  # 上次成功抓取的时间戳
-        self._network_check_interval = 2  # 网络检查间隔（秒）
+
+    # ==================== 持久化冷却方法 ====================
+
+    def _save_last_fetch_time(self) -> None:
+        """将当前时间戳持久化到文件"""
+        try:
+            # 确保目录存在
+            os.makedirs(os.path.dirname(LAST_FETCH_TIME_FILE), exist_ok=True)
+            with open(LAST_FETCH_TIME_FILE, 'w', encoding='utf-8') as f:
+                f.write(str(time.time()))
+            logger.debug(f"💾 已保存抓取时间戳")
+        except Exception as e:
+            logger.warning(f"保存抓取时间戳失败: {e}")
+
+    def _get_last_fetch_time(self) -> float:
+        """从文件读取上次抓取时间戳，失败返回 0.0"""
+        try:
+            if os.path.exists(LAST_FETCH_TIME_FILE):
+                with open(LAST_FETCH_TIME_FILE, 'r', encoding='utf-8') as f:
+                    return float(f.read().strip())
+        except Exception as e:
+            logger.debug(f"读取抓取时间戳失败: {e}")
+        return 0.0
+
+    def record_manual_update(self) -> None:
+        """
+        公开方法：记录手动更新时间
+        供 api.py 的手动更新接口调用
+        """
+        self._save_last_fetch_time()
+        self._last_successful_run = time.time()
+        logger.info("📝 已记录手动更新时间")
+
+    # =========================================================
 
     @property
     def is_running(self) -> bool:
@@ -53,7 +105,7 @@ class DaemonManager:
     def start(
         self,
         task_callback: Callable[[], Dict[str, Any]],
-        interval_seconds: int = 900,
+        interval_getter: Callable[[], int] = lambda: 900,
         initial_wait: int = 10,
         on_new_articles: Optional[Callable[[int, Dict[str, Any]], None]] = None,
         debug_mode: bool = False
@@ -63,7 +115,7 @@ class DaemonManager:
 
         Args:
             task_callback: 要执行的任务（返回 {"status": ..., "new_count": ...}）
-            interval_seconds: 轮询间隔（秒），默认 15 分钟
+            interval_getter: 获取轮询间隔的函数（返回秒数），支持热重载
             initial_wait: 初始等待时间（秒）
             on_new_articles: 发现新文章时的回调，参数为 (count, result)
             debug_mode: 调试模式，缩短初始等待时间
@@ -74,66 +126,149 @@ class DaemonManager:
 
         self._is_running = True
         self._stop_event.clear()
-        self._last_successful_run = time.time()  # 初始化为当前时间
+
+        # 🌟 从持久化文件恢复上次抓取时间
+        persisted_last_fetch_time = self._get_last_fetch_time()
+        self._last_successful_run = persisted_last_fetch_time if persisted_last_fetch_time > 0 else time.time()
 
         def worker():
-            # 1. 强行打印，绕过 logger 可能的级别过滤
-            print(f"🚀 [Debug] 守护线程准备就绪 (轮询间隔: {interval_seconds}秒)")
-            logger.info(f"🛡️ 守护线程已启动 (轮询间隔: {interval_seconds}秒)")
+            # 🌟 首次获取间隔
+            current_interval = interval_getter()
+            print(f"🚀 [Debug] 守护线程准备就绪 (当前轮询间隔: {current_interval}秒)")
+            logger.info(f"🛡️ 守护线程已启动 (当前轮询间隔: {current_interval}秒)")
 
             # 初始等待（调试模式下缩短）
             actual_initial_wait = 2 if debug_mode else initial_wait
             if self._stop_event.wait(actual_initial_wait):
                 return
 
-            last_run_time = 0
+            # 🌟 时间追踪变量
+            first_run = True
+            last_run_time = persisted_last_fetch_time  # 🌟 使用持久化的时间戳初始化
+            current_date = ""
+
+            # 🌟 抖动状态
+            morning_ran = False
+            evening_ran = False
+            morning_target = 0.0
+            evening_target = 0.0
+
+            # 🌟 断网退避
+            current_wait_interval = current_interval
 
             while not self._stop_event.is_set():
+                # 🌟 每次循环开始时，强制从硬盘同步最新抓取时间，防止在 sleep 期间被手动抓取"偷家"
+                disk_time = self._get_last_fetch_time()
+                if disk_time > last_run_time:
+                    last_run_time = disk_time
+
+                # 🌟 热重载：动态获取最新间隔
+                current_interval = interval_getter()
+
+                now = datetime.datetime.now()
                 current_time = time.time()
-                time_elapsed = current_time - last_run_time
+                hour_float = now.hour + now.minute / 60.0
+                today_str = now.strftime("%Y-%m-%d")
 
-                # 🌟 智能网络检测
-                current_network_status = check_network_status()
-                previous_network_status = self._last_network_status
+                # 🌟 跨天重置逻辑
+                if today_str != current_date:
+                    current_date = today_str
+                    morning_ran = False
+                    evening_ran = False
+                    morning_target = 0.0
+                    evening_target = 0.0
+                    logger.info(f"📅 新的一天开始: {current_date}，抖动状态已重置")
 
-                # 更新网络状态记录
-                self._last_network_status = current_network_status
+                # 🌟 抖动目标生成
+                # 早8点抖动区间 (8:00-8:30)
+                if 8.0 <= hour_float < 8.5 and not morning_ran and morning_target == 0:
+                    morning_target = current_time + random.randint(0, 1800)
+                    logger.info(f"🌅 早间抖动目标已设定: {datetime.datetime.fromtimestamp(morning_target).strftime('%H:%M:%S')}")
 
-                # 🌟 断线补偿逻辑
-                should_compensate = False
-                if previous_network_status == NetworkStatus.NO_NETWORK:
-                    # 之前无网络，现在有网络了
-                    if current_network_status != NetworkStatus.NO_NETWORK:
-                        time_since_last_success = current_time - self._last_successful_run
-                        if time_since_last_success >= self.COMPENSATION_THRESHOLD:
-                            logger.info(f"🔄 网络恢复！触发补偿抓取（距上次成功: {int(time_since_last_success)}秒）")
-                            should_compensate = True
+                # 晚8点抖动区间 (19:30-20:00)
+                if 19.5 <= hour_float < 20.0 and not evening_ran and evening_target == 0:
+                    evening_target = current_time + random.randint(0, 1800)
+                    logger.info(f"🌆 晚间抖动目标已设定: {datetime.datetime.fromtimestamp(evening_target).strftime('%H:%M:%S')}")
 
-                # 首次运行、达到轮询间隔、或需要补偿时执行任务
-                if should_compensate or time_elapsed >= interval_seconds or last_run_time == 0:
-                    # 无网络时跳过
+                # 🌟 执行判断逻辑（互斥 if-elif）
+                should_run = False
+
+                if first_run:
+                    # 🌟 首次运行冷却校验：防止用户通过重启绕过冷却限制
+                    time_since_last_fetch = current_time - last_run_time
+                    if time_since_last_fetch < self.MANUAL_UPDATE_COOLDOWN:
+                        # 刚刚抓取过，跳过首抓
+                        remaining_cooldown = int(self.MANUAL_UPDATE_COOLDOWN - time_since_last_fetch)
+                        logger.info(f"⏳ 检测到近期已抓取（{int(time_since_last_fetch)}秒前），跳过首抓，剩余冷却: {remaining_cooldown}秒")
+                        print(f"⏳ [Debug] 跳过首抓（剩余冷却: {remaining_cooldown}秒）")
+                    else:
+                        # 冷却已过，正常执行首抓
+                        should_run = True
+                        logger.info("🚀 首次运行，立即执行抓取")
+                    first_run = False
+
+                elif hour_float >= 20.0 or hour_float < 8.0:
+                    # 深夜阶段：非首抓则绝对静默
+                    pass
+
+                elif 8.0 <= hour_float < 8.5 and not morning_ran and current_time >= morning_target:
+                    # 早间抖动触发
+                    if current_time >= last_run_time + self.MIN_RUN_INTERVAL:
+                        should_run = True
+                        logger.info(f"🌅 早间抖动触发 (目标时间已到)")
+
+                elif 19.5 <= hour_float < 20.0 and not evening_ran and current_time >= evening_target:
+                    # 晚间抖动触发
+                    if current_time >= last_run_time + self.MIN_RUN_INTERVAL:
+                        should_run = True
+                        logger.info(f"🌆 晚间抖动触发 (目标时间已到)")
+
+                elif 8.0 <= hour_float < 20.0:
+                    # 白天正常轮询
+                    if (current_time >= last_run_time + current_interval and
+                        current_time >= last_run_time + self.MIN_RUN_INTERVAL):
+                        should_run = True
+                        logger.debug(f"☀️ 白天定时轮询触发 (当前间隔: {current_interval}秒)")
+
+                # 🌟 执行任务
+                if should_run:
+                    # 执行网络检测
+                    current_network_status = check_network_status()
+                    previous_network_status = self._last_network_status
+                    self._last_network_status = current_network_status
+
+                    # 断线补偿逻辑
+                    should_compensate = False
+                    if previous_network_status == NetworkStatus.NO_NETWORK:
+                        if current_network_status != NetworkStatus.NO_NETWORK:
+                            time_since_last_success = current_time - self._last_successful_run
+                            if time_since_last_success >= self.COMPENSATION_THRESHOLD:
+                                logger.info(f"🔄 网络恢复！触发补偿抓取（距上次成功: {int(time_since_last_success)}秒）")
+                                should_compensate = True
+
+                    # 断网跳过
                     if current_network_status == NetworkStatus.NO_NETWORK:
-                        logger.debug("💤 无网络连接，跳过本轮检测")
-                        self._stop_event.wait(self._network_check_interval)
+                        logger.debug(f"💤 无网络连接，跳过本轮检测")
+                        current_wait_interval = min(current_wait_interval * 2, self.MAX_BACKOFF_INTERVAL)
+                        last_run_time = current_time
                         continue
 
+                    # 网络正常，执行任务
                     network_desc = get_network_description(current_network_status)
                     reason = "补偿抓取" if should_compensate else "定时检测"
                     print(f"⏳ [Debug] 触发{reason}... (网络: {network_desc})")
                     logger.info(f"🔍 触发{reason}... (网络: {network_desc})")
 
-                    # 2. 加上极其重要的 try...except 保护罩
                     try:
                         result = task_callback()
                         print(f"✅ [Debug] 抓取执行完毕！状态: {result.get('status')}, 提交数量: {result.get('submitted_count')}")
 
-                        # 增加一层类型检查，防止 result 为 None 导致 get() 报错崩溃
                         if result and isinstance(result, dict):
                             if result.get("status") == "success":
-                                # 更新成功抓取时间
                                 self._last_successful_run = time.time()
+                                # 🌟 恢复为当前动态获取的间隔
+                                current_wait_interval = current_interval
 
-                                # 检查是否有新文章
                                 new_count = result.get("new_count", 0)
                                 submitted_count = result.get("submitted_count", 0)
                                 if new_count > 0 and on_new_articles:
@@ -149,12 +284,23 @@ class DaemonManager:
                         traceback.print_exc()
 
                     finally:
-                        # 3. 无论成功还是崩溃，都必须更新时间戳，防止无限死循环狂刷目标网站
+                        # 🌟 收尾更新
                         last_run_time = time.time()
+                        # 🌟 持久化抓取时间
+                        self._save_last_fetch_time()
                         print(f"💤 [Debug] 本轮结束，等待下一次触发...")
-                else:
-                    # 短间隔等待，便于快速响应停止信号和网络变化
-                    self._stop_event.wait(self._network_check_interval)
+
+                        # 如果当前在抖动区间，标记为已运行
+                        if 8.0 <= hour_float < 8.5:
+                            morning_ran = True
+                            logger.info("🌅 早间抖动任务已完成")
+                        if 19.5 <= hour_float < 20.0:
+                            evening_ran = True
+                            logger.info("🌆 晚间抖动任务已完成")
+
+                # 🌟 基础心跳：每 60 秒检查一次
+                if self._stop_event.wait(60):
+                    return
 
         self._thread = threading.Thread(target=worker, daemon=True)
         self._thread.start()
