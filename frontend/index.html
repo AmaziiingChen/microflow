@@ -1583,7 +1583,7 @@
         <!-- 🌟 新增：软件更新弹窗 -->
         <div v-if="updateInfo" class="update-modal-overlay">
             <div class="update-modal">
-                <div class="update-header">🚀 发现新版本 {{ updateInfo.latest_version }}</div>
+                <div class="update-header">🚀 发现新版本 {{ updateInfo.version }}</div>
                 <div class="update-body markdown-body" v-html="renderMarkdown(updateInfo.notes)"></div>
                 <div class="update-footer">
                     <button class="action-btn btn-secondary" style="flex: 1;" @click="updateInfo = null">暂不更新</button>
@@ -1676,49 +1676,43 @@
                     version: '1.0.0'
                 });
 
-                // 🌟 新增：云端配置拉取方法
-                const latestVersion = ref(''); // 记录最新版本号
+                // 🌟 云端版本号（从后端缓存获取）
+                const remoteVersion = ref('');
+
+                // 🌟 云端配置拉取方法（通过后端统一请求，避免重复）
                 const fetchSystemConfig = async () => {
-                    // 云端配置 JSON 直链（请替换为实际地址）
-                    const configUrl = 'https://microflow-1412347033.cos.ap-guangzhou.myqcloud.com/version.json';
-
                     try {
-                        const response = await fetch(configUrl, {
-                            method: 'GET',
-                            cache: 'no-cache', // 避免缓存
-                            headers: { 'Accept': 'application/json' }
-                        });
+                        // 通过后端 API 获取缓存的版本信息（后端仅在启动时请求一次）
+                        const res = await pywebview.api.get_version_info();
 
-                        if (!response.ok) {
-                            throw new Error(`HTTP ${response.status}`);
+                        if (res.status !== 'success') {
+                            console.warn('⚠️ 后端获取版本信息失败，使用本地保底公告');
+                            return;
                         }
 
-                        const data = await response.json();
-
-                        // 解析云端配置，更新 systemNotice
-                        if (data.announcement) {
+                        // 🌟 解析云端配置，更新 systemNotice
+                        if (res.announcement) {
                             systemNotice.value = {
-                                id: data.announcement.id || 'sys_notice_1',
-                                title: data.announcement.title || systemNotice.value.title,
-                                publish_time: data.announcement.publish_time || systemNotice.value.publish_time,
-                                department: data.announcement.department || '系统公告',
-                                tags: data.announcement.tags || systemNotice.value.tags,
-                                summary: data.announcement.summary || systemNotice.value.summary,
-                                content: data.announcement.content || systemNotice.value.content,
+                                id: res.announcement.id || 'sys_notice_1',
+                                title: res.announcement.title || systemNotice.value.title,
+                                publish_time: res.announcement.publish_time || systemNotice.value.publish_time,
+                                department: res.announcement.department || '系统公告',
+                                tags: res.announcement.tags || systemNotice.value.tags,
+                                summary: res.announcement.summary || systemNotice.value.summary,
+                                content: res.announcement.content || systemNotice.value.content,
                                 is_announcement: true,
-                                version: data.announcement.version || systemNotice.value.version
+                                version: res.announcement.version || systemNotice.value.version
                             };
                         }
 
-                        // 记录最新版本号
-                        if (data.latestVersion) {
-                            latestVersion.value = data.latestVersion;
+                        // 🌟 记录远程版本号（统一使用 version 字段）
+                        if (res.version) {
+                            remoteVersion.value = res.version;
                         }
 
-                        console.log('✅ 云端配置拉取成功:', data);
+                        console.log('✅ 云端配置拉取成功:', res);
                     } catch (error) {
                         console.warn('⚠️ 云端配置拉取失败，使用本地保底公告:', error.message);
-                        // 网络失败时保持本地默认公告不变
                     }
                 };
                 // 🌟 新增：已读公告版本，从 localStorage 初始化

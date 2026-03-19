@@ -79,6 +79,7 @@ jobs:
           BUCKET: ${{ secrets.COS_BUCKET }}
           REGION: ${{ secrets.COS_REGION }}
           TAG_NAME: ${{ github.ref_name }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           python -c "
           import os
@@ -98,12 +99,12 @@ jobs:
           bucket = os.environ['BUCKET']
           region = os.environ['REGION']
           tag_name = os.environ['TAG_NAME']
+          repo = os.environ.get('GITHUB_REPOSITORY', 'unknown/repo')
 
           base_url = f'https://{bucket}.cos.{region}.myqcloud.com'
 
           version_info = {
               'version': tag_name,
-              'latestVersion': tag_name, # 兼容 CC 的读取习惯
               'release_date': datetime.now().isoformat(),
               'is_active': True,
               'kill_message': '由于合规性要求，MicroFlow 已永久停止服务。感谢您的使用。',
@@ -118,8 +119,9 @@ jobs:
                   'content': '亲爱的同学/老师，欢迎使用 MicroFlow！<br><br>为了让 AI 能够为您智能总结长篇公文，您需要先配置 AI 的 API 密钥。<br><br>👉 **配置方法**：请点击本界面**左上角的「设置/齿轮」图标**，在弹出的面板中填入您的 API 信息。<br><br>配置完成后，您就可以体验极速的公文摘要功能了。'
               },
               'downloads': {
-                  'github': f'https://github.com/{repo}/releases/tag/{tag_name}',
-                  'netdisk': '您可以去腾讯云手动修改此 JSON 文件，填入您的网盘链接'
+                  'windows': f'{base_url}/microflow_win.exe',
+                  'macos': f'{base_url}/microflow_mac.zip',
+                  'github': f'https://github.com/{repo}/releases/tag/{tag_name}'
               }
           }
 

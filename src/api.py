@@ -32,6 +32,11 @@ from src.version import __version__
 
 logger = logging.getLogger(__name__)
 
+# ============================================================
+# 🌟 全局常量：云端配置 URL（单一真相源）
+# ============================================================
+VERSION_URL = "https://microflow-1412347033.cos.ap-guangzhou.myqcloud.com/version.json"
+
 # 确保数据目录存在
 ensure_data_dir_exists()
 
@@ -42,6 +47,9 @@ class Api:
     def __init__(self):
         # 当前软件版本号（从 version.py 统一导入）
         self.CURRENT_VERSION = __version__
+
+        # 🌟 云端版本信息缓存（启动时由 perform_startup_check 填充）
+        self._version_info: Dict[str, Any] = {}
 
         # 大模型服务
         self.llm = LLMService()
@@ -517,64 +525,75 @@ class Api:
             return {"status": "error", "message": str(e)}
 
     def check_software_update(self) -> Dict[str, Any]:
-        """检查腾讯云 COS 上的 version.json 并返回对应系统的下载链接"""
+        """
+        检查软件更新（使用缓存的版本信息）
+
+        如果缓存为空，则发起网络请求
+        """
         import platform
 
-        try:
-            # 从腾讯云 COS 获取版本信息
-            version_url = "https://microflow-1412347033.cos.ap-guangzhou.myqcloud.com/version.json"
+        # 🌟 优先使用缓存
+        data = self._version_info
 
-            response = requests.get(version_url, timeout=5, verify=False)
-            if response.status_code == 200:
-                data = response.json()
-                latest_version = data.get("version", "")
+        if not data:
+            # 缓存为空，发起网络请求
+            try:
+                response = requests.get(VERSION_URL, timeout=5, verify=False)
+                if response.status_code == 200:
+                    data = response.json()
+                    self._version_info = data  # 缓存结果
+            except Exception as e:
+                logger.error(f"检查更新失败: {e}")
+                return {"has_update": False, "error": str(e)}
 
-                # 简单的版本号字符串比对 (例如 "v1.1.0" > "v1.0.0")
-                if latest_version and latest_version > self.CURRENT_VERSION:
-                    # 根据当前系统选择对应的下载链接
-                    downloads = data.get("downloads", {})
-                    current_system = platform.system().lower()  # 'windows' 或 'darwin'
-
-                    if current_system == "windows":
-                        download_url = downloads.get("windows", "")
-                    elif current_system == "darwin":
-                        download_url = downloads.get("macos", "")
-                    else:
-                        download_url = ""
-
-                    # 构造更新说明
-                    release_date = data.get("release_date", "")
-                    notes = f"发布时间: {release_date}" if release_date else "有新版本可用"
-
-                    return {
-                        "has_update": True,
-                        "latest_version": latest_version,
-                        "notes": notes,
-                        "download_url": download_url
-                    }
-
+        if not data:
             return {"has_update": False}
-        except Exception as e:
-            logger.error(f"检查更新失败: {e}")
-            return {"has_update": False, "error": str(e)}
+
+        latest_version = data.get("version", "")
+
+        # 简单的版本号字符串比对 (例如 "v1.1.0" > "v1.0.0")
+        if latest_version and latest_version > self.CURRENT_VERSION:
+            # 根据当前系统选择对应的下载链接
+            downloads = data.get("downloads", {})
+            current_system = platform.system().lower()
+
+            if current_system == "windows":
+                download_url = downloads.get("windows", "")
+            elif current_system == "darwin":
+                download_url = downloads.get("macos", "")
+            else:
+                download_url = ""
+
+            release_date = data.get("release_date", "")
+            notes = f"发布时间: {release_date}" if release_date else "有新版本可用"
+
+            return {
+                "has_update": True,
+                "version": latest_version,
+                "notes": notes,
+                "download_url": download_url
+            }
+
+        return {"has_update": False}
 
     def perform_startup_check(self) -> Dict[str, Any]:
         """
-        启动时执行的安全检查
+        启动时执行的安全检查（唯一请求 version.json 的入口）
 
         检查步骤：
-        1. 检查本地锁定状态（is_locked）
+        1. 检查本地锁定状态（isLocked）
         2. 检查网络环境（必须是校园网）
-        3. 请求远程 version.json，检查 is_active 字段
-        4. 如果 is_active 为 False，执行自毁逻辑
+        3. 请求远程 version.json，缓存到实例属性
+        4. 检查 is_active 字段，如果为 False 执行自毁逻辑
 
         Returns:
             {
                 "status": "success" | "locked" | "network_error",
-                "reason": str,  # 失败原因
-                "has_update": bool,  # 是否有更新
-                "latest_version": str,  # 最新版本号
-                "download_url": str  # 下载链接
+                "reason": str,
+                "has_update": bool,
+                "version": str,
+                "download_url": str,
+                "announcement": dict  # 公告信息，供前端使用
             }
         """
         # 🌟 步骤 1：检查本地锁定状态
@@ -594,55 +613,47 @@ class Api:
                 "reason": "请连接深圳技术大学校园网后使用"
             }
 
-        # 🌟 步骤 3：请求远程 version.json
-        version_url = "https://microflow-1412347033.cos.ap-guangzhou.myqcloud.com/version.json"
-
+        # 🌟 步骤 3：请求远程 version.json（唯一请求点）
         try:
-            response = requests.get(version_url, timeout=5, verify=False)
+            response = requests.get(VERSION_URL, timeout=5, verify=False)
 
             if response.status_code != 200:
-                # 网络请求失败，默认放行（避免误杀）
                 logger.warning(f"启动检查：无法获取远程配置 (HTTP {response.status_code})，默认放行")
                 return self._build_success_response({})
 
             data = response.json()
 
+            # 🌟 缓存版本信息（供后续 check_software_update 和前端使用）
+            self._version_info = data
+
             # 🌟 步骤 4：检查 is_active 字段
-            is_active = data.get('is_active', True)  # 默认为 True，避免误杀
+            is_active = data.get('is_active', True)
 
             if is_active is False:
-                # 执行自毁逻辑
-                kill_reason = data.get('kill_reason', '该软件已被禁用')
+                kill_reason = data.get('kill_message', '该软件已被禁用')
                 logger.warning(f"🚫 启动检查：远程配置标记为不可用，原因: {kill_reason}")
-
-                # 执行自毁
                 self._execute_self_destruct(kill_reason)
-
                 return {
                     "status": "locked",
                     "reason": kill_reason
                 }
 
-            # 🌟 步骤 5：一切正常，返回成功响应和更新信息
+            # 🌟 步骤 5：一切正常，返回成功响应
             return self._build_success_response(data)
 
         except requests.exceptions.Timeout:
-            # 超时默认放行（避免误杀）
             logger.warning("启动检查：请求超时，默认放行")
             return self._build_success_response({})
 
         except requests.exceptions.RequestException as e:
-            # 网络错误默认放行
             logger.warning(f"启动检查：网络请求失败 ({e})，默认放行")
             return self._build_success_response({})
 
         except json.JSONDecodeError as e:
-            # JSON 解析失败默认放行
             logger.warning(f"启动检查：JSON 解析失败 ({e})，默认放行")
             return self._build_success_response({})
 
         except Exception as e:
-            # 其他异常默认放行
             logger.error(f"启动检查：未知错误 ({e})，默认放行")
             return self._build_success_response({})
 
@@ -666,17 +677,21 @@ class Api:
 
     def _build_success_response(self, version_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        构建成功响应，包含版本更新信息
+        构建成功响应，包含版本更新信息和公告
 
         Args:
             version_data: 从远程获取的版本数据
 
         Returns:
-            成功响应字典
+            成功响应字典，字段与 version.json 结构对齐
         """
         import platform
 
-        response: Dict[str, Any] = {"status": "success", "has_update": False}
+        response: Dict[str, Any] = {
+            "status": "success",
+            "has_update": False,
+            "announcement": version_data.get("announcement", {})
+        }
 
         # 检查版本更新
         latest_version = version_data.get("version", "")
@@ -696,10 +711,46 @@ class Api:
             notes = f"发布时间: {release_date}" if release_date else "有新版本可用"
 
             response["has_update"] = True
-            response["latest_version"] = latest_version
+            response["version"] = latest_version
             response["download_url"] = download_url
             response["notes"] = notes
-        else:
-            response["has_update"] = False
 
         return response
+
+    def get_version_info(self) -> Dict[str, Any]:
+        """
+        获取云端版本信息（供前端调用）
+
+        如果缓存为空，则发起网络请求
+
+        Returns:
+            {
+                "status": "success" | "error",
+                "version": str,
+                "announcement": dict,
+                "downloads": dict,
+                "release_date": str,
+                "is_active": bool
+            }
+        """
+        # 🌟 优先返回缓存
+        if self._version_info:
+            return {
+                "status": "success",
+                **self._version_info
+            }
+
+        # 缓存为空，发起网络请求
+        try:
+            response = requests.get(VERSION_URL, timeout=5, verify=False)
+            if response.status_code == 200:
+                data = response.json()
+                self._version_info = data  # 缓存结果
+                return {
+                    "status": "success",
+                    **data
+                }
+        except Exception as e:
+            logger.error(f"获取版本信息失败: {e}")
+
+        return {"status": "error", "message": "无法获取版本信息"}
