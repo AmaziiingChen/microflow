@@ -1,5 +1,9 @@
 name: Build and Release
 
+# 赋予 GitHub Actions 创建 Release 和上传文件的写权限
+permissions:
+  contents: write
+
 on:
   push:
     tags:
