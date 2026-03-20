@@ -277,12 +277,32 @@
         
         /* 顶部 DEEPSEEK 与 附件标识栏 */
         .provider-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-        .provider-info { font-size: 12px; color: #9CA3AF; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+        .provider-info { font-size: 12px; color: #9CA3AF; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;white-space: nowrap; }
+        /* 🌟 核心补丁：确保内联 SVG 图标完美对齐文字 */
+        .inline-ai-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 14px; 
+            height: 14px;
+            margin-right: 4px;
+            flex-shrink: 0;      /* 🌟 强制图标不许被挤压 */
+            overflow: hidden;    /* 🌟 核心：即便里面是长文本，也绝对不许溢出到外面 */
+            filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1));
+            vertical-align: middle; /* 🌟 物理级垂直对齐 */
+        }
+        
+        /* 强制 SVG 充满容器，彻底解决快照时尺寸丢失导致的“白框”Bug */
+        .inline-ai-icon svg {
+            width: 100% !important;
+            height: 100% !important;
+            display: block;
+        }
         /* 1. 修改原有的附件按钮基础样式 */
         .badge-attachment {
             display: inline-flex; align-items: center; gap: 4px;
             color: #8395FF; background: #EEF1FF;
-            padding: 4px 8px; border-radius: 6px; border: 1px solid #D6DEFF;
+            padding: 4px 6px; border-radius: 7px; border: 1px solid #D6DEFF;
             font-size: 11px; font-weight: 700;
             cursor: pointer;
             transition: background 0.2s, border-color 0.2s;
@@ -299,7 +319,7 @@
         .badge-snapshot {
             display: inline-flex; align-items: center; gap: 4px;
             color: #A68CFD; background: #F5F1FF;
-            padding: 4px 8px; border-radius: 6px; border: 1px solid #E0D6FF;
+            padding: 4px 6px; border-radius: 7px; border: 1px solid #E0D6FF;
             font-size: 11px; font-weight: 700;
             cursor: pointer;
             transition: background 0.2s, border-color 0.2s;
@@ -316,7 +336,7 @@
         .badge-home {
             display: inline-flex; align-items: center; gap: 4px;
             color: #4298FD; background: #E8F2FF;
-            padding: 4px 8px; border-radius: 6px; border: 1px solid #C6E0FF;
+            padding: 4px 6px; border-radius: 7px; border: 1px solid #C6E0FF;
             font-size: 11px; font-weight: 700;
             cursor: pointer;
             transition: background 0.2s, border-color 0.2s;
@@ -333,7 +353,7 @@
         .badge-clear {
             display: inline-flex; align-items: center; gap: 4px;
             color: #BE123C; background: #FFF1F2;
-            padding: 4px 8px; border-radius: 6px; border: 1px solid #FECDD3;
+            padding: 4px 8px; border-radius: 7px; border: 1px solid #FECDD3;
             font-size: 11px; font-weight: 700;
             cursor: pointer;
             transition: background 0.2s, border-color 0.2s;
@@ -350,7 +370,7 @@
         .badge-refresh {
             display: inline-flex; align-items: center; gap: 4px;
             color: #7C3AED; background: #F3E8FF;
-            padding: 4px 8px; border-radius: 6px; border: 1px solid #DDD6FE;
+            padding: 4px 6px; border-radius: 7px; border: 1px solid #DDD6FE;
             font-size: 12px; font-weight: 600;
             cursor: pointer;
             transition: background 0.2s, border-color 0.2s;
@@ -382,7 +402,7 @@
         .icon-svg-gear { width: 14px; height: 14px; vertical-align: middle; }
 
         /* 👇 新增：用于包裹右侧附件和快照按钮的容器 */
-        .top-actions { display: flex; align-items: center; gap: 8px; }
+        .top-actions { display: flex; align-items: center; gap: 5px; }
 
         .detail-title { font-size: 18px; font-weight: 800; color: #111; margin: 0 0 16px 0; line-height: 1.4;user-select: text;-webkit-user-select: text; }
         
@@ -545,7 +565,7 @@
             margin-top: 24px;
             background: #F8FAFC; /* 极浅的蓝灰色，区别于主背景的纯白 */
             border: 1px solid #E2E8F0;
-            border-radius: 8px;
+            border-radius: 7px;
             overflow: hidden;
             /* 增加一点内阴影，让它看起来像一个凹下去的代码框 */
             box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02);
@@ -584,7 +604,7 @@
             padding: 0 4px;
             border-radius: 4px;
             font-weight: 800;
-            border-bottom: 2px solid #FDE047; /* 底部加粗一条线，增强荧光笔质感 */
+            /* border-bottom: 2px solid #FDE047; 底部加粗一条线，增强荧光笔质感 */
         }
 
         /* 底部悬浮栏 */
@@ -660,7 +680,7 @@
 
         .attachment-card {
             display: flex; align-items: center; gap: 12px; padding: 12px 16px;
-            background: #F9FAFB; border: 1px solid var(--border-color); border-radius: 8px;
+            background: #F9FAFB; border: 1px solid var(--border-color); border-radius: 7px;
             cursor: pointer; transition: all 0.2s ease;
             min-width: 400px;
             max-width: 100%;
@@ -1126,6 +1146,43 @@
         }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* ================= 新增：置顶图钉按钮 ================= */
+        .badge-pin {
+            display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+            /* 默认状态：轻柔淡灰，减少视觉干扰，更有透气感 */
+            color: #6B7280; 
+            background: #F9FAFB; /* 更干净、透明的淡灰色 */
+            padding: 4px 6px; border-radius: 7px; /* 增加圆润度和宽度 */
+            border: 1px solid #E5E7EB;
+            cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .badge-pin:hover { background: #F3F4F6; color: #111827; }
+        
+        /* 激活状态 (已置顶)： */
+        .badge-pin.is-pinned {
+            /* 从原先的厚重纯色背景解放，改为精致的“白底 + 主题色内容” */
+            color: var(--accent-color); /* 图标变为品牌主题色，自动适配 DeepSeek 蓝/GPT 绿 */
+            background: #F1E8FD; /* 背景保持干净的白色，融入详情页卡片 */
+            border-color: var(--accent-color); /* 边框使用品牌主题色强调 */
+            
+            /* 增加一个带有品牌色的柔和发光投影，而不是生硬的阴影 */
+            box-shadow: 0 6px 20px -5px rgba(0, 0, 0, 0.08); /* 基础柔和投影 */
+        }
+        .badge-pin.is-pinned:hover { 
+            background: #FFFFFF;
+            border-color: var(--accent-color);
+            transform: scale(1.05); /* 悬停时稍微放大，物理反馈更好 */
+            box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.12);
+        }
+        
+        /* 图钉专属的物理点击动画 */
+        @keyframes pin-push {
+            0% { transform: scale(1) translateY(0); }
+            40% { transform: scale(0.85) translateY(2px) rotate(-15deg); }
+            100% { transform: scale(1) translateY(0) rotate(0deg); }
+        }
+        .pin-anim { animation: pin-push 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
     </style>
 </head>
 <body>
@@ -1230,10 +1287,11 @@
                     <span class="list-date">{{ item.formattedTime || item.exact_time || item.date }}</span>
                 </div>
             </div>
-            <div class="list-view">
-                <div id="load-more-anchor" style="height: 20px; text-align: center;">
+            <div class="list-view" style="padding-top: 0; min-height: 40px; overflow: hidden;">
+                <div id="load-more-anchor">
                     <span v-if="isLoadingMore">加载更多中...</span>
-                    <span v-else-if="noMoreData">END</span>
+                    <span v-else-if="isSearching">找到 {{ processedArticles.filter(a => !a.is_announcement).length }} 篇相关条目</span>
+                    <span v-else-if="noMoreData">共 {{ processedArticles.filter(a => !a.is_announcement).length }} 篇条目</span>
                 </div>
             </div>
         </div>
@@ -1244,14 +1302,21 @@
             <div class="detail-header">
                 <div class="provider-row">
                     <span class="provider-info settings-trigger" @click="openSettings">
-                        <img v-show="!iconLoadError"
-                             :src="aiIconUrl"
-                             crossorigin="anonymous"
-                             @error="handleIconError"
-                             style="width: 14px; height: 14px; object-fit: contain; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1));"
-                             alt="" />
+                        <span v-if="localAiIconSvg && !iconLoadError"
+                              class="inline-ai-icon"
+                              v-html="localAiIconSvg">
+                        </span>
+                        
+                        <span v-else-if="!iconLoadError" style="margin-right: 4px;">✨</span>
 
-                        {{ aiIntelligenceTitle }} <span class="gear-icon"><svg class="icon-svg-gear" viewBox="0 0 1086 1024" xmlns="http://www.w3.org/2000/svg"><path d="M268.318092 282.524846a161.703821 161.703821 0 0 0-35.705264-117.452942 20.584721 20.584721 0 0 1 2.346909-28.825775A511.214108 511.214108 0 0 1 386.971361 48.371407a20.620552 20.620552 0 0 1 26.281798 12.701973 160.772224 160.772224 0 0 0 150.488821 103.908948 160.646816 160.646816 0 0 0 150.488821-104.034355 20.620552 20.620552 0 0 1 26.281798-12.684058 495.412782 495.412782 0 0 1 150.005107 85.993612c8.706853 7.166134-12.433243 22.501662-19.509801 31.208515-41.205272 50.377924-25.188962 122.164675 9.244313 181.786912s103.908948 71.930073 168.117512 61.413772c11.053762-1.791534 19.294817 22.143355 21.283419 33.37627a522.482854 522.482854 0 0 1 7.614017 88.089707 498.422558 498.422558 0 0 1-7.614017 87.785145c-1.988602 11.053762-17.915336 11.859952-29.004929 10.032588-64.172733-10.498387-130.781952 23.684074-165.268973 83.306312s-21.229673 133.594659 20.101007 183.972584a20.584721 20.584721 0 0 1-2.364825 28.825775 511.214108 511.214108 0 0 1-152.06537 87.910553c-10.749201 3.977205-26.96258 1.218243-30.939785-9.459298-23.021207-60.732988-76.910537-107.097878-145.777088-107.097877s-151.474164 37.389306-174.495371 98.104379a20.602636 20.602636 0 0 1-26.281797 12.684058c-56.00334-20.477229-83.23465-44.627102-128.184228-82.141815a20.566806 20.566806 0 0 1-2.472317-28.915352 160.879716 160.879716 0 0 0 14.869729-182.342288c-34.451191-59.622238-98.40894-102.493636-162.563757-91.977334-11.071678 1.791534-24.669417 8.241054-26.478867-2.812708a520.315099 520.315099 0 0 1-7.614017-88.089706 498.368812 498.368812 0 0 1 7.614017-87.785146 20.656382 20.656382 0 0 1 23.73782-16.500024 161.793398 161.793398 0 0 0 137.016489-42.226447" fill="#80C6FF"/><path d="M542.834783 727.541788a215.575236 215.575236 0 1 0 0-431.132557c-118.868253 0-215.557321 96.617406-215.557321 215.396083S424.038191 727.541788 542.834783 727.541788z m0-409.437085a193.790188 193.790188 0 1 1-193.628949 193.879764c0-106.900809 86.907294-193.879764 193.628949-193.879764z" fill="#46505D"/></svg></span>
+                        {{ aiIntelligenceTitle }} 
+                        
+                        <span class="gear-icon">
+                            <svg class="icon-svg-gear" viewBox="0 0 1086 1024" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M268.318092 282.524846a161.703821 161.703821 0 0 0-35.705264-117.452942 20.584721 20.584721 0 0 1 2.346909-28.825775A511.214108 511.214108 0 0 1 386.971361 48.371407a20.620552 20.620552 0 0 1 26.281798 12.701973 160.772224 160.772224 0 0 0 150.488821 103.908948 160.646816 160.646816 0 0 0 150.488821-104.034355 20.620552 20.620552 0 0 1 26.281798-12.684058 495.412782 495.412782 0 0 1 150.005107 85.993612c8.706853 7.166134-12.433243 22.501662-19.509801 31.208515-41.205272 50.377924-25.188962 122.164675 9.244313 181.786912s103.908948 71.930073 168.117512 61.413772c11.053762-1.791534 19.294817 22.143355 21.283419 33.37627a522.482854 522.482854 0 0 1 7.614017 88.089707 498.422558 498.422558 0 0 1-7.614017 87.785145c-1.988602 11.053762-17.915336 11.859952-29.004929 10.032588-64.172733-10.498387-130.781952 23.684074-165.268973 83.306312s-21.229673 133.594659 20.101007 183.972584a20.584721 20.584721 0 0 1-2.364825 28.825775 511.214108 511.214108 0 0 1-152.06537 87.910553c-10.749201 3.977205-26.96258 1.218243-30.939785-9.459298-23.021207-60.732988-76.910537-107.097878-145.777088-107.097877s-151.474164 37.389306-174.495371 98.104379a20.602636 20.602636 0 0 1-26.281797 12.684058c-56.00334-20.477229-83.23465-44.627102-128.184228-82.141815a20.566806 20.566806 0 0 1-2.472317-28.915352 160.879716 160.879716 0 0 0 14.869729-182.342288c-34.451191-59.622238-98.40894-102.493636-162.563757-91.977334-11.071678 1.791534-24.669417 8.241054-26.478867-2.812708a520.315099 520.315099 0 0 1-7.614017-88.089706 498.368812 498.368812 0 0 1 7.614017-87.785146 20.656382 20.656382 0 0 1 23.73782-16.500024 161.793398 161.793398 0 0 0 137.016489-42.226447" fill="#80C6FF"></path>
+                                <path d="M542.834783 727.541788a215.575236 215.575236 0 1 0 0-431.132557c-118.868253 0-215.557321 96.617406-215.557321 215.396083S424.038191 727.541788 542.834783 727.541788z m0-409.437085a193.790188 193.790188 0 1 1-193.628949 193.879764c0-106.900809 86.907294-193.879764 193.628949-193.879764z" fill="#46505D"></path>
+                            </svg>
+                        </span>
                     </span>
 
                     <div class="top-actions">
@@ -1284,6 +1349,15 @@
                             <svg class="icon-svg" :class="{ 'spin': isRegenerating[activeArticle.id] }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
                                 <path d="M21 3v5h-5"></path>
+                            </svg>
+                        </span>
+
+                        <span class="badge-pin"
+                              :class="{ 'is-pinned': config.isPinned, 'pin-anim': pinAnimating }"
+                              @click="togglePin"
+                              :title="config.isPinned ? '取消置顶' : '窗口强制置顶'">
+                            <svg class="icon-svg" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M399.5136 748.6976l-202.4448 202.4448-62.1056-62.1056L337.408 686.592l-162.048-162.048a31.0272 31.0272 0 0 1-9.0624-24.832 38.2464 38.2464 0 0 1 11.6224-25.9584 218.368 218.368 0 0 1 122.112-62.976c47.104-7.5776 83.1488 0.9728 108.032 25.8048l181.8624-181.8624c-13.1072-13.056-19.0464-29.5936-18.0736-49.8688 0.7168-19.456 9.1136-38.0928 23.296-51.9168 14.4896-14.5408 31.744-22.2208 51.9168-23.296 20.0192-1.024 36.7616 4.9152 49.92 18.0736l241.3568 241.3568c13.1072 13.1072 18.9952 29.6448 18.0736 49.8688a77.2096 77.2096 0 0 1-23.296 51.968c-14.4896 14.5408-31.744 22.1696-51.9168 23.296-20.2752 1.1264-36.864-4.9664-49.92-18.0736l-181.76 181.76c24.8832 24.8832 33.4848 60.928 25.8048 108.032a218.7264 218.7264 0 0 1-62.976 122.2656c-7.168 7.2192-15.872 11.264-25.9072 11.6224a31.6416 31.6416 0 0 1-24.8832-9.0112l-162.048-162.048z" fill="currentColor"></path>
                             </svg>
                         </span>
 
@@ -1422,7 +1496,7 @@
                         <svg class="disclaimer-icon" opacity="0.5" viewBox="0 0 1024 1024" width="14" height="14" xmlns="http://www.w3.org/2000/svg">
                             <path d="M505.4 878.6c-196.7 0-358-150.9-374.9-343.1 1-18.6 16.1-33.4 34.9-33.4 10.8 0 20.5 4.8 26.9 12.4 0.2 0.3 0.5 0.1 0.5-0.7 41.6 44.2 100.5 71.9 166.1 71.9 127.1 0 230.1-103 230.1-230.1 0-66.1-28-125.1-72.6-166.8 0.1-0.1 0.5-0.1 0.3-0.3-7-6.5-11.4-15.7-11.4-26.1 0-19 14.9-34.1 33.7-35.3 192.1 17.1 342.9 178.3 342.9 375 0 208-168.5 376.5-376.5 376.5z" fill="#C4B5FD"></path>
                         </svg>
-                        最终解释权归原发文单位所有
+                        具体内容请点击查看原文查看
                     </span>
                 </div>
                 <div class="btn-group">
@@ -1459,8 +1533,8 @@
                 </div>
                 <div class="form-group" style="margin-bottom: 0;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <label class="form-label" style="margin:0;">系统提示词 (System Prompt)</label>
-                        <button class="badge-refresh" @click="resetPrompt">重置为默认</button>
+                        <label class="form-label" style="margin:0;">System Prompt</label>
+                        <button class="badge-refresh" @click="resetPrompt">重置</button>
                     </div>
                     <textarea v-model="config.prompt" class="form-input" style="min-height: 120px;"></textarea>
                 </div>
@@ -1505,7 +1579,7 @@
                         </div>
                     </div>
                     <div style="font-size: 11px; color: #9CA3AF; text-align: center; margin-top: 8px;">
-                        {{ config.trackMode === 'today' ? '仅抓取今日新发布的公文，速度最快' : '自动向下翻页补抓历史遗漏的公文，更严谨' }}
+                        {{ config.trackMode === 'today' ? '仅追踪今日新发布条目' : '自动追踪历史遗漏条目' }}
                     </div>
                 </div>
 
@@ -1516,20 +1590,19 @@
                             <div style="font-size: 11px; color: #6B7280;">设置自动检查新公文的基准时间间隔</div>
                         </div>
                         <div style="font-size: 14px; font-weight: 800; color: var(--accent-color);">
-                            {{ config.pollingInterval || 60 }} 分钟
+                            {{ config.pollingInterval || 30 }} 分钟
                         </div>
                     </div>
                     <input type="range" min="15" max="240" step="15" v-model.number="config.pollingInterval" style="width: 100%; accent-color: var(--accent-color); cursor: pointer;">
                     <div style="display: flex; justify-content: space-between; font-size: 11px; color: #9CA3AF; margin-top: 6px; font-weight: 500;">
-                        <span>15分钟 (紧凑)</span>
-                        <span>240分钟 (省电)</span>
+                        <span>15分钟</span>
+                        <span>240分钟</span>
                     </div>
                 </div>
 
                 <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 16px; border-top: 1px solid #F3F4F6;">
                     <div>
                         <div style="font-weight: 700; font-size: 14px; color: #111;">开机自启动</div>
-                        <div style="font-size: 11px; color: #6B7280;">跟随系统静默启动</div>
                     </div>
                     <input type="checkbox" class="ios-toggle" v-model="config.autoStart">
                 </div>
@@ -1537,7 +1610,6 @@
                 <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 16px; margin-top: 16px; border-top: 1px solid #F3F4F6;">
                     <div>
                         <div style="font-weight: 700; font-size: 14px; color: #111;">免打扰模式</div>
-                        <div style="font-size: 11px; color: #6B7280;">新公文仅红点提示，不弹出窗口</div>
                     </div>
                     <input type="checkbox" class="ios-toggle" v-model="config.muteMode">
                 </div>
@@ -1610,8 +1682,51 @@
 
             createApp({
                 setup() {
-                    console.log('Vue setup 开始执行');
-                    const previousView = ref('list'); // 记录从哪个页面进入的设置
+                console.log('Vue setup 开始执行');
+                if (typeof Vue === 'undefined') {
+    console.error('Vue 未加载，请检查网络连接');
+    document.body.innerHTML = '<div style="padding:20px;color:red;">无法加载核心库，请检查网络后重启软件</div>';
+    return;
+}
+                const showSystemToast = (msg, type = 'info') => {
+                    statusMsg.value = msg;
+                    setTimeout(() => statusMsg.value = '', 3000);
+                };
+                const previousView = ref('list'); // 记录从哪个页面进入的设置
+                const localAiIconSvg = ref(''); // 🌟 粘贴在这里
+                const aiIntelligenceTitle = computed(() => {
+                const model = config.value.modelName || 'AI';
+                // 逻辑：提取第一个连字符前面的部分并大写。
+                // 例如：'deepseek-chat' -> 'DEEPSEEK', 'mimo-flash' -> 'MIMO'
+                let brand = model.split('-')[0].toUpperCase();
+
+                // 特殊处理：如果模型名比较短或没有连字符，直接大写全名
+                if (brand.length < 2) brand = model.toUpperCase();
+
+                return `${brand} INTELLIGENCE`;
+            });
+                    // 🌟 新增：置顶功能逻辑
+                const pinAnimating = ref(false);
+                const togglePin = async () => {
+                    // 1. 触发 UI 的物理弹跳动画
+                    pinAnimating.value = true;
+                    setTimeout(() => { pinAnimating.value = false; }, 400);
+
+                    // 2. 切换状态
+                    config.value.isPinned = !config.value.isPinned;
+
+                    // 3. 呼叫后端控制系统窗口
+                    if (window.pywebview && window.pywebview.api && window.pywebview.api.set_window_on_top) {
+                        await window.pywebview.api.set_window_on_top(config.value.isPinned);
+                    }
+
+                    // 4. 静默保存到本地配置（下次打开软件时依旧保持置顶状态）
+                    await pywebview.api.save_config(JSON.parse(JSON.stringify(config.value)));
+
+                    // 5. 屏幕底部提示
+                    statusMsg.value = config.value.isPinned ? '窗口已强制置顶' : '已取消置顶';
+                    setTimeout(() => statusMsg.value = '', 2000);
+                };
                     // 新增：详情页快照生成状态
                 const isCapturing = ref(false);
                 const currentView = ref('list');
@@ -1631,6 +1746,14 @@
                 // 🎯 冷却倒计时函数（支持持久化恢复）
                 const COOLDOWN_SECONDS = 120; // 冷却时间常量
                 const startCooldown = (remainingSeconds) => {
+                    // 边界情况：剩余时间 <= 0 时直接重置
+                    if (!remainingSeconds || remainingSeconds <= 0) {
+                        if (cooldownTimer) clearInterval(cooldownTimer);
+                        isUpdateDisabled.value = false;
+                        updateCooldown.value = 0;
+                        return;
+                    }
+
                     isUpdateDisabled.value = true;
                     updateCooldown.value = remainingSeconds;
 
@@ -1647,6 +1770,10 @@
                             localStorage.removeItem('lastManualUpdateTime');
                         }
                     }, 1000);
+
+                    // 同步存储时间戳（用于页面刷新恢复）
+                    const simulatedStartTime = Date.now() - ((COOLDOWN_SECONDS - remainingSeconds) * 1000);
+                    localStorage.setItem('lastManualUpdateTime', simulatedStartTime.toString());
                 };
 
                 // 🎯 进度条相关变量
@@ -1762,7 +1889,8 @@
                     customFontPath: '', // 🌟 新增：外部字体路径
                     customFontName: '', // 🌟 新增：外部字体原始名称
                     subscribedSources: [],  // 🌟 新增：订阅的来源列表
-                    pollingInterval: 60  // 🌟 新增：后台巡检频率（分钟），默认 1 小时
+                    pollingInterval: 60,  // 🌟 新增：后台巡检频率（分钟），默认 1 小时
+                    isPinned: false // 🌟 新增：默认不置顶
                 });
 
                 // 🌟 新增：处理导入自定义字体
@@ -2067,109 +2195,54 @@
 
                     // 👇 变化 4：整合系统公告
                     // 构造公告对象，格式与公文一致
-                    const noticeItem = {
-                        id: systemNotice.value.id,
-                        title: systemNotice.value.title,
-                        publish_time: systemNotice.value.publish_time,
-                        department: systemNotice.value.department,
-                        source_name: '系统通知', // 🌟 彩色标签显示
-                        category: `v${systemNotice.value.version}`, // 🌟 灰色标签显示版本号
-                        parsedTags: systemNotice.value.tags,
-                        parsedBody: systemNotice.value.content || systemNotice.value.summary,
-                        summary: systemNotice.value.summary,
-                        is_announcement: true,
-                        version: systemNotice.value.version,
-                        formattedTime: systemNotice.value.publish_time,
-                        is_read: readNoticeVersion.value >= systemNotice.value.version ? 1 : 0
-                    };
+                    // 👇 变化 4：整合系统公告 (🌟 增加严格的显示门槛)
+                    // 只有在【没有进行搜索】且【分类筛选为"全部"】时，才允许显示公告
+                    if (!isSearching.value && !searchQuery.value.trim() && activeSource.value === '全部') {
+                        const noticeItem = {
+                            id: systemNotice.value.id,
+                            title: systemNotice.value.title,
+                            publish_time: systemNotice.value.publish_time,
+                            department: systemNotice.value.department,
+                            source_name: '系统通知', 
+                            category: `v${systemNotice.value.version}`, 
+                            parsedTags: systemNotice.value.tags,
+                            parsedBody: systemNotice.value.content || systemNotice.value.summary,
+                            summary: systemNotice.value.summary,
+                            is_announcement: true,
+                            version: systemNotice.value.version,
+                            formattedTime: systemNotice.value.publish_time,
+                            is_read: readNoticeVersion.value >= systemNotice.value.version ? 1 : 0
+                        };
 
-                    // 判断公告是否已读
-                    const isNoticeRead = readNoticeVersion.value >= systemNotice.value.version;
-                    if (!isNoticeRead) {
-                        // 未读：置顶
-                        mapped.unshift(noticeItem);
-                    } else {
-                        // 已读：沉底
-                        mapped.push(noticeItem);
+                        const isNoticeRead = readNoticeVersion.value >= systemNotice.value.version;
+                        if (!isNoticeRead) {
+                            mapped.unshift(noticeItem); // 未读置顶
+                        } else {
+                            mapped.push(noticeItem);    // 已读沉底
+                        }
                     }
 
                     // 👇 变化 5：最后把整合好的数组 return 出去
                     return mapped;
                 });
 
-                // 🌟 新增：根据模型名称动态生成智能标识
-                const aiIntelligenceTitle = computed(() => {
-                    const model = config.value.modelName || 'AI';
-                    // 逻辑：提取第一个连字符前面的部分并大写。
-                    // 例如：'deepseek-chat' -> 'DEEPSEEK', 'mimo-flash' -> 'MIMO', 'gpt-4o' -> 'GPT'
-                    let brand = model.split('-')[0].toUpperCase();
-
-                    // 特殊处理：如果模型名比较短或没有连字符，直接大写全名
-                    if (brand.length < 2) brand = model.toUpperCase();
-
-                    return `${brand} INTELLIGENCE`;
-                });
-
-                // ================= 新增：LobeHub 动态 AI 图标逻辑 =================
-                const fallbackToMonochrome = ref(false);
+                // ================= 🚀 升级后的本地化 AI 图标逻辑 (后端直供版) =================
                 const iconLoadError = ref(false);
 
-                // 当模型名称发生改变时，重置图标的错误状态
-                watch(() => config.value.modelName, () => {
-                    fallbackToMonochrome.value = false;
-                    iconLoadError.value = false;
-                });
-
-                // 动态计算 LobeHub 图标的 CDN 地址
-                const aiIconUrl = computed(() => {
-                    const model = (config.value.modelName || 'deepseek').toLowerCase();
-                    const brand = model.split('-')[0];
-
-                    // 建立常见模型与 LobeHub 图标 Slug 的映射字典
-                    // 建立更全面的品牌映射字典
-                const brandMap = {
-                    // 国际大厂
-                    'gpt': 'openai', 'openai': 'openai',
-                    'claude': 'anthropic', 'anthropic': 'anthropic',
-                    'gemini': 'google', 'google': 'google',
-                    'llama': 'meta', 'meta': 'meta',
-                    'mistral': 'mistral',
-                    'grok': 'xai',
-                    'perplexity': 'perplexity',
-                    
-                    // 国内大厂
-                    'glm': 'zhipu', 'zhipu': 'zhipu',
-                    'qwen': 'qwen', 'tongyi': 'qwen',
-                    'kimi': 'moonshot', 'moonshot': 'moonshot',
-                    'doubao': 'doubao', 'bytedance': 'doubao',
-                    'minimax': 'minimax',
-                    'baichuan': 'baichuan',
-                    'deepseek': 'deepseek',
-                    'yi': '01', '01': '01',
-                    'hunyuan': 'tencent', 'tencent': 'tencent',
-                    'ernie': 'baidu', 'baidu': 'baidu',
-                    'spark': 'iflytek', 'iflytek': 'iflytek',
-                    'step': 'stepfun',
-                    
-                    // 🌟 新增：小米 mimo
-                    'mimo': 'xiaomi', 
-                    'xiaomi': 'xiaomi'
-                };
-
-                    const slug = brandMap[brand] || brand;
-
-                    // 优先请求彩色版 (-color.svg)，如果失败则降级为单色版 (.svg)
-                    const suffix = fallbackToMonochrome.value ? '.svg' : '-color.svg';
-                    return `https://unpkg.com/@lobehub/icons-static-svg@latest/icons/${slug}${suffix}`;
-                });
-
-                // 图标加载失败的降级处理机制
-                const handleIconError = () => {
-                    if (!fallbackToMonochrome.value) {
-                        fallbackToMonochrome.value = true; // 第一次失败：尝试降级为单色版
-                    } else {
-                        iconLoadError.value = true;        // 第二次失败：彻底隐藏图标
+                // 核心：监听模型名称变化，直接从后端抓取并注入“补全尺寸版”的 SVG 源码
+                // 监听模型变化，向 Python 索要图标
+                watch(() => config.value.modelName, async (newModel) => {
+                    if (!newModel) return;
+                    // Python 会优先去你的 data/icons 文件夹里翻那 800 个图标
+                    const res = await pywebview.api.get_local_ai_icon(newModel);
+                    if (res.svg_raw) {
+                        localAiIconSvg.value = res.svg_raw;
+                        iconLoadError.value = false;
                     }
+                }, { immediate: true });
+
+                const handleIconError = () => {
+                    iconLoadError.value = true;
                 };
 
                 // 🌟 新增：处理系统公告点击
@@ -2305,16 +2378,27 @@
                             console.warn('加载配置失败:', e);
                         }
 
-                        // 🌟 新增：从后端同步真实的冷却时间（物理级防穿透）
-                        try {
-                            const cooldownRes = await pywebview.api.get_update_cooldown();
-                            if (cooldownRes && cooldownRes.status === 'cooling' && cooldownRes.remaining > 0) {
-                                console.log(`🔄 从后端恢复真实的冷却倒计时: 剩余 ${cooldownRes.remaining} 秒`);
-                                startCooldown(cooldownRes.remaining);
+                        // 🌟 新增：延迟从后端同步真实的冷却时间（物理级防穿透 + 竞态保护）
+                        // 延迟 500ms 给守护线程时间完成首次抓取并设置冷却
+                        setTimeout(async () => {
+                            try {
+                                // 先检查是否有待处理的冷却通知
+                                if (window._pendingCooldown) {
+                                    console.log('🔄 处理待处理的冷却通知');
+                                    window._pendingCooldown = false;
+                                    startCooldown(120);
+                                    return;
+                                }
+                                // 否则从后端同步
+                                const cooldownRes = await pywebview.api.get_update_cooldown();
+                                if (cooldownRes && cooldownRes.status === 'cooling' && cooldownRes.remaining > 0) {
+                                    console.log(`🔄 从后端恢复真实的冷却倒计时: 剩余 ${cooldownRes.remaining} 秒`);
+                                    startCooldown(cooldownRes.remaining);
+                                }
+                            } catch (e) {
+                                console.warn('同步冷却时间失败:', e);
                             }
-                        } catch (e) {
-                            console.warn('同步冷却时间失败:', e);
-                        }
+                        }, 500);
 
                         // 👇 附加：静默检查软件更新
                         try {
@@ -2389,23 +2473,29 @@
                 };
 
                 // 🌟 后台自动巡检完成通知：锁定按钮并同步冷却状态
+                // 🌟 增强版：处理前端未就绪时的竞态情况
                 window.triggerAutoFetchCooldown = () => {
                     console.log("🔔 收到后台自动巡检完成通知，锁定按钮");
-                    statusMsg.value = "已自动执行开机/后台巡检，120s内无需重复刷新";
-                    setTimeout(() => statusMsg.value = '', 5000); // 5秒后提示消失
-                    startCooldown(120);
-                    // 同步更新 localStorage，防止重启失效
-                    localStorage.setItem('lastManualUpdateTime', Date.now().toString());
+                    // 检查 startCooldown 是否已定义（Vue 组件是否已挂载）
+                    if (typeof startCooldown === 'function') {
+                        statusMsg.value = "已自动执行开机/后台巡检，120s内无需重复刷新";
+                        setTimeout(() => statusMsg.value = '', 5000);
+                        startCooldown(120);
+                    } else {
+                        // Vue 未就绪，设置标志位，等待初始化时处理
+                        window._pendingCooldown = true;
+                        console.log('⏳ 前端未就绪，冷却通知已缓存');
+                    }
                 };
 
                 const checkUpdates = async () => {
                     if (isUpdateDisabled.value) { return; }
                     isLoading.value = true;
+
                     statusMsg.value = "";
                     totalTasks.value = 0; completedTasks.value = 0; progressDetailText.value = "";
 
                     let cooldownRemaining = 120; // 默认冷却
-                    let shouldStartCooldown = false;
 
                     try {
                         const res = await pywebview.api.check_updates(true);
@@ -2431,28 +2521,28 @@
                                 statusMsg.value = "当前已是最新，无新公文";
                                 setTimeout(() => statusMsg.value = '', 4000);
                             }
-                            shouldStartCooldown = true;
+                            // 🌟 使用后端返回的冷却剩余时间
+                            cooldownRemaining = res.cooldown_remaining !== undefined ? res.cooldown_remaining : 120;
                         } else if (res.status === 'cooldown') {
                             // 🌟 拦截成功：使用后端返回的真实剩余时间
                             statusMsg.value = "⏳ " + res.message;
                             setTimeout(() => statusMsg.value = '', 3000);
-                            cooldownRemaining = res.remaining;
-                            shouldStartCooldown = true;
+                            cooldownRemaining = res.remaining || 120;
                         } else {
                             statusMsg.value = "❌ " + (res.message || "更新失败");
                             setTimeout(() => statusMsg.value = '', 3000);
+                            // 🌟 错误时也启动较短冷却（60秒）
+                            cooldownRemaining = res.cooldown_remaining || 60;
                         }
                     } catch (e) {
                         statusMsg.value = "❌ 连接异常或超时";
                         setTimeout(() => statusMsg.value = '', 3000);
+                        // 🌟 异常时启动较短冷却（60秒）
+                        cooldownRemaining = 60;
                     } finally {
                         isLoading.value = false;
-                        if (shouldStartCooldown) {
-                            startCooldown(cooldownRemaining);
-                            // 🌟 动态计算伪造的起始时间，确保存入 localStorage 的时间戳是精准对齐的
-                            const simulatedStartTime = Date.now() - ((120 - cooldownRemaining) * 1000);
-                            localStorage.setItem('lastManualUpdateTime', simulatedStartTime.toString());
-                        }
+                        // 🌟 无论成功、失败、异常，都启动冷却
+                        startCooldown(cooldownRemaining);
                     }
                 };
 
@@ -3101,25 +3191,38 @@
                 };
 
                 return {
-                    currentView, activeArticle, lastArticle, isNavigatingBack, processedArticles, isLoading, statusMsg, updateInfo, tagColors, getTagColor, formatDateTime, aiIntelligenceTitle,
-                    // 🌟 新增：LobeHub 动态图标
-                    aiIconUrl, iconLoadError, handleIconError,
-                    checkUpdates, openDetail, backToList, goToLastArticle, renderMarkdown, openBrowser, copyText, downloadFile,scrollToAttachments,takeSnapshot,page, isLoadingMore, noMoreData, loadMoreArticles,openSettings, backToPrevious, config, showApiKey, settingsMsg, isTesting, isRegenerating,
-                    resetPrompt, saveSettings, testConnection,closeAppWindow,searchQuery, handleSearch, clearSearch, regenerateSummary,
-                    // 🌟 更新按钮冷却
+                    // 视图与状态
+                    currentView, activeArticle, lastArticle, isNavigatingBack,
+                    processedArticles, isLoading, statusMsg, updateInfo,
+
+                    // 🌟 冷却倒计时（修复白屏）
                     isUpdateDisabled, updateCooldown,
-                    // 🌟 新增：来源筛选相关
-                    sources, activeSource, filterBySource,
-                    // 🌟 新增：订阅管理相关
-                    allAvailableSources, selectAllSources, deselectAllSources,
-                    // 🌟 新增：文件名拆分（中间省略）
+
+                    // 🌟 AI 图标相关 (已清理旧变量)
+                    localAiIconSvg, aiIntelligenceTitle, iconLoadError, handleIconError,
+
+                    // 核心功能
+                    checkUpdates, openDetail, backToList, goToLastArticle,
+                    renderMarkdown, openBrowser, copyText, downloadFile,
+                    scrollToAttachments, takeSnapshot, regenerateSummary,
+
+                    // 搜索与分页
+                    page, isLoadingMore, noMoreData, loadMoreArticles,
+                    searchQuery, isSearching, handleSearch, clearSearch,
+
+                    // 设置与置顶
+                    openSettings, backToPrevious, config, showApiKey,
+                    settingsMsg, isTesting, isRegenerating, resetPrompt,
+                    saveSettings, testConnection, closeAppWindow,
+                    pinAnimating, togglePin,
+
+                    // 来源与订阅
+                    sources, activeSource, filterBySource, allAvailableSources,
+                    selectAllSources, deselectAllSources,
+
+                    // 附件与工具
                     truncateMiddle, setPrefixRef, setAttNameRef, isPrefixTruncated,
-                    // 🌟 新增：附件图标
-                    getAttachmentIcon,
-                    // 🌟 新增：自定义字体导入
-                    importCustomFont,
-                    // 🌟 新增：公告点击处理
-                    handleNoticeClick
+                    getAttachmentIcon, importCustomFont, handleNoticeClick, formatDateTime, getTagColor
                 };
             }
         }).mount('#app');

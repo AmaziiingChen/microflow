@@ -27,46 +27,68 @@ class GwtSpider(BaseSpider):
     # 列表页入口 URL
     LIST_ENTRY = "https://nbw.sztu.edu.cn/list.jsp?urltype=tree.TreeTempUrl&wbtreeid=1029"
 
-    def fetch_list(self, page_num: int = 1, limit: int = 50, **kwargs) -> List[ArticleData]:
+    def fetch_list(self, page_num: int = 1, section_name: Optional[str] = None, limit: Optional[int] = None, **kwargs) -> List[ArticleData]:
         """
-        获取公文列表页
+        获取公文列表页（智能翻页，按需停止）
 
         Args:
             page_num: 页码，从 1 开始
-            limit: 最大抓取数量
+            section_name: 板块名称（公文通不适用，保留兼容）
+            limit: 每个板块抓取的文章上限，None 表示不限制
 
         Returns:
             标准化的文章摘要列表
         """
+        # 兼容旧调用方式：如果 limit 为 None，使用默认值
+        if limit is None:
+            limit = 50
+
         notices = []
+        current_page = page_num
 
-        # 构造分页 URL
-        current_url = f"https://nbw.sztu.edu.cn/list.jsp?PAGENUM={page_num}&urltype=tree.TreeTempUrl&wbtreeid=1029"
-        logger.info(f"[{self.SOURCE_NAME}] 正在抓取列表 (第 {page_num} 页): {current_url}")
+        while True:
+            # 🌟 已达到上限，停止请求
+            if limit is not None and len(notices) >= limit:
+                break
 
-        response = self._safe_get(current_url)
-        if not response:
-            return notices
+            # 构造分页 URL
+            current_url = f"https://nbw.sztu.edu.cn/list.jsp?PAGENUM={current_page}&urltype=tree.TreeTempUrl&wbtreeid=1029"
+            logger.info(f"[{self.SOURCE_NAME}] 正在抓取列表 (第 {current_page} 页)")
 
-        soup = BeautifulSoup(response.text, 'html.parser')
+            response = self._safe_get(current_url)
+            if not response:
+                break
 
-        # 定位公文列表项
-        articles_tags = soup.select('ul.news-ul li.clearfix')
+            soup = BeautifulSoup(response.text, 'html.parser')
 
-        if not articles_tags:
-            logger.info(f"[{self.SOURCE_NAME}] 已到达列表最后一页")
-            return notices
+            # 定位公文列表项
+            articles_tags = soup.select('ul.news-ul li.clearfix')
 
-        for article in articles_tags:
-            try:
-                item = self._parse_list_item(article)
-                if item:
-                    notices.append(item)
-                    if len(notices) >= limit:
-                        break
-            except Exception as e:
-                logger.debug(f"[{self.SOURCE_NAME}] 解析列表项失败: {e}")
-                continue
+            if not articles_tags:
+                logger.info(f"[{self.SOURCE_NAME}] 已到达列表最后一页")
+                break
+
+            for article in articles_tags:
+                try:
+                    item = self._parse_list_item(article)
+                    if item:
+                        notices.append(item)
+                        # 🌟 达到上限立即停止
+                        if limit is not None and len(notices) >= limit:
+                            break
+                except Exception as e:
+                    logger.debug(f"[{self.SOURCE_NAME}] 解析列表项失败: {e}")
+                    continue
+
+            # 当前页处理完毕，检查是否需要继续
+            if limit is not None and len(notices) >= limit:
+                break
+
+            current_page += 1
+
+        # 最终截断（兜底保护）
+        if limit is not None:
+            notices = notices[:limit]
 
         return notices
 

@@ -334,3 +334,24 @@ class DaemonManager:
         if self._last_network_status:
             return self._last_network_status.value
         return None
+
+    def get_cooldown_remaining(self, cooldown_seconds: int = None) -> int:
+        """
+        获取冷却剩余时间（秒）
+
+        Args:
+            cooldown_seconds: 冷却总时长，默认使用 MANUAL_UPDATE_COOLDOWN
+
+        Returns:
+            剩余冷却秒数，若已过期则返回 0
+        """
+        if cooldown_seconds is None:
+            cooldown_seconds = self.MANUAL_UPDATE_COOLDOWN
+
+        last_fetch = self._get_last_fetch_time()
+        if last_fetch <= 0:
+            return 0
+
+        elapsed = time.time() - last_fetch
+        remaining = int(cooldown_seconds - elapsed)
+        return max(0, remaining)

@@ -39,7 +39,14 @@ class BaseSpider(ABC):
             backoff_factor=1,
             status_forcelist=[429, 500, 502, 503, 504]
         )
-        adapter = HTTPAdapter(max_retries=retry_strategy)
+        
+        # 👇 核心修改在这里：显式扩展底层 Socket 连接池大小
+        adapter = HTTPAdapter(
+            pool_connections=20,  # 缓存的独立域名连接池数量（应对图片/附件CDN跨域）
+            pool_maxsize=20,      # 连接池最大容量，避免高频请求时频繁断开/建立 TCP 握手
+            max_retries=retry_strategy
+        )
+        
         self.session.mount("https://", adapter)
         self.session.mount("http://", adapter)
         self.session.headers.update({
@@ -48,8 +55,14 @@ class BaseSpider(ABC):
         })
 
     @abstractmethod
-    def fetch_list(self, page_num: int = 1, section_name: Optional[str] = None) -> List[ArticleData]:
-        """获取文章列表（由子类实现具体选择器）"""
+    def fetch_list(self, page_num: int = 1, section_name: Optional[str] = None, limit: Optional[int] = None, **kwargs) -> List[ArticleData]:
+        """获取文章列表（由子类实现具体选择器）
+
+        Args:
+            page_num: 页码（保留兼容）
+            section_name: 板块名称
+            limit: 每个板块抓取的文章上限，None 表示不限制
+        """
         pass
 
     # --- 核心升级：全自动翻页推演中枢 (修复 NMNE 缺失 p_no 的问题) ---
@@ -60,8 +73,8 @@ class BaseSpider(ABC):
         soup = BeautifulSoup(response.text, 'html.parser')
         page_urls = [entry_url]
 
-        # 寻找“尾页”按钮，这是所有规律的源头
-        last_btn = soup.find('a', string=lambda t: t and '尾页' in t)
+        # 寻找”尾页”按钮，这是所有规律的源头
+        last_btn = soup.find('a', string=lambda t: t and '尾页' in t)  # type: ignore[call-overload]
         if not last_btn: 
             logger.info(f"[{self.SOURCE_NAME}] 未找到翻页组件，视为单页板块。")
             return page_urls
@@ -91,9 +104,9 @@ class BaseSpider(ABC):
                 if total_text:
                     total_pages = int(total_text.get_text(strip=True))
                 
-                # 尝试二（NMNE专属兜底）：通过“下页”的链接提取总页数
+                # 尝试二（NMNE专属兜底）：通过”下页”的链接提取总页数
                 if total_pages == 1:
-                    next_btn = soup.find('a', string=lambda t: t and ('下页' in t or '下一页' in t))
+                    next_btn = soup.find('a', string=lambda t: t and ('下页' in t or '下一页' in t))  # type: ignore[call-overload]
                     if next_btn:
                         n_match = re.search(r'(\d+)\.htm', next_btn.get('href', ''))
                         if n_match: total_pages = int(n_match.group(1)) + 1
@@ -147,7 +160,7 @@ class BaseSpider(ABC):
             if match: exact_time = match.group(1)
 
         if exact_time:
-            exact_time = exact_time.replace('年', '-').replace('月', '-').replace('日', '').replace('/', '-')
+            exact_time = str(exact_time).replace('年', '-').replace('月', '-').replace('日', '').replace('/', '-')
 
         # 3. 多路径正文提取
         content_selectors = [
@@ -161,7 +174,7 @@ class BaseSpider(ABC):
         
         core_container = None
         for tag, attrs in content_selectors:
-            core_container = soup.find(tag, attrs=attrs)
+            core_container = soup.find(tag, attrs=attrs)  # type: ignore[arg-type]
             if core_container:
                 break 
         
@@ -176,7 +189,7 @@ class BaseSpider(ABC):
         attachments = self._extract_attachments(article_wrapper if article_wrapper else soup, url)
 
         return {
-            'title': soup.title.get_text(strip=True).split('-')[0].strip(),
+            'title': soup.title.get_text(strip=True).split('-')[0].strip() if soup.title else "",
             'url': url,
             'body_text': core_container.get_text(separator='\n', strip=True),
             'attachments': attachments,
@@ -184,7 +197,6 @@ class BaseSpider(ABC):
             'exact_time': exact_time
         }
 
-    # --- 新增：微信公众号统一解析器 ---
     # --- 新增：微信公众号统一解析器（穿透 JS 动态渲染版） ---
     def _fetch_wechat_detail(self, url: str) -> Optional[ArticleData]:
         response = self._safe_get(url)
@@ -260,8 +272,8 @@ class BaseSpider(ABC):
 
     def _safe_get(self, url: str, **kwargs) -> Optional[requests.Response]:
         try:
-            # 加入随机延迟，防止被学校防火墙封禁
-            # time.sleep(random.uniform(0.5, 1.5))
+            # 底层拟人化微抖动，防止被学校防火墙封禁
+            time.sleep(random.uniform(0.2, 0.5))
             res = self.session.get(url, timeout=12, **kwargs)
             res.encoding = 'utf-8'
             return res

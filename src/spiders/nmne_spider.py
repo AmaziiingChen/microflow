@@ -40,16 +40,14 @@ class NmneSpider(BaseSpider):
     # 🌟 V3 升级：特殊容器类名传递给基类
     CONTENT_CONTAINER_CLASS = 'v_news_content'
 
-    def fetch_list(self, page_num: int = 1, section_name: Optional[str] = None, **kwargs) -> List[ArticleData]:
+    def fetch_list(self, page_num: int = 1, section_name: Optional[str] = None, limit: Optional[int] = None, **kwargs) -> List[ArticleData]:
         """
         获取文章列表
 
         Args:
             page_num: 页码，从 1 开始
             section_name: 指定板块名称，为 None 时遍历所有板块
-
-        Returns:
-            标准化的文章摘要列表
+            limit: 每个板块抓取的文章上限，None 表示不限制
         """
         articles = []
 
@@ -58,7 +56,7 @@ class NmneSpider(BaseSpider):
 
         for section, entry_url in sections_to_fetch.items():
             try:
-                section_articles = self._fetch_section_list(entry_url, section)
+                section_articles = self._fetch_section_list(entry_url, section, limit)
                 articles.extend(section_articles)
             except Exception as e:
                 logger.warning(f"[{self.SOURCE_NAME}] 板块 '{section}' 列表抓取失败: {e}")
@@ -66,16 +64,9 @@ class NmneSpider(BaseSpider):
 
         return articles
 
-    def _fetch_section_list(self, entry_url: str, section: str) -> List[ArticleData]:
+    def _fetch_section_list(self, entry_url: str, section: str, limit: Optional[int] = None) -> List[ArticleData]:
         """
-        抓取单个板块的文章列表（使用基类自动翻页推演）
-
-        Args:
-            entry_url: 板块入口 URL
-            section: 板块名称
-
-        Returns:
-            文章列表
+        抓取单个板块的文章列表（智能翻页，按需停止）
         """
         articles = []
 
@@ -83,6 +74,10 @@ class NmneSpider(BaseSpider):
         all_pages = self.get_all_page_urls(entry_url)
 
         for target_url in all_pages:
+            # 🌟 已达到上限，停止请求
+            if limit is not None and len(articles) >= limit:
+                break
+
             response = self._safe_get(target_url)
             if not response:
                 continue
@@ -101,9 +96,16 @@ class NmneSpider(BaseSpider):
                     article = self._parse_list_item(li, section)
                     if article:
                         articles.append(article)
+                        # 🌟 达到上限立即停止
+                        if limit is not None and len(articles) >= limit:
+                            break
                 except Exception as e:
                     logger.debug(f"[{self.SOURCE_NAME}] 解析列表项失败: {e}")
                     continue
+
+        # 最终截断（兜底保护）
+        if limit is not None:
+            articles = articles[:limit]
 
         return articles
 

@@ -6,7 +6,7 @@ V2 版本后端调度引擎 - 多源数据订阅架构
 2. 维护爬虫实例列表，遍历抓取所有数据源
 3. 支持 source_name 字段，实现多来源聚合
 """
-
+import sys
 import logging
 import webview
 import os
@@ -143,7 +143,7 @@ class Api:
             is_manual: 是否为用户手动触发
 
         Returns:
-            {"status": "success/error", "submitted_count": int, "queue_size": int, "data": list}
+            {"status": "success/error", "submitted_count": int, "queue_size": int, "data": list, "cooldown_remaining": int}
         """
         # 🌟 终极防御：如果前端的锁失效了，后端在这里强行拦截
         if is_manual:
@@ -151,7 +151,12 @@ class Api:
             remaining = 120 - (time.time() - last_fetch)
             if remaining > 0:
                 logger.warning(f"拦截高频手动刷新，剩余冷却 {remaining:.1f} 秒")
-                return {"status": "cooldown", "remaining": int(remaining), "message": f"刷新太快啦，请等待 {int(remaining)} 秒"}
+                return {
+                    "status": "cooldown",
+                    "remaining": int(remaining),
+                    "message": f"刷新太快啦，请等待 {int(remaining)} 秒",
+                    "cooldown_remaining": int(remaining)
+                }
 
         mode = self.config_service.get('trackMode', 'continuous')
 
@@ -166,9 +171,12 @@ class Api:
             enabled_sources=subscribed_sources
         )
 
-        # 如果调度器返回错误，直接返回
+        # 如果调度器返回错误，直接返回（带冷却时间）
         if result.get("status") == "error" and result.get("message"):
-            return result
+            return {
+                **result,
+                "cooldown_remaining": self.daemon_manager.get_cooldown_remaining()
+            }
 
         # 🌟 手动更新成功后，记录时间戳（与守护进程共享冷却状态）
         if is_manual and result.get("status") == "success":
@@ -181,23 +189,31 @@ class Api:
         if not is_manual and result.get("status") == "success":
             try:
                 if webview.windows:
-                    webview.windows[0].evaluate_js("if(window.triggerAutoFetchCooldown) window.triggerAutoFetchCooldown();")
+                    webview.windows[0].evaluate_js("""
+                        if (window.triggerAutoFetchCooldown) {
+                            window.triggerAutoFetchCooldown();
+                        } else {
+                            window._pendingCooldown = true;
+                        }
+                    """)
             except Exception as e:
                 logger.debug(f"通知前端锁定按钮失败: {e}")
+
+        # 🌟 获取冷却剩余时间
+        cooldown_remaining = self.daemon_manager.get_cooldown_remaining()
 
         return {
             "status": "success",
             "submitted_count": result.get("submitted_count", 0),
             "queue_size": result.get("queue_size", 0),
             "data": all_articles,
-            "warnings": result.get("warnings")
+            "warnings": result.get("warnings"),
+            "cooldown_remaining": cooldown_remaining
         }
 
     def get_update_cooldown(self) -> Dict[str, Any]:
         """获取真实的剩余更新冷却时间（秒）"""
-        last_fetch = self.daemon_manager._get_last_fetch_time()
-        elapsed = time.time() - last_fetch
-        remaining = int(120 - elapsed)
+        remaining = self.daemon_manager.get_cooldown_remaining()
 
         if remaining > 0:
             return {"status": "cooling", "remaining": remaining}
@@ -366,7 +382,13 @@ class Api:
 
     def load_config(self) -> dict:
         """暴露给前端：获取配置"""
-        return {"status": "success", "data": self.config_service.to_dict()}
+        config_data = self.config_service.to_dict()
+        
+        # 🌟 修复：启动时恢复置顶状态，改为对属性赋值
+        if self.window and config_data.get('isPinned', False):
+            self.window.on_top = True
+            
+        return {"status": "success", "data": config_data}
 
     def save_config(self, new_config: dict) -> dict:
         """暴露给前端：保存配置"""
@@ -755,3 +777,77 @@ class Api:
             logger.error(f"获取版本信息失败: {e}")
 
         return {"status": "error", "message": "无法获取版本信息"}
+    
+
+    def set_window_on_top(self, is_on_top: bool):
+        """前端调用：切换窗口置顶状态"""
+        if self.window:
+            # 🌟 修复：改为对属性进行赋值
+            self.window.on_top = is_on_top
+            return {"status": "success", "is_pinned": is_on_top}
+        return {"status": "error"}
+
+    def get_local_ai_icon(self, model_name: str) -> Dict[str, Any]:
+        """
+        🌟 增强版图标检索：支持模糊匹配与打包路径兼容
+        """
+        # 1. 提取品牌关键词
+        brand_key = model_name.lower().split('-')[0]
+        
+        # 2. 别名映射（可根据需要增删）
+        brand_map = {'gpt': 'openai', 'claude': 'anthropic', 'gemini': 'google'}
+        slug = brand_map.get(brand_key, brand_key)
+
+        # 3. 🚀 打包兼容性路径处理
+        # 如果是 PyInstaller 打包后的环境，使用 sys._MEIPASS；否则使用当前文件目录
+        if getattr(sys, 'frozen', False):
+            # 生产环境：指向解压后的临时资源目录
+            base_path = getattr(sys, '_MEIPASS', '')  # type: ignore[attr-defined]
+        else:
+            # 开发环境：指向当前项目根目录
+            base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+        # 确保指向 /data/icons 文件夹
+        icons_dir = os.path.join(base_path, 'data', 'icons')
+        
+        # 4. 检索逻辑：优先精准匹配，次选模糊匹配
+        svg_content = None
+        
+        try:
+            if os.path.exists(icons_dir):
+                files = os.listdir(icons_dir)
+                
+                # 策略 A: 精准匹配 (mimo.svg / icon_mimo.svg)
+                target_exact = [f"{slug}.svg", f"icon_{slug}.svg", f"{slug}-color.svg"]
+                for f in target_exact:
+                    if f in files:
+                        with open(os.path.join(icons_dir, f), 'r', encoding='utf-8') as fs:
+                            svg_content = fs.read()
+                        break
+                
+                # 策略 B: 模糊匹配 (匹配 xiaomimimo.svg)
+                if not svg_content:
+                    for f in files:
+                        if f.endswith('.svg') and slug in f.lower():
+                            with open(os.path.join(icons_dir, f), 'r', encoding='utf-8') as fs:
+                                svg_content = fs.read()
+                            break
+
+            # 5. 回退逻辑：如果本地 800 个都没中，去云端抓取
+            if not svg_content:
+                url = f"https://unpkg.com/@lobehub/icons-static-svg@latest/icons/{slug}-color.svg"
+                resp = requests.get(url, timeout=3, verify=False)
+                if resp.status_code == 200 and resp.text.startswith('<svg'):
+                    svg_content = resp.text
+                    # 下载后顺手存进本地库，下次就不用下电了
+                    with open(os.path.join(icons_dir, f"{slug}.svg"), 'w', encoding='utf-8') as f:
+                        f.write(svg_content)
+
+            # 6. 尺寸加固：确保截图必现
+            if svg_content and 'width=' not in svg_content:
+                svg_content = svg_content.replace('<svg', '<svg width="100%" height="100%"')
+
+            return {"status": "success", "svg_raw": svg_content or ""}
+            
+        except Exception as e:
+            return {"status": "error", "message": str(e), "svg_raw": ""}

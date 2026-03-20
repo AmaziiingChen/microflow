@@ -26,15 +26,19 @@ class SgimSpider(BaseSpider):
     SOURCE_NAME = "中德智能制造学院"
     BASE_URL = "https://sgim.sztu.edu.cn/"
 
-    def __init__(self):
-        super().__init__()
-        self.sections = {
+    sections = {
             "学院新闻": "https://sgim.sztu.edu.cn/xyxw.htm",
             "通知公告": "https://sgim.sztu.edu.cn/list2022.jsp?urltype=tree.TreeTempUrl&wbtreeid=1045"
         }
 
-    def fetch_list(self, page_num: int = 1, section_name: Optional[str] = None, **kwargs) -> List[ArticleData]:
-        """获取文章列表"""
+    def fetch_list(self, page_num: int = 1, section_name: Optional[str] = None, limit: Optional[int] = None, **kwargs) -> List[ArticleData]:
+        """获取文章列表
+
+        Args:
+            page_num: 页码，从 1 开始
+            section_name: 指定板块名称，为 None 时遍历所有板块
+            limit: 每个板块抓取的文章上限，None 表示不限制
+        """
         logger.info(f"🚀 正在启动 {self.SOURCE_NAME} 爬虫，任务列表: {self.sections}")
 
         articles = []
@@ -47,7 +51,7 @@ class SgimSpider(BaseSpider):
         for section, entry_url in sections_to_fetch.items():
             try:
                 logger.info(f"[{self.SOURCE_NAME}] 正在抓取板块 '{section}': {entry_url}")
-                section_articles = self._fetch_section_list(entry_url, section)
+                section_articles = self._fetch_section_list(entry_url, section, limit)
                 articles.extend(section_articles)
             except Exception as e:
                 logger.warning(f"[{self.SOURCE_NAME}] 板块 '{section}' 列表抓取失败: {e}")
@@ -55,14 +59,18 @@ class SgimSpider(BaseSpider):
 
         return articles
 
-    def _fetch_section_list(self, entry_url: str, section: str) -> List[ArticleData]:
-        """抓取单个板块的文章列表（使用基类自动翻页推演）"""
+    def _fetch_section_list(self, entry_url: str, section: str, limit: Optional[int] = None) -> List[ArticleData]:
+        """抓取单个板块的文章列表（智能翻页，按需停止）"""
         articles = []
 
         # 🌟 V3 升级：使用基类的自动翻页推演
         all_pages = self.get_all_page_urls(entry_url)
 
         for target_url in all_pages:
+            # 🌟 已达到上限，停止请求
+            if limit is not None and len(articles) >= limit:
+                break
+
             response = self._safe_get(target_url)
             if not response:
                 continue
@@ -88,9 +96,16 @@ class SgimSpider(BaseSpider):
                     article = self._parse_list_item(item, section)
                     if article:
                         articles.append(article)
+                        # 🌟 达到上限立即停止
+                        if limit is not None and len(articles) >= limit:
+                            break
                 except Exception as e:
                     logger.debug(f"[{self.SOURCE_NAME}] 解析列表项失败: {e}")
                     continue
+
+        # 最终截断（兜底保护）
+        if limit is not None:
+            articles = articles[:limit]
 
         logger.info(f"[{self.SOURCE_NAME}] 列表页抓取到了 {len(articles)} 条项目")
         return articles
@@ -129,11 +144,36 @@ class SgimSpider(BaseSpider):
         }
 
     def _normalize_date(self, date_str: str) -> str:
-        """标准化日期格式"""
+        """标准化日期格式
+
+        输入示例：
+        - "发布日期： 2026-01-13" -> "2026-01-13"
+        - "2026年1月7日" -> "2026-01-07"
+        - "2026/03/20 14:30" -> "2026-03-20 14:30" (保留时间)
+        """
         if not date_str:
             return ""
 
-        normalized = re.sub(r'[/\.年月]', '-', date_str)
+        # 1. 移除中文前缀（如"发布日期："、"发布时间："等）
+        cleaned = re.sub(r'^[^\d]*', '', date_str).strip()
+
+        # 2. 尝试匹配带时间的格式：2026-01-13 14:30 或 2026年1月13日 14:30
+        time_match = re.search(
+            r'(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})日?\s+(\d{1,2}:\d{1,2}(?::\d{1,2})?)',
+            cleaned
+        )
+        if time_match:
+            year, month, day, time_part = time_match.groups()
+            return f"{year}-{month.zfill(2)}-{day.zfill(2)} {time_part}"
+
+        # 3. 匹配纯日期格式：2026-01-13 或 2026年1月13日
+        date_match = re.search(r'(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})', cleaned)
+        if date_match:
+            year, month, day = date_match.groups()
+            return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+
+        # 4. 兜底：原有逻辑
+        normalized = re.sub(r'[/\.年月]', '-', cleaned)
         normalized = re.sub(r'-+', '-', normalized).strip('-')
 
         return normalized

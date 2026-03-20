@@ -1,49 +1,379 @@
+"""
+SQLite 连接池 - 高并发优化的数据库管理器
+
+架构设计：
+┌──────────────────────────────────────────────────────────────┐
+│                    DatabaseManager (单例)                     │
+├──────────────────────────────────────────────────────────────┤
+│  读操作 (并发)                │  写操作 (串行化)               │
+│  ┌─────────────────┐         │  ┌─────────────────┐         │
+│  │  Read Pool (3)  │         │  │  Write Queue    │         │
+│  │  Connection 1   │         │  │  ┌───┐┌───┐┌───┐│         │
+│  │  Connection 2   │         │  │  │ T ││ T ││ T ││         │
+│  │  Connection 3   │         │  │  └───┘└───┘└───┘│         │
+│  └─────────────────┘         │  └────────┬────────┘         │
+│                              │           ▼                  │
+│                              │  ┌─────────────────┐         │
+│                              │  │ Write Thread    │         │
+│                              │  │ (Single Conn)   │         │
+│                              │  └─────────────────┘         │
+└──────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+                    ┌─────────────────┐
+                    │   SQLite WAL    │
+                    │  (Readers ⊥ Writer) │
+                    └─────────────────┘
+
+核心特性：
+1. WAL 模式：允许多读单写并发
+2. 读连接池：复用连接，避免频繁创建销毁
+3. 写队列：串行化写入，杜绝 database is locked
+4. 超时保护：防止无限等待
+"""
+
 import sqlite3
-import os
 import hashlib
 import logging
 import threading
+import queue
 import re
-from typing import Optional, Dict, Any
-
-from src.core.paths import DB_PATH, ensure_data_dir_exists
+from typing import Optional, Dict, Any, List, Callable
+from contextlib import contextmanager
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
 
-class DatabaseManager:
-    def __init__(self):
-        # 确保数据目录存在（使用系统级持久化路径）
-        ensure_data_dir_exists()
+def _get_db_path() -> str:
+    """延迟获取数据库路径，避免循环导入"""
+    from src.core.paths import DB_PATH
+    return str(DB_PATH)
 
-        # 🌟 数据库级别的全局写锁（使用可重入锁，支持同一线程多次获取）
-        self._write_lock = threading.RLock()
-        
 
-        self.init_db()
-        self._migrate_source_name()
+def _ensure_data_dir():
+    """延迟确保数据目录存在"""
+    from src.core.paths import ensure_data_dir_exists
+    ensure_data_dir_exists()
 
-    def get_connection(self):
-        """获取数据库连接的工厂方法"""
-        conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
-        # --- 核心改进：开启 WAL 模式 ---
+
+@dataclass
+class WriteTask:
+    """写任务封装"""
+    operation: Callable[[sqlite3.Cursor], Any]
+    result_event: threading.Event
+    result: Any = None
+    error: Optional[Exception] = None
+
+
+class ConnectionPool:
+    """
+    轻量级读连接池
+
+    特性：
+    - 固定大小的连接池（默认 3 个）
+    - 线程安全的 get/put
+    - 自动重连机制
+    """
+
+    def __init__(self, db_path: str, pool_size: int = 3):
+        self._db_path = db_path
+        self._pool_size = pool_size
+        self._pool: queue.Queue[sqlite3.Connection] = queue.Queue(maxsize=pool_size)
+        self._lock = threading.Lock()
+        self._initialized = False
+
+        # 初始化连接池
+        self._init_pool()
+
+    def _create_connection(self) -> sqlite3.Connection:
+        """创建新的数据库连接"""
+        conn = sqlite3.connect(
+            self._db_path,
+            check_same_thread=False,
+            timeout=10.0
+        )
+        # 开启 WAL 模式（读连接也需要的设置）
         conn.execute('PRAGMA journal_mode=WAL;')
-        # 增加同步频率，让数据写入更安全（可选）
         conn.execute('PRAGMA synchronous=NORMAL;')
-        # 🌟 新增：设置繁忙等待超时（5秒），避免立即报 database is locked 错误
         conn.execute('PRAGMA busy_timeout=5000;')
-        # 将返回结果转化为类似字典的对象，方便后续通过列名获取数据 (如 row['title'])
+        conn.execute('PRAGMA read_uncommitted=ON;')  # WAL 模式下允许脏读，提高并发
         conn.row_factory = sqlite3.Row
         return conn
 
-    def init_db(self):
+    def _init_pool(self):
+        """初始化连接池"""
+        with self._lock:
+            if self._initialized:
+                return
+            for _ in range(self._pool_size):
+                try:
+                    conn = self._create_connection()
+                    self._pool.put(conn, block=False)
+                except Exception as e:
+                    logger.warning(f"创建读连接失败: {e}")
+            self._initialized = True
+            logger.info(f"📖 读连接池已初始化，大小: {self._pool_size}")
+
+    @contextmanager
+    def get(self):
+        """
+        获取连接（上下文管理器）
+
+        用法：
+            with pool.get() as conn:
+                cursor = conn.cursor()
+                cursor.execute(...)
+        """
+        conn = None
+        try:
+            conn = self._pool.get(timeout=5.0)
+            yield conn
+        except queue.Empty:
+            # 池中无可用连接，创建临时连接
+            logger.debug("读连接池耗尽，创建临时连接")
+            temp_conn = None
+            try:
+                temp_conn = self._create_connection()
+                yield temp_conn
+            finally:
+                # 临时连接用完即关，不回池
+                if temp_conn:
+                    try:
+                        temp_conn.close()
+                    except Exception:
+                        pass
+            return
+        except Exception as e:
+            logger.error(f"获取读连接失败: {e}")
+            raise
+        else:
+            # 正常归还连接
+            if conn:
+                try:
+                    self._pool.put(conn, block=False)
+                except queue.Full:
+                    # 池已满，直接关闭
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+
+    def close_all(self):
+        """关闭所有连接"""
+        while not self._pool.empty():
+            try:
+                conn = self._pool.get_nowait()
+                conn.close()
+            except Exception:
+                pass
+        logger.info("读连接池已关闭")
+
+
+class WriteWorker:
+    """
+    写入工作线程 - 串行化所有写操作
+
+    特性：
+    - 单连接，避免 SQLite 写锁冲突
+    - 异步提交，不阻塞调用线程
+    - 同步等待结果（可选）
+    """
+
+    def __init__(self, db_path: str):
+        self._db_path = db_path
+        self._task_queue: queue.Queue[WriteTask] = queue.Queue(maxsize=100)
+        self._stop_event = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+        self._conn: Optional[sqlite3.Connection] = None
+
+        # 统计
+        self._stats = {
+            'writes': 0,
+            'errors': 0,
+            'queue_full': 0
+        }
+        self._stats_lock = threading.Lock()
+
+    def start(self):
+        """启动写入线程"""
+        if self._thread and self._thread.is_alive():
+            return
+
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._worker_loop, daemon=True, name="DBWriteWorker")
+        self._thread.start()
+        logger.info("✍️ 写入线程已启动")
+
+    def _worker_loop(self):
+        """写入线程主循环"""
+        # 创建专用的写入连接
+        self._conn = sqlite3.connect(
+            self._db_path,
+            check_same_thread=False,
+            timeout=30.0
+        )
+        self._conn.execute('PRAGMA journal_mode=WAL;')
+        self._conn.execute('PRAGMA synchronous=NORMAL;')
+        self._conn.execute('PRAGMA busy_timeout=10000;')  # 写入等待更久
+        self._conn.row_factory = sqlite3.Row
+
+        logger.debug("写入连接已创建")
+
+        while not self._stop_event.is_set():
+            try:
+                # 获取任务（带超时，便于检查停止信号）
+                try:
+                    task = self._task_queue.get(timeout=1.0)
+                except queue.Empty:
+                    continue
+
+                # 执行写入操作
+                try:
+                    cursor = self._conn.cursor()
+                    task.result = task.operation(cursor)
+                    self._conn.commit()
+
+                    with self._stats_lock:
+                        self._stats['writes'] += 1
+
+                except Exception as e:
+                    task.error = e
+                    with self._stats_lock:
+                        self._stats['errors'] += 1
+
+                    # 尝试回滚
+                    try:
+                        self._conn.rollback()
+                    except Exception:
+                        pass
+
+                    logger.error(f"写入操作失败: {e}")
+
+                finally:
+                    # 通知调用线程结果已就绪
+                    task.result_event.set()
+                    self._task_queue.task_done()
+
+            except Exception as e:
+                logger.error(f"写入线程异常: {e}")
+
+        # 关闭连接
+        if self._conn:
+            try:
+                self._conn.close()
+            except Exception:
+                pass
+        logger.info("写入线程已停止")
+
+    def submit(self, operation: Callable[[sqlite3.Cursor], Any], wait: bool = True, timeout: float = 10.0) -> Any:
+        """
+        提交写操作
+
+        Args:
+            operation: 接收 cursor 的操作函数
+            wait: 是否等待结果
+            timeout: 等待超时时间
+
+        Returns:
+            操作结果（如果 wait=True）
+        """
+        if self._stop_event.is_set():
+            raise RuntimeError("写入线程已停止")
+
+        task = WriteTask(
+            operation=operation,
+            result_event=threading.Event()
+        )
+
+        try:
+            self._task_queue.put(task, block=False)
+        except queue.Full:
+            with self._stats_lock:
+                self._stats['queue_full'] += 1
+            raise RuntimeError("写队列已满，请稍后重试")
+
+        if wait:
+            # 等待结果
+            if not task.result_event.wait(timeout=timeout):
+                raise TimeoutError(f"写入操作超时 ({timeout}s)")
+
+            if task.error:
+                raise task.error
+
+            return task.result
+
+        return None
+
+    def stop(self):
+        """停止写入线程"""
+        self._stop_event.set()
+        if self._thread:
+            self._thread.join(timeout=5.0)
+
+    def get_stats(self) -> Dict[str, int]:
+        """获取统计信息"""
+        with self._stats_lock:
+            return dict(self._stats)
+
+    def get_queue_size(self) -> int:
+        """获取当前队列大小"""
+        return self._task_queue.qsize()
+
+
+class DatabaseManager:
+    """
+    数据库管理器 - 单例模式
+
+    架构：
+    - 读操作：通过连接池并发执行
+    - 写操作：通过写队列串行化执行
+    """
+
+    _instance = None
+    _init_lock = threading.Lock()
+
+    def __new__(cls):
+        if cls._instance is None:
+            with cls._init_lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __init__(self):
+        # 防止重复初始化
+        if hasattr(self, '_initialized') and self._initialized:
+            return
+
+        _ensure_data_dir()
+        db_path = _get_db_path()
+
+        # 读连接池（3 个并发读连接）
+        self._read_pool = ConnectionPool(db_path, pool_size=3)
+
+        # 写工作线程（单连接串行写入）
+        self._write_worker = WriteWorker(db_path)
+        self._write_worker.start()
+
+        # 兼容旧代码的写锁（现在主要用于保护 generate_hash）
+        self._write_lock = threading.RLock()
+
+        # 初始化数据库
+        self._init_db()
+        self._migrate_source_name()
+
+        self._initialized = True
+        logger.info("🗄️ DatabaseManager 初始化完成 (连接池模式)")
+
+    @contextmanager
+    def _get_read_connection(self):
+        """获取读连接（上下文管理器）"""
+        with self._read_pool.get() as conn:
+            yield conn
+
+    def _init_db(self):
         """初始化数据库表结构"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            # 创建公文表
-            # raw_hash: 用于比对文章内容是否发生了暗中修改（标题没变，但正文变了）
-            # is_read: 0 表示未读（显示红点），1 表示已读
-            # source_name: 数据来源标识（如 '公文通', '新能源学院' 等）
+        def init_schema(cursor: sqlite3.Cursor):
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS articles (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,87 +392,62 @@ class DatabaseManager:
                     created_at TIMESTAMP DEFAULT (datetime('now', 'localtime'))
                 )
             ''')
-            conn.commit()
+            return True
+
+        # 初始化时使用写线程同步执行
+        self._write_worker.submit(init_schema, wait=True, timeout=30.0)
 
     def _migrate_source_name(self):
-        """
-        V2 版本迁移：无损添加 source_name 字段
-        如果表已存在但缺少该字段，执行 ALTER TABLE 补充
-        """
+        """V2 版本迁移：添加 source_name 字段"""
+        def migrate(cursor: sqlite3.Cursor):
+            cursor.execute("PRAGMA table_info(articles)")
+            columns = [row[1] for row in cursor.fetchall()]
+
+            if 'source_name' not in columns:
+                logger.info("检测到旧版数据库结构，正在执行 source_name 字段迁移...")
+                cursor.execute("ALTER TABLE articles ADD COLUMN source_name TEXT DEFAULT '公文通'")
+                cursor.execute("UPDATE articles SET source_name = '公文通' WHERE source_name IS NULL")
+                logger.info("source_name 字段迁移完成")
+            return True
+
         try:
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
-
-                # 1. 检查 source_name 字段是否存在
-                cursor.execute("PRAGMA table_info(articles)")
-                columns = [row[1] for row in cursor.fetchall()]
-
-                if 'source_name' not in columns:
-                    logger.info("检测到旧版数据库结构，正在执行 source_name 字段迁移...")
-
-                    # 2. 添加字段
-                    cursor.execute("ALTER TABLE articles ADD COLUMN source_name TEXT DEFAULT '公文通'")
-
-                    # 3. 将所有历史数据更新为 '公文通'
-                    cursor.execute("UPDATE articles SET source_name = '公文通' WHERE source_name IS NULL")
-
-                    conn.commit()
-                    logger.info("source_name 字段迁移完成，历史数据已标记为 '公文通'")
-
+            self._write_worker.submit(migrate, wait=True, timeout=30.0)
         except Exception as e:
             logger.error(f"数据库迁移失败: {e}")
 
-    def generate_hash(self, text):
-        """生成文本的 MD5 哈希值，用于内容变动比对"""
+    def generate_hash(self, text: str) -> str:
+        """生成文本的 MD5 哈希值"""
         return hashlib.md5(text.encode('utf-8')).hexdigest()
 
+    # ==================== 读操作 ====================
+
     def check_if_url_exists(self, url: str) -> bool:
-        """
-        极轻量级的查重：仅判断 URL 是否已在数据库中。
-        用于在"持续追更"模式下，快速跳过已抓取的历史公文，无需发起网络请求。
-        """
-        with self.get_connection() as conn:
+        """检查 URL 是否已存在"""
+        with self._get_read_connection() as conn:
             cursor = conn.cursor()
-            # 使用 EXISTS 语句是 SQLite 中性能最高的查重方式
             cursor.execute("SELECT 1 FROM articles WHERE url = ? LIMIT 1", (url,))
             return cursor.fetchone() is not None
 
-    def check_if_new_or_updated(self, url, raw_content):
-        """
-        核心业务逻辑：判断公文是否是全新的，或者是内容被暗中修改过的。
-        返回 (is_new_or_updated, reason)
-        """
+    def check_if_new_or_updated(self, url: str, raw_content: str) -> tuple:
+        """检查文章是否为新或有更新"""
         current_hash = self.generate_hash(raw_content)
 
-        with self.get_connection() as conn:
+        with self._get_read_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT raw_hash FROM articles WHERE url = ?", (url,))
             row = cursor.fetchone()
 
             if row is None:
-                return True, "new"  # 数据库里没有这个URL，完全是新的
+                return True, "new"
 
             if row['raw_hash'] != current_hash:
-                return True, "updated"  # 有这个URL，但哈希值变了，说明教务老师悄悄改了内容
+                return True, "updated"
 
-            return False, "unchanged"  # 啥也没变，忽略
+            return False, "unchanged"
 
-    def insert_or_update_article(self, title, url, date, exact_time, category, department, attachments, summary, raw_content, source_name='公文通'):
-        """插入或更新文章 - 受写锁保护，防止并发写入冲突"""
-        current_hash = self.generate_hash(raw_content)
-        with self._write_lock:  # 🌟 加锁保护写入操作
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute('''
-                    REPLACE INTO articles
-                    (title, url, date, exact_time, category, department, attachments, summary, raw_text, raw_hash, is_read, source_name)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
-                ''', (title, url, date, exact_time, category, department, attachments, summary, raw_content, current_hash, source_name))
-                conn.commit()
-
-    def get_articles_paged(self, limit=20, offset=0, source_name: str = None):# type: ignore
-        """分页获取公文，支持按来源筛选"""
-        with self.get_connection() as conn:
+    def get_articles_paged(self, limit: int = 20, offset: int = 0, source_name: Optional[str] = None) -> List[Dict]:
+        """分页获取文章"""
+        with self._get_read_connection() as conn:
             cursor = conn.cursor()
             if source_name:
                 cursor.execute(
@@ -156,33 +461,34 @@ class DatabaseManager:
                 )
             return [dict(row) for row in cursor.fetchall()]
 
-    def mark_as_read(self, url):
-        """标记某篇公文为已读（消除红点）"""
-        with self.get_connection() as conn:
+    def get_all_sources(self) -> List[str]:
+        """获取所有数据来源"""
+        with self._get_read_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("UPDATE articles SET is_read = 1 WHERE url = ?", (url,))
-            conn.commit()
+            cursor.execute("SELECT DISTINCT source_name FROM articles ORDER BY source_name")
+            return [row[0] for row in cursor.fetchall() if row[0]]
 
-    def search_articles(self, keyword: str, limit: int = 50, source_name: str = None) -> list: # type: ignore
-        """
-        全局搜索接口：支持多关键词布尔搜索 (空格/and 表示 AND，or 表示 OR)
-        示例: "校园 附件 or 放假" 会被解析为 (校园 AND 附件) OR (放假)
-        """
-        with self.get_connection() as conn:
-            conn.row_factory = sqlite3.Row
+    def get_article_by_id(self, article_id: int) -> Optional[Dict[str, Any]]:
+        """根据 ID 获取文章"""
+        with self._get_read_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM articles WHERE id = ?", (article_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def search_articles(self, keyword: str, limit: int = 50, source_name: Optional[str] = None) -> List[Dict]:
+        """搜索文章"""
+        with self._get_read_connection() as conn:
             cursor = conn.cursor()
 
-            # --- 🌟 核心逻辑：解析布尔搜索语法 ---
-            # 1. 以 " or " 为界限切分 OR 组 (忽略大小写)
+            # 解析布尔搜索语法
             or_groups = [g.strip() for g in re.split(r'\s+or\s+', keyword, flags=re.IGNORECASE)]
 
             sql_or_conditions = []
             params = []
 
             for group in or_groups:
-                # 2. 将 " and " 替换为空格，统一处理 AND 逻辑
                 group = re.sub(r'\s+and\s+', ' ', group, flags=re.IGNORECASE)
-                # 3. 以空格切分 AND 关键词
                 and_terms = [t.strip() for t in group.split() if t.strip()]
 
                 if not and_terms:
@@ -191,22 +497,23 @@ class DatabaseManager:
                 and_conditions = []
                 for term in and_terms:
                     like_term = f"%{term}%"
-                    # 对每个关键词，要求在标题、日期、正文或摘要中至少命中一个
-                    term_cond = "(title LIKE ? OR date LIKE ? OR raw_text LIKE ? OR summary LIKE ?)"
+                    # 🌟 核心修改：在 SQL 条件中加入 attachments 字段
+                    # 这样搜索文件名（如 "实验报告"）或后缀（如 ".zip"）都能匹配到
+                    term_cond = ("(title LIKE ? OR date LIKE ? OR raw_text LIKE ? OR summary LIKE ? "
+                                 "OR department LIKE ? OR category LIKE ? OR source_name LIKE ? "
+                                 "OR attachments LIKE ?)")
                     and_conditions.append(term_cond)
-                    params.extend([like_term] * 4)
+                    
+                    # 🌟 注意：这里必须改成 * 8，因为括号内现在有 8 个问号
+                    params.extend([like_term] * 8)
 
-                # 同一个 OR 组内的词，必须全部命中 (AND)
                 sql_or_conditions.append("(" + " AND ".join(and_conditions) + ")")
 
-            # 如果解析后没有有效查询条件，退化为无条件查询
             if not sql_or_conditions:
                 base_condition = "1=1"
             else:
-                # 把所有的 OR 组连接起来
                 base_condition = "(" + " OR ".join(sql_or_conditions) + ")"
 
-            # 🌟 动态拼装最终 SQL 语句
             if source_name:
                 query = f"""
                 SELECT * FROM articles
@@ -224,15 +531,11 @@ class DatabaseManager:
                 """
 
             params.append(limit)
-
-            # 执行查询
             cursor.execute(query, tuple(params))
-
-            # --- 🌟 结果后处理：动态上下文摘录 ---
             rows = cursor.fetchall()
-            results = []
 
-            # 提取所有独立的搜索关键词（过滤掉 and, or, 空格）
+            # 结果后处理：上下文摘录
+            results = []
             raw_terms = re.split(r'\s+', keyword)
             terms = [t for t in raw_terms if t.lower() not in ('and', 'or') and t.strip()]
 
@@ -258,13 +561,11 @@ class DatabaseManager:
                             suffix = "..." if end < len(raw_text) else ""
 
                             snippet_text = raw_text[start:end].replace('\n', ' ')
-                            # 🌟 核心改变：不再用 **加粗**，而是直接套用 strong 标签，方便我们用 CSS 做荧光笔效果
                             snippet_text = re.sub(f"({re.escape(t)})", r"<strong>\1</strong>", snippet_text, flags=re.IGNORECASE)
                             snippets.append(f"{prefix}{snippet_text}{suffix}")
 
                     if snippets:
                         snippets_html = "<br><br>".join(snippets)
-                        # 🌟 拼装专属的 HTML 卡片结构
                         html_block = f"""
 <div class="search-snippet-box">
     <div class="snippet-header">
@@ -279,50 +580,129 @@ class DatabaseManager:
 
             return results
 
-    def get_all_sources(self) -> list:
-        """获取所有数据来源列表"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT DISTINCT source_name FROM articles ORDER BY source_name")
-            return [row[0] for row in cursor.fetchall() if row[0]]
+    # ==================== 写操作 ====================
 
-    def get_article_by_id(self, article_id: int) -> Optional[Dict[str, Any]]:
-        """
-        根据 ID 获取文章详情
+    def insert_or_update_article(self, title: str, url: str, date: str, exact_time: str,
+                                  category: str, department: str, attachments: str,
+                                  summary: str, raw_content: str, source_name: str = '公文通'):
+        """插入或更新文章（异步写入）"""
+        current_hash = self.generate_hash(raw_content)
 
-        Args:
-            article_id: 文章 ID
+        def do_insert(cursor: sqlite3.Cursor):
+            cursor.execute('''
+                REPLACE INTO articles
+                (title, url, date, exact_time, category, department, attachments, summary, raw_text, raw_hash, is_read, source_name)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+            ''', (title, url, date, exact_time, category, department, attachments, summary, raw_content, current_hash, source_name))
+            return True
 
-        Returns:
-            文章字典，不存在则返回 None
-        """
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM articles WHERE id = ?", (article_id,))
-            row = cursor.fetchone()
-            return dict(row) if row else None
+        # 提交到写队列，不等待结果（异步写入）
+        try:
+            self._write_worker.submit(do_insert, wait=False)
+        except Exception as e:
+            logger.error(f"提交写入任务失败: {e}")
+            raise
+
+    def insert_or_update_article_sync(self, title: str, url: str, date: str, exact_time: str,
+                                        category: str, department: str, attachments: str,
+                                        summary: str, raw_content: str, source_name: str = '公文通') -> bool:
+        """插入或更新文章（同步版本，等待写入完成）"""
+        current_hash = self.generate_hash(raw_content)
+
+        def do_insert(cursor: sqlite3.Cursor):
+            cursor.execute('''
+                REPLACE INTO articles
+                (title, url, date, exact_time, category, department, attachments, summary, raw_text, raw_hash, is_read, source_name)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+            ''', (title, url, date, exact_time, category, department, attachments, summary, raw_content, current_hash, source_name))
+            return True
+
+        try:
+            self._write_worker.submit(do_insert, wait=True, timeout=15.0)
+            return True
+        except Exception as e:
+            logger.error(f"同步写入失败: {e}")
+            return False
+
+    def mark_as_read(self, url: str):
+        """标记文章为已读"""
+        def do_mark(cursor: sqlite3.Cursor):
+            cursor.execute("UPDATE articles SET is_read = 1 WHERE url = ?", (url,))
+            return True
+
+        try:
+            self._write_worker.submit(do_mark, wait=False)
+        except Exception as e:
+            logger.error(f"标记已读失败: {e}")
 
     def update_summary(self, article_id: int, new_summary: str) -> bool:
-        """
-        更新文章的 AI 总结
+        """更新文章摘要（同步）"""
+        def do_update(cursor: sqlite3.Cursor):
+            cursor.execute(
+                "UPDATE articles SET summary = ? WHERE id = ?",
+                (new_summary, article_id)
+            )
+            return cursor.rowcount > 0
 
-        Args:
-            article_id: 文章 ID
-            new_summary: 新的总结内容
+        try:
+            return self._write_worker.submit(do_update, wait=True, timeout=10.0)
+        except Exception as e:
+            logger.error(f"更新摘要失败: {e}")
+            return False
 
-        Returns:
-            是否更新成功
-        """
-        with self._write_lock:
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "UPDATE articles SET summary = ? WHERE id = ?",
-                    (new_summary, article_id)
-                )
-                conn.commit()
-                return cursor.rowcount > 0
+    # ==================== 管理 ====================
+
+    def get_stats(self) -> Dict[str, Any]:
+        """获取统计信息"""
+        return {
+            'write_stats': self._write_worker.get_stats(),
+            'write_queue_size': self._write_worker.get_queue_size()
+        }
+
+    def close(self):
+        """关闭所有资源"""
+        logger.info("正在关闭数据库管理器...")
+        self._write_worker.stop()
+        self._read_pool.close_all()
+        logger.info("数据库管理器已关闭")
+
+    # ==================== 兼容旧 API ====================
+
+    def get_connection(self):
+        """兼容旧 API：获取读连接"""
+        return self._read_pool.get()
 
 
-# 实例化一个单例供其他模块直接引入使用
-db = DatabaseManager()
+# ==================== 延迟初始化单例 ====================
+
+_db_instance: Optional[DatabaseManager] = None
+_db_lock = threading.Lock()
+
+
+def get_db() -> DatabaseManager:
+    """
+    获取数据库管理器单例（延迟初始化）
+
+    解决循环导入问题：
+    - 模块加载时不创建实例
+    - 首次调用时才初始化
+    """
+    global _db_instance
+    if _db_instance is None:
+        with _db_lock:
+            if _db_instance is None:
+                _db_instance = DatabaseManager()
+    return _db_instance
+
+
+# 兼容旧代码：db 属性访问（延迟初始化）
+class _DBProxy:
+    """数据库代理类，支持延迟初始化和属性透明转发"""
+    def __getattr__(self, name):
+        return getattr(get_db(), name)
+
+    def __repr__(self):
+        return repr(get_db())
+
+
+db = _DBProxy()

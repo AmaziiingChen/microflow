@@ -50,14 +50,18 @@ class ArticleProcessor:
     架构设计：
     ┌─────────────┐      ┌──────────────┐      ┌─────────────┐
     │  Producer   │ ───▶ │  Task Queue  │ ───▶ │   Workers   │
-    │ (scheduler) │      │  (threadsafe)│      │  (3-5 线程) │
+    │ (scheduler) │      │  (threadsafe)│      │  (4 线程)   │
     └─────────────┘      └──────────────┘      └─────────────┘
                                                       │
                                                       ▼
                                                ┌─────────────┐
                                                │  Database   │
-                                               │ (写锁保护)  │
+                                               │ (异步写队列) │
                                                └─────────────┘
+
+    数据库架构（详见 src/database.py）：
+    - 读操作：ConnectionPool (3 连接并发读)
+    - 写操作：WriteQueue (单线程串行写，WAL 模式)
     """
 
     # 标题黑名单：过滤导航噪音
@@ -245,7 +249,7 @@ class ArticleProcessor:
             attachments_data = []
         attachments_json = json.dumps(attachments_data, ensure_ascii=False)
 
-        # 9. 入库（⚠️ 数据库层的 RLock 已在 insert_or_update_article 内部保护）
+        # 9. 入库（🌟 异步写入：通过写队列串行化，不阻塞当前 Worker）
         self.db.insert_or_update_article(
             title=ctx.title,
             url=ctx.url,

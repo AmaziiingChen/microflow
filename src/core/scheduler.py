@@ -3,6 +3,7 @@
 import json
 import logging
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple, Callable, Type, TYPE_CHECKING
 
@@ -25,7 +26,7 @@ logger = logging.getLogger(__name__)
 # 顺序：公文通 -> 中德智能制造 -> 人工智能 -> 新材料与新能源 -> 城市交通与物流 -> 健康与环境工程 -> 工程物理 -> 药学院 -> 集成电路与光电芯片 -> 未来技术 -> 创意设计 -> 商学院
 SPIDER_REGISTRY: List[Tuple[Type[BaseSpider], int, str, bool]] = [
     (GwtSpider, 1, "公文通", True),                    # 公文通需要校园网
-    (SgimSpider, 1, "中德智能制造学院", False),
+    (SgimSpider, 2, "中德智能制造学院", False),
     (AiSpider, 2, "人工智能学院", False),
     (NmneSpider, 6, "新材料与新能源学院", False),
     (UtlSpider, 2, "城市交通与物流学院", False),
@@ -85,6 +86,9 @@ class SpiderScheduler:
         self.config_service = config_service
         self.active_spiders: List[BaseSpider] = []
         self._update_lock = threading.Lock()
+        # 线程安全进度条支持
+        self._progress_lock = threading.Lock()
+        self._current_scanned = 0
 
         # 初始化爬虫
         self._init_spiders()
@@ -222,12 +226,13 @@ class SpiderScheduler:
             errors: List[str] = []
             skipped_spiders: List[str] = []
 
-            # 3. 预估总任务数并推送初始进度
+            # 3. 重置进度计数器并推送初始进度
+            self._current_scanned = 0
             total_tasks = self.estimate_total_tasks()
-            scanned_count = 0
             self._push_progress(0, total_tasks, "正在扫描数据源...")
 
-            # 4. 遍历所有爬虫实例（智能过滤）
+            # 4. 筛选需要执行的爬虫（智能过滤）
+            spiders_to_run: List[BaseSpider] = []
             for spider in self.active_spiders:
                 # 订阅过滤：如果指定了 enabled_sources，且当前爬虫不在列表中，则跳过
                 if enabled_sources is not None and spider.SOURCE_NAME not in enabled_sources:
@@ -243,27 +248,37 @@ class SpiderScheduler:
                     skipped_spiders.append(spider.SOURCE_NAME)
                     continue
 
-                try:
-                    count = self._process_spider(
+                spiders_to_run.append(spider)
+
+            # 5. 使用线程池并发执行爬虫
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                futures = {}
+                for spider in spiders_to_run:
+                    future = executor.submit(
+                        self._process_spider,
                         spider=spider,
                         mode=mode,
                         today_str=today_str,
                         is_manual=is_manual,
-                        scanned_start=scanned_count,
                         total_tasks=total_tasks
                     )
-                    submitted_count += count
-                    scanned_count += count
-                    if count > 0:
-                        submitted_sources.append(f"{spider.SOURCE_NAME}({count})")
+                    futures[future] = spider.SOURCE_NAME
 
-                    logger.info(f"📊 [{spider.SOURCE_NAME}] 已提交 {count} 篇文章到处理队列")
-
-                except Exception as e:
-                    error_msg = f"[{spider.SOURCE_NAME}] 爬虫执行崩溃: {e}"
-                    logger.error(error_msg, exc_info=True)
-                    errors.append(error_msg)
-                    continue
+                # 使用 as_completed 收集结果
+                for future in as_completed(futures):
+                    source_name = futures[future]
+                    try:
+                        result_name, count, error_list = future.result()
+                        submitted_count += count
+                        if error_list:
+                            errors.extend(error_list)
+                        if count > 0:
+                            submitted_sources.append(f"{result_name}({count})")
+                        logger.info(f"📊 [{result_name}] 已提交 {count} 篇文章到处理队列")
+                    except Exception as e:
+                        error_msg = f"[{source_name}] 爬虫执行崩溃: {e}"
+                        logger.error(error_msg, exc_info=True)
+                        errors.append(error_msg)
 
             # 5. 如果需要等待完成
             if wait_for_completion:
@@ -314,41 +329,38 @@ class SpiderScheduler:
         mode: str,
         today_str: str,
         is_manual: bool,
-        scanned_start: int,
         total_tasks: int
-    ) -> int:
+    ) -> Tuple[str, int, List[str]]:
         """
-        处理单个爬虫的所有板块（异步提交）
+        处理单个爬虫的所有板块（异步提交，线程安全）
 
         Args:
             spider: 爬虫实例
             mode: 追踪模式
             today_str: 今日日期字符串
             is_manual: 是否手动触发
-            scanned_start: 开始前的已扫描计数
-            total_tasks: 总任务数
+            total_tasks: 总任务数（用于进度条）
 
         Returns:
-            提交到队列的文章数量
+            (来源名称, 提交数量, 错误列表) 元组
         """
         submitted_count = 0
         source_name = spider.SOURCE_NAME
-        current_scanned = scanned_start
+        error_list: List[str] = []
 
         # 获取板块列表
         sections = self._get_sections(spider)
 
         for section_name in sections:
             try:
-                # 获取文章列表
-                if section_name:
-                    articles = spider.fetch_list(page_num=1, section_name=section_name)
-                else:
-                    articles = spider.fetch_list(page_num=1)
-
-                # Top N 测试模式（动态从配置读取）
+                # 获取文章列表（传入 limit，让爬虫层控制抓取数量）
                 limit = self.articles_per_section_limit
-                articles = articles[:limit]
+                if section_name:
+                    articles = spider.fetch_list(page_num=1, section_name=section_name, limit=limit)
+                else:
+                    articles = spider.fetch_list(page_num=1, limit=limit)
+
+                # limit 已在爬虫层生效，无需再次截断
 
                 for article in articles:
                     # 创建文章上下文
@@ -372,8 +384,10 @@ class SpiderScheduler:
                     if self.article_processor.should_skip_by_url(ctx.url, is_manual):
                         continue
 
-                    # 推送进度
-                    current_scanned += 1
+                    # 线程安全地更新进度
+                    with self._progress_lock:
+                        self._current_scanned += 1
+                        current_scanned = self._current_scanned
                     self._push_progress(current_scanned, total_tasks, ctx.title)
 
                     # 🌟 异步提交到处理队列（立即返回，不阻塞）
@@ -388,10 +402,12 @@ class SpiderScheduler:
 
             except Exception as e:
                 section_label = f"板块 '{section_name}'" if section_name else "默认板块"
-                logger.warning(f"[{source_name}] {section_label} 抓取异常: {e}")
+                error_msg = f"[{source_name}] {section_label} 抓取异常: {e}"
+                logger.warning(error_msg)
+                error_list.append(error_msg)
                 continue
 
-        return submitted_count
+        return (source_name, submitted_count, error_list)
 
     @property
     def is_locked(self) -> bool:
