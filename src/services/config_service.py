@@ -25,6 +25,7 @@ class AppConfig:
     subscribed_sources: list = field(default_factory=list)  # 🌟 新增：订阅的来源列表
     polling_interval: int = 900  # 🌟 新增：守护进程轮询间隔（秒），默认 15 分钟
     is_locked: bool = False  # 🌟 新增：配置锁定状态（用于防止修改）
+    articles_per_section_limit: int = 10  # 🌟 新增：每个板块处理的文章上限
 
 
 class ConfigService:
@@ -84,7 +85,8 @@ class ConfigService:
                 custom_font_name=data.get('customFontName', default.custom_font_name),  # 🌟 新增
                 subscribed_sources=data.get('subscribedSources', default.subscribed_sources),  # 🌟 新增
                 polling_interval=data.get('pollingInterval', default.polling_interval),  # 🌟 新增
-                is_locked=data.get('isLocked', default.is_locked)  # 🌟 新增：配置锁定状态
+                is_locked=data.get('isLocked', default.is_locked),  # 🌟 新增：配置锁定状态
+                articles_per_section_limit=data.get('articlesPerSectionLimit', default.articles_per_section_limit),  # 🌟 新增
             )
             return self._config
 
@@ -127,7 +129,8 @@ class ConfigService:
                 custom_font_name=config_dict.get('customFontName', ''),  # 🌟 新增
                 subscribed_sources=config_dict.get('subscribedSources', []),  # 🌟 新增
                 polling_interval=config_dict.get('pollingInterval', 900),  # 🌟 新增
-                is_locked=config_dict.get('isLocked', False)  # 🌟 新增：配置锁定状态
+                is_locked=config_dict.get('isLocked', False),  # 🌟 新增：配置锁定状态
+                articles_per_section_limit=config_dict.get('articlesPerSectionLimit', 10),  # 🌟 新增
             )
 
             logger.info("配置已成功保存")
@@ -165,12 +168,13 @@ class ConfigService:
             "customFontName": config.custom_font_name,  # 🌟 新增
             "subscribedSources": config.subscribed_sources,  # 🌟 新增
             "pollingInterval": config.polling_interval,  # 🌟 新增
-            "isLocked": config.is_locked  # 🌟 新增：配置锁定状态
+            "isLocked": config.is_locked,  # 🌟 新增：配置锁定状态
+            "articlesPerSectionLimit": config.articles_per_section_limit,  # 🌟 新增
         }
 
     def get(self, key: str, default: Any = None) -> Any:
         """
-        获取单个配置项
+        获取单个配置项（支持热重载）
 
         Args:
             key: 配置键名（支持前端格式如 'apiKey' 或 Python 格式如 'api_key'）
@@ -179,6 +183,16 @@ class ConfigService:
         Returns:
             配置值
         """
+        # 🌟 热重载：每次读取时重新从文件加载配置
+        if os.path.exists(self.config_path):
+            try:
+                file_mtime = os.path.getmtime(self.config_path)
+                if not hasattr(self, '_last_mtime') or file_mtime != self._last_mtime:
+                    self._last_mtime = file_mtime
+                    self.load()  # 文件有变更时重新加载
+            except Exception:
+                pass
+
         config = self.current
 
         # 支持两种格式的键名
@@ -195,9 +209,25 @@ class ConfigService:
             'subscribedSources': 'subscribed_sources',  # 🌟 新增
             'pollingInterval': 'polling_interval',  # 🌟 新增
             'isLocked': 'is_locked',  # 🌟 新增：配置锁定状态
+            'articlesPerSectionLimit': 'articles_per_section_limit',  # 🌟 新增
         }
 
         # 转换键名
         attr_name = key_mapping.get(key, key)
 
         return getattr(config, attr_name, default)
+
+    def reload(self) -> bool:
+        """
+        强制重新加载配置文件（用于外部修改后的手动刷新）
+
+        Returns:
+            是否成功加载
+        """
+        try:
+            self.load()
+            logger.info("配置已热重载")
+            return True
+        except Exception as e:
+            logger.error(f"配置热重载失败: {e}")
+            return False

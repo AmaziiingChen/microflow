@@ -4,7 +4,7 @@ import json
 import logging
 import threading
 from datetime import datetime
-from typing import Dict, Any, List, Optional, Tuple, Callable, Type
+from typing import Dict, Any, List, Optional, Tuple, Callable, Type, TYPE_CHECKING
 
 from src.spiders import (
     BaseSpider, GwtSpider, NmneSpider, AiSpider,
@@ -14,6 +14,9 @@ from src.spiders import (
 from src.database import db
 from src.core.article_processor import ArticleProcessor, ArticleContext
 from src.core.network_utils import check_network_status, NetworkStatus, get_network_description
+
+if TYPE_CHECKING:
+    from src.services.config_service import ConfigService
 
 logger = logging.getLogger(__name__)
 
@@ -60,13 +63,14 @@ class SpiderScheduler:
     4. 推送进度到前端
     """
 
-    # 每个板块处理的文章上限（测试模式）
-    ARTICLES_PER_SECTION_LIMIT = 10
+    # 🌟 V3 升级：移除硬编码常量，改为从配置服务动态读取
+    DEFAULT_ARTICLES_PER_SECTION_LIMIT = 10
 
     def __init__(
         self,
         article_processor: ArticleProcessor,
-        progress_callback: Optional[Callable[[int, int, str], None]] = None
+        progress_callback: Optional[Callable[[int, int, str], None]] = None,
+        config_service: Optional["ConfigService"] = None
     ):
         """
         初始化调度器
@@ -74,14 +78,28 @@ class SpiderScheduler:
         Args:
             article_processor: 文章处理器实例
             progress_callback: 进度回调函数 (completed, total, current_title)
+            config_service: 配置服务实例（用于动态读取配置）
         """
         self.article_processor = article_processor
         self.progress_callback = progress_callback
+        self.config_service = config_service
         self.active_spiders: List[BaseSpider] = []
         self._update_lock = threading.Lock()
 
         # 初始化爬虫
         self._init_spiders()
+
+    @property
+    def articles_per_section_limit(self) -> int:
+        """
+        动态获取每个板块处理的文章上限（支持热重载）
+
+        Returns:
+            每个板块处理的文章上限
+        """
+        if self.config_service:
+            return self.config_service.get('articlesPerSectionLimit', self.DEFAULT_ARTICLES_PER_SECTION_LIMIT)
+        return self.DEFAULT_ARTICLES_PER_SECTION_LIMIT
 
     def _init_spiders(self) -> None:
         """初始化所有爬虫实例"""
@@ -98,11 +116,12 @@ class SpiderScheduler:
                 logger.error(f"❌ {spider_cls.__name__} 初始化失败: {e}")
 
     def estimate_total_tasks(self) -> int:
-        """预估总任务数（用于进度条显示）"""
+        """预估总任务数（用于进度条显示，动态读取配置）"""
         total = 0
+        limit = self.articles_per_section_limit
         for spider in self.active_spiders:
             section_count = self._get_section_count(spider)
-            total += section_count * self.ARTICLES_PER_SECTION_LIMIT
+            total += section_count * limit
         return max(total, 1)
 
     def _get_section_count(self, spider: BaseSpider) -> int:
@@ -327,8 +346,9 @@ class SpiderScheduler:
                 else:
                     articles = spider.fetch_list(page_num=1)
 
-                # Top 10 测试模式
-                articles = articles[:self.ARTICLES_PER_SECTION_LIMIT]
+                # Top N 测试模式（动态从配置读取）
+                limit = self.articles_per_section_limit
+                articles = articles[:limit]
 
                 for article in articles:
                     # 创建文章上下文

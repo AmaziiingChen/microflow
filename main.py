@@ -20,16 +20,6 @@ _tray_icon = None
 _has_alert = False
 _base_icon_256 = None  # 存储超清母版，用于后续超采样画红点
 
-def check_campus_network() -> bool:
-    """探测是否处于深圳技术大学校园网环境"""
-    try:
-        # 探测公文通主页，设置 2 秒极短超时
-        requests.head("https://nbw.sztu.edu.cn/list.jsp?urltype=tree.TreeTempUrl&wbtreeid=1029", timeout=2, verify=False)
-        return True
-    except requests.exceptions.RequestException:
-        return False
-    
-
 
 def set_tray_alert():
     """在托盘图标上显示红点提醒（超采样抗锯齿版）"""
@@ -143,21 +133,6 @@ def load_tray_icon():
     else:
         print(f"⚠️ 找不到托盘图标文件: {icon_path}")
 if __name__ == '__main__':
-    # 🌟 校园网护城河：启动拦截
-    if not check_campus_network():
-        print("⛔️ 访问受限：未检测到校园网环境。")
-        error_html = """
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-align: center; margin-top: 20vh; color: #111827;">
-            <h2 style="color: #E11D48;">访问受限</h2>
-            <p style="color: #4B5563; font-size: 14px;">Microflow（微流） 仅限在深圳技术大学校园网环境下运行。</p>
-            <p style="color: #4B5563; font-size: 14px;">请连接校园 WiFi 后重新启动软件。</p>
-        </div>
-        """
-        webview.create_window('网络错误', html=error_html, width=400, height=300)
-        webview.start()
-        sys.exit(0)
-    
-    # 网络校验通过，正常启动原本的微流 Microflow逻辑...
     # 实例化后端桥接 API
     api = Api()
 

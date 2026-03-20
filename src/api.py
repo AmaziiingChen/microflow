@@ -66,7 +66,8 @@ class Api:
         )
         self.scheduler = SpiderScheduler(
             article_processor=self.article_processor,
-            progress_callback=self._push_progress
+            progress_callback=self._push_progress,
+            config_service=self.config_service
         )
 
         # 🌟 核心组件：守护进程管理器
@@ -604,14 +605,14 @@ class Api:
                 "reason": "该软件已被永久禁用"
             }
 
-        # 🌟 步骤 2：检查网络环境
-        network_status = check_network_status()
-        if network_status != NetworkStatus.PUBLIC_AND_INTRANET:
-            logger.warning(f"🚫 启动检查：网络环境不符合要求 ({network_status.value})")
-            return {
-                "status": "network_error",
-                "reason": "请连接深圳技术大学校园网后使用"
-            }
+        # # 🌟 步骤 2：检查网络环境 [已禁用 - 允许公网环境运行]
+        # network_status = check_network_status()
+        # if network_status != NetworkStatus.PUBLIC_AND_INTRANET:
+        #     logger.warning(f"🚫 启动检查：网络环境不符合要求 ({network_status.value})")
+        #     return {
+        #         "status": "network_error",
+        #         "reason": "请连接深圳技术大学校园网后使用"
+        #     }
 
         # 🌟 步骤 3：请求远程 version.json（唯一请求点）
         try:

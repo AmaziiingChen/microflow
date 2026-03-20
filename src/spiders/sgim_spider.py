@@ -1,11 +1,11 @@
 """
-中德智能制造学院爬虫 - V2 多源数据订阅架构
+中德智能制造学院爬虫 - V3 多源数据订阅架构
 
 支持板块：
 - 学院新闻
 
 特性：
-- 逆向分页逻辑处理
+- 自动翻页推演（使用基类 get_all_page_urls）
 - 图文动画列表样式解析
 - 纯图片内容防御
 - 附件智能提取（带类型卫士）
@@ -26,33 +26,19 @@ class SgimSpider(BaseSpider):
     SOURCE_NAME = "中德智能制造学院"
     BASE_URL = "https://sgim.sztu.edu.cn/"
 
-    # 逆向分页配置：第 2 页为 30.htm
-    MAX_PAGE = 32
-
     def __init__(self):
         super().__init__()
-        # 板块配置（必须使用小写的 self.sections）
         self.sections = {
-            "学院新闻": "https://sgim.sztu.edu.cn/xyxw.htm"
+            "学院新闻": "https://sgim.sztu.edu.cn/xyxw.htm",
+            "通知公告": "https://sgim.sztu.edu.cn/list2022.jsp?urltype=tree.TreeTempUrl&wbtreeid=1045"
         }
 
     def fetch_list(self, page_num: int = 1, section_name: Optional[str] = None, **kwargs) -> List[ArticleData]:
-        """
-        获取文章列表
-
-        Args:
-            page_num: 页码，从 1 开始
-            section_name: 指定板块名称，为 None 时遍历所有板块
-
-        Returns:
-            标准化的文章摘要列表
-        """
-        # 🚀 唤醒日志
+        """获取文章列表"""
         logger.info(f"🚀 正在启动 {self.SOURCE_NAME} 爬虫，任务列表: {self.sections}")
 
         articles = []
 
-        # 确定要抓取的板块
         if section_name:
             sections_to_fetch = {section_name: self.sections[section_name]}
         else:
@@ -61,7 +47,7 @@ class SgimSpider(BaseSpider):
         for section, entry_url in sections_to_fetch.items():
             try:
                 logger.info(f"[{self.SOURCE_NAME}] 正在抓取板块 '{section}': {entry_url}")
-                section_articles = self._fetch_section_list(entry_url, section, page_num)
+                section_articles = self._fetch_section_list(entry_url, section)
                 articles.extend(section_articles)
             except Exception as e:
                 logger.warning(f"[{self.SOURCE_NAME}] 板块 '{section}' 列表抓取失败: {e}")
@@ -69,119 +55,69 @@ class SgimSpider(BaseSpider):
 
         return articles
 
-    def _fetch_section_list(self, entry_url: str, section: str, page_num: int) -> List[ArticleData]:
-        """
-        抓取单个板块的文章列表
-
-        Args:
-            entry_url: 板块入口 URL
-            section: 板块名称
-            page_num: 页码
-
-        Returns:
-            文章列表
-        """
+    def _fetch_section_list(self, entry_url: str, section: str) -> List[ArticleData]:
+        """抓取单个板块的文章列表（使用基类自动翻页推演）"""
         articles = []
 
-        # 计算实际请求 URL（处理逆向分页）
-        target_url = self._calculate_page_url(entry_url, page_num)
+        # 🌟 V3 升级：使用基类的自动翻页推演
+        all_pages = self.get_all_page_urls(entry_url)
 
-        response = self._safe_get(target_url)
-        if not response:
-            return articles
-
-        # 🔧 排查字符集问题：强制使用 UTF-8 或检测到的编码
-        response.encoding = response.apparent_encoding or 'utf-8'
-        html_content = response.text
-
-        # DEBUG: 打印 HTML 片段帮助排查
-        logger.debug(f"[{self.SOURCE_NAME}] HTML 长度: {len(html_content)}")
-
-        soup = BeautifulSoup(html_content, 'html.parser')
-
-        # 🔧 验证解析器选择器：使用 .content-list .item（从截图看外层是 .content-list）
-        items = soup.select('.content-list .item')
-        logger.info(f"[{self.SOURCE_NAME}] CSS 选择器 '.content-list .item' 找到 {len(items)} 个元素")
-
-        # 备用选择器（不使用 .animated）
-        if not items:
-            items = soup.select('.item')
-            logger.info(f"[{self.SOURCE_NAME}] 备用选择器 '.item' 找到 {len(items)} 个元素")
-
-        for item in items:
-            try:
-                article = self._parse_list_item(item, section)
-                if article:
-                    articles.append(article)
-            except Exception as e:
-                logger.debug(f"[{self.SOURCE_NAME}] 解析列表项失败: {e}")
+        for target_url in all_pages:
+            response = self._safe_get(target_url)
+            if not response:
                 continue
 
-        # DEBUG 打印
-        logger.info(f"[{self.SOURCE_NAME}] 列表页抓取到了 {len(articles)} 条项目")
+            response.encoding = response.apparent_encoding or 'utf-8'
+            html_content = response.text
 
+            logger.debug(f"[{self.SOURCE_NAME}] HTML 长度: {len(html_content)}")
+
+            soup = BeautifulSoup(html_content, 'html.parser')
+
+            # 使用 .content-list .item（从截图看外层是 .content-list）
+            items = soup.select('.content-list .item')
+            logger.info(f"[{self.SOURCE_NAME}] CSS 选择器 '.content-list .item' 找到 {len(items)} 个元素")
+
+            # 备用选择器
+            if not items:
+                items = soup.select('.item')
+                logger.info(f"[{self.SOURCE_NAME}] 备用选择器 '.item' 找到 {len(items)} 个元素")
+
+            for item in items:
+                try:
+                    article = self._parse_list_item(item, section)
+                    if article:
+                        articles.append(article)
+                except Exception as e:
+                    logger.debug(f"[{self.SOURCE_NAME}] 解析列表项失败: {e}")
+                    continue
+
+        logger.info(f"[{self.SOURCE_NAME}] 列表页抓取到了 {len(articles)} 条项目")
         return articles
 
-    def _calculate_page_url(self, entry_url: str, page_num: int) -> str:
-        """
-        计算分页 URL（逆向分页，SGIM 特殊路径风格）
-
-        SGIM 学院分页规则：
-        - 第 1 页：xyxw.htm
-        - 第 2 页：30.htm, 29.htm, 28.htm...
-        - 公式：索引 = MAX_PAGE - page_num
-
-        Args:
-            entry_url: 板块入口 URL
-            page_num: 页码
-
-        Returns:
-            实际请求 URL
-        """
-        if page_num == 1:
-            return entry_url
-
-        # SGIM 特殊：分页文件在根目录，而非子目录
-        # https://sgim.sztu.edu.cn/xyxw.htm -> https://sgim.sztu.edu.cn/30.htm
-        page_index = self.MAX_PAGE - page_num
-        base = entry_url.rsplit('/', 1)[0]  # 去掉文件名，保留目录
-        return f"{base}/{page_index}.htm"
-
     def _parse_list_item(self, item, section: str) -> Optional[ArticleData]:
-        """
-        解析列表项
-
-        Args:
-            item: BeautifulSoup 元素
-            section: 板块名称
-
-        Returns:
-            标准化的文章数据
-        """
-        # 获取内部的 a 标签
+        """解析列表项"""
         a_tag = item.find('a')
         if not a_tag:
             return None
 
-        # 提取标题：使用 select_one 安全提取
+        # 提取标题
         title_elem = item.select_one('.title')
         if title_elem:
             title = title_elem.get_text(strip=True)
         else:
             title = a_tag.get_text(strip=True)
 
-        # 提取日期：使用 select_one 安全提取
+        # 提取日期
         date_str = ""
         date_elem = item.select_one('.date')
         if date_elem:
             date_str = date_elem.get_text(strip=True)
 
-        # 提取链接
         href = a_tag.get('href', '')
         if not title or not href:
             return None
 
-        # 转换为绝对 URL
         full_url = self.safe_urljoin(self.BASE_URL, href)
 
         return {
@@ -193,181 +129,16 @@ class SgimSpider(BaseSpider):
         }
 
     def _normalize_date(self, date_str: str) -> str:
-        """
-        标准化日期格式
-
-        Args:
-            date_str: 原始日期字符串
-
-        Returns:
-            标准化日期（如 2026-01-08）
-        """
+        """标准化日期格式"""
         if not date_str:
             return ""
 
-        # 替换各种分隔符为 -
         normalized = re.sub(r'[/\.年月]', '-', date_str)
-        # 清理多余的 -
         normalized = re.sub(r'-+', '-', normalized).strip('-')
 
         return normalized
 
     def fetch_detail(self, url: str) -> Optional[ArticleData]:
-        """
-        获取文章详情
-
-        Args:
-            url: 文章 URL
-
-        Returns:
-            标准化的文章详情
-        """
-        # 判断是否为微信公众号链接
-        if 'mp.weixin.qq.com' in url:
-            return self._fetch_wechat_detail(url)
-
-        # 常规校园网页面
-        return self._fetch_campus_detail(url)
-
-    def _fetch_campus_detail(self, url: str) -> Optional[ArticleData]:
-        """
-        抓取校园网文章详情
-
-        Args:
-            url: 文章 URL
-
-        Returns:
-            文章详情
-        """
-        response = self._safe_get(url)
-        if not response:
-            return None
-
-        soup = BeautifulSoup(response.text, 'html.parser')
-
-        # 提取标题
-        title = ""
-        title_tag = soup.find('h1') or soup.find('title')
-        if title_tag:
-            title = title_tag.get_text(strip=True)
-
-        # 提取正文：div.v_news_content
-        body_html = ""
-        body_text = ""
-        content_div = soup.find('div', class_='v_news_content')
-
-        if content_div:
-            # 移除动态脚本
-            for script in content_div.find_all('script'):
-                script.decompose()
-
-            body_html = str(content_div)
-            body_text = content_div.get_text(strip=True, separator='\n')
-        else:
-            # 备用提取：查找可能的内容区域
-            main_content = soup.find('div', class_='article-content') or soup.find('div', id='content')
-            if main_content:
-                body_html = str(main_content)
-                body_text = main_content.get_text(strip=True, separator='\n')
-
-        # 纯图片内容防御：如果正文很短但包含图片
-        if len(body_text) < 50 and '<img' in body_html:
-            logger.info(f"[{self.SOURCE_NAME}] 检测到纯图片内容，保留 HTML 结构: {url[:50]}...")
-
-        # 提取附件：在整个 soup 中全局搜索（打破容器限制）
-        attachments = self._extract_attachments(soup, url)
-
-        # 提取精确时间
-        exact_time = self._extract_exact_time(soup)
-
-        return {
-            'title': title,
-            'url': url,
-            'date': '',
-            'body_html': body_html,
-            'body_text': body_text,
-            'attachments': attachments,
-            'source_name': self.SOURCE_NAME,
-            'exact_time': exact_time
-        }
-
-    def _fetch_wechat_detail(self, url: str) -> Optional[ArticleData]:
-        """
-        抓取微信公众号文章详情
-
-        Args:
-            url: 微信文章 URL
-
-        Returns:
-            文章详情
-        """
-        response = self._safe_get(url)
-        if not response:
-            return None
-
-        soup = BeautifulSoup(response.text, 'html.parser')
-
-        # 提取标题
-        title = ""
-        title_tag = soup.find('h1', class_='rich_media_title') or soup.find('h1')
-        if title_tag:
-            title = title_tag.get_text(strip=True)
-
-        # 提取微信公众号正文
-        body_html = ""
-        body_text = ""
-        content_div = soup.find('div', class_='rich_media_content', id='js_content')
-
-        if content_div:
-            # 移除脚本和样式
-            for tag in content_div.find_all(['script', 'style']):
-                tag.decompose()
-
-            body_html = str(content_div)
-            body_text = content_div.get_text(strip=True, separator='\n')
-
-        # 提取发布时间
-        exact_time = ""
-        time_tag = soup.find('em', id='publish_time')
-        if time_tag:
-            exact_time = time_tag.get_text(strip=True)
-
-        return {
-            'title': title,
-            'url': url,
-            'date': '',
-            'body_html': body_html,
-            'body_text': body_text,
-            'attachments': [],  # 微信公众号通常没有附件下载
-            'source_name': self.SOURCE_NAME,
-            'exact_time': exact_time
-        }
-
-    def _extract_exact_time(self, soup: BeautifulSoup) -> str:
-        """
-        提取精确发布时间
-
-        Args:
-            soup: BeautifulSoup 对象
-
-        Returns:
-            精确时间字符串
-        """
-        full_text = soup.get_text()
-
-        # 匹配各种时间格式
-        patterns = [
-            r'(\d{4}[-年/]\d{1,2}[-月/]\d{1,2}日?\s*\d{1,2}:\d{1,2}:\d{1,2})',  # 带秒
-            r'(\d{4}[-年/]\d{1,2}[-月/]\d{1,2}日?\s*\d{1,2}:\d{1,2})',         # 不带秒
-            r'(\d{4}[-年/]\d{1,2}[-月/]\d{1,2}日?)'                             # 仅日期
-        ]
-
-        for pattern in patterns:
-            match = re.search(pattern, full_text)
-            if match:
-                time_str = match.group(1)
-                # 标准化时间格式
-                time_str = time_str.replace('年', '-').replace('月', '-').replace('日', '')
-                return time_str.strip()
-
-        return ""
+        """获取文章详情"""
+        # 基类已自动处理微信链接路由，直接调用基类方法
+        return super().fetch_detail(url)

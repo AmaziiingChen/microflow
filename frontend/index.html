@@ -1246,6 +1246,7 @@
                     <span class="provider-info settings-trigger" @click="openSettings">
                         <img v-show="!iconLoadError"
                              :src="aiIconUrl"
+                             crossorigin="anonymous"
                              @error="handleIconError"
                              style="width: 14px; height: 14px; object-fit: contain; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1));"
                              alt="" />
@@ -2125,14 +2126,35 @@
                     const brand = model.split('-')[0];
 
                     // 建立常见模型与 LobeHub 图标 Slug 的映射字典
-                    const brandMap = {
-                        'gpt': 'openai', 'claude': 'anthropic', 'gemini': 'google',
-                        'glm': 'zhipu', 'zhipu': 'zhipu', 'qwen': 'qwen', 'tongyi': 'qwen',
-                        'kimi': 'moonshot', 'moonshot': 'moonshot', 'doubao': 'doubao',
-                        'minimax': 'minimax', 'baichuan': 'baichuan', 'deepseek': 'deepseek',
-                        'yi': '01', 'hunyuan': 'tencent', 'ernie': 'baidu', 'spark': 'iflytek',
-                        'step': 'stepfun'
-                    };
+                    // 建立更全面的品牌映射字典
+                const brandMap = {
+                    // 国际大厂
+                    'gpt': 'openai', 'openai': 'openai',
+                    'claude': 'anthropic', 'anthropic': 'anthropic',
+                    'gemini': 'google', 'google': 'google',
+                    'llama': 'meta', 'meta': 'meta',
+                    'mistral': 'mistral',
+                    'grok': 'xai',
+                    'perplexity': 'perplexity',
+                    
+                    // 国内大厂
+                    'glm': 'zhipu', 'zhipu': 'zhipu',
+                    'qwen': 'qwen', 'tongyi': 'qwen',
+                    'kimi': 'moonshot', 'moonshot': 'moonshot',
+                    'doubao': 'doubao', 'bytedance': 'doubao',
+                    'minimax': 'minimax',
+                    'baichuan': 'baichuan',
+                    'deepseek': 'deepseek',
+                    'yi': '01', '01': '01',
+                    'hunyuan': 'tencent', 'tencent': 'tencent',
+                    'ernie': 'baidu', 'baidu': 'baidu',
+                    'spark': 'iflytek', 'iflytek': 'iflytek',
+                    'step': 'stepfun',
+                    
+                    // 🌟 新增：小米 mimo
+                    'mimo': 'xiaomi', 
+                    'xiaomi': 'xiaomi'
+                };
 
                     const slug = brandMap[brand] || brand;
 
@@ -2668,8 +2690,6 @@
 
                     // 🌟 智能分流：根据 download_type 判断处理方式
                     if (type === 'external') {
-                        // 需要浏览器处理验证码的附件
-                        statusMsg.value = "⚠️ 该附件需在浏览器中处理验证码下载";
                         try {
                             await pywebview.api.open_in_browser(url);
                         } catch (e) {
@@ -2794,7 +2814,7 @@
                             scale: 2,
                             useCORS: true,
                             backgroundColor: '#ffffff',
-                            allowTaint: true,
+                            allowTaint: false,
                             foreignObjectRendering: true,
                             windowWidth: targetView.scrollWidth,
                             windowHeight: targetView.scrollHeight
