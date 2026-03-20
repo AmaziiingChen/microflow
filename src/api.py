@@ -208,6 +208,33 @@ class Api:
         # 获取用户订阅的来源列表
         subscribed_sources = self.config_service.get('subscribedSources', None)
 
+        # 🌟 核心：在执行爬虫之前，立即通知前端开始加载
+        # 无论是手动还是自动，都要通知前端显示进度条和冷却状态
+        try:
+            if webview.windows:
+                # 如果是后台自动执行，合并通知（同时显示进度条和提示消息）
+                if not is_manual:
+                    webview.windows[0].evaluate_js("""
+                        if (window.onStartFetching) {
+                            window.onStartFetching();
+                        }
+                        if (window.showAutoFetchNotice) {
+                            window.showAutoFetchNotice();
+                        }
+                    """)
+                else:
+                    # 手动触发只显示进度条
+                    webview.windows[0].evaluate_js("""
+                        if (window.onStartFetching) {
+                            window.onStartFetching();
+                        }
+                    """)
+                # 🌟 关键修复：给浏览器一个处理事件循环的机会
+                # 确保通知在爬虫执行之前被渲染到 UI
+                time.sleep(0.05)
+        except Exception as e:
+            logger.debug(f"通知前端开始执行失败: {e}")
+
         # 委托给调度器执行（异步提交）
         result = self.scheduler.run_all_spiders(
             mode=mode,
@@ -230,20 +257,6 @@ class Api:
 
         # 获取最新数据
         all_articles = db.get_articles_paged(limit=20, offset=0)
-
-        # 🌟 核心联动：如果不是手动更新（即后台 daemon 触发的），且执行成功，主动通知前端锁定按钮
-        if not is_manual and result.get("status") == "success":
-            try:
-                if webview.windows:
-                    webview.windows[0].evaluate_js("""
-                        if (window.triggerAutoFetchCooldown) {
-                            window.triggerAutoFetchCooldown();
-                        } else {
-                            window._pendingCooldown = true;
-                        }
-                    """)
-            except Exception as e:
-                logger.debug(f"通知前端锁定按钮失败: {e}")
 
         # 🌟 获取冷却剩余时间
         cooldown_remaining = self.daemon_manager.get_cooldown_remaining()

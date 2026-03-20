@@ -2716,23 +2716,37 @@
                             ? `正在启动爬虫 (共 ${total} 个)...`
                             : `已追踪 ${sourceName} (${current}/${total})`
                     };
-                    // 🌟 爬虫完成时不在这里做判断，保持加载状态
-                    // 由 checkUpdates 根据返回结果决定是否切换到 AI 阶段
                 };
 
-                // 🌟 后台自动巡检完成通知：锁定按钮并同步冷却状态
-                // 🌟 增强版：处理前端未就绪时的竞态情况
-                window.triggerAutoFetchCooldown = () => {
-                    console.log("🔔 收到后台自动巡检完成通知，锁定按钮");
-                    // 检查 startCooldown 是否已定义（Vue 组件是否已挂载）
+                // 🌟 开始执行爬虫时立即调用（无论手动还是自动）
+                window.onStartFetching = () => {
+                    console.log("🔔 收到开始执行通知");
+                    // 立即显示进度条
+                    isLoading.value = true;
+                    updatePhase.value = 'spider';
+                    spiderProgress.value = { total: 0, completed: 0, detail: '正在启动爬虫...' };
+                    aiProgress.value = { total: 0, completed: 0, detail: '' };
+                    // 立即进入 120s 冷却倒计时
                     if (typeof startCooldown === 'function') {
-                        statusMsg.value = "已自动执行开机/后台巡检，120s内无需重复刷新";
-                        setTimeout(() => statusMsg.value = '', 5000);
                         startCooldown(120);
-                    } else {
-                        // Vue 未就绪，设置标志位，等待初始化时处理
-                        window._pendingCooldown = true;
-                        console.log('⏳ 前端未就绪，冷却通知已缓存');
+                    }
+                };
+
+                // 🌟 后台自动执行时额外显示提示消息
+                window.showAutoFetchNotice = () => {
+                    console.log("🔔 收到后台自动执行通知");
+                    statusMsg.value = "已自动执行开机/后台巡检，120s内无需重复刷新";
+                    setTimeout(() => {
+                        if (statusMsg.value.includes('自动执行')) statusMsg.value = '';
+                    }, 5000);
+                };
+
+                // 🌟 兼容旧版：后台完成通知（现在主要用于确认执行成功）
+                window.triggerAutoFetchCooldown = () => {
+                    console.log("🔔 收到后台执行完成确认");
+                    // 冷却已经在 onStartFetching 时启动，这里只做确认
+                    if (typeof startCooldown === 'function') {
+                        startCooldown(120);
                     }
                 };
 
