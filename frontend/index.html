@@ -1319,12 +1319,19 @@
                             等待 {{ aiBrandName }} 处理...
                         </span>
                     </div>
+                    <!-- 🌟 进度显示：处理中显示 (completed+1)/total，完成时显示 total/total -->
                     <div class="progress-right-stats" v-if="aiProgress.total > 0">
-                        {{ Math.round(aiProgress.completed / aiProgress.total * 100) }}% ( {{ aiProgress.completed }} / {{ aiProgress.total }} )
+                        <template v-if="aiProgress.completed >= aiProgress.total">
+                            {{ Math.round(100) }}% ( {{ aiProgress.total }} / {{ aiProgress.total }} )
+                        </template>
+                        <template v-else>
+                            {{ Math.round((aiProgress.completed + 1) / aiProgress.total * 100) }}% ( {{ aiProgress.completed + 1 }} / {{ aiProgress.total }} )
+                        </template>
                     </div>
                 </div>
                 <div class="progress-track">
-                    <div class="progress-fill" :style="{ width: (aiProgress.total > 0 ? (aiProgress.completed / aiProgress.total * 100) : 0) + '%' }"></div>
+                    <!-- 🌟 进度条宽度：处理中包含正在处理的那一篇，完成时为100% -->
+                    <div class="progress-fill" :style="{ width: (aiProgress.total > 0 ? Math.min((aiProgress.completed + 1) / aiProgress.total * 100, 100) : 0) + '%' }"></div>
                 </div>
             </div>
 
@@ -2671,8 +2678,12 @@
                 });
 
                 // 暴露给 Python 底层调用的全局方法
+                // 🌟 AI 进度回调：在开始处理每篇文章时触发
+                // completed: 已完成处理的文章数（不包括正在处理的）
+                // total: 总共需要处理的文章数
+                // currentTitle: 当前正在处理的文章标题（空字符串表示全部完成）
                 window.updatePyProgress = (completed, total, currentTitle) => {
-                    // 🌟 没有文章需要处理，关闭加载
+                    // 没有文章需要处理，关闭加载
                     if (total === 0 && completed === 0) {
                         isLoading.value = false;
                         hasPendingAiTasks.value = false;
@@ -2682,11 +2693,11 @@
                     aiProgress.value = {
                         total,
                         completed,
-                        // 🌟 文案改为"已完成"，因为回调是在处理完成后触发的
-                        detail: currentTitle ? `已完成 ${aiBrandName.value} 总结: ${currentTitle}` : '正在处理...'
+                        // 🌟 文案显示"正在由 xxx 总结：标题"
+                        detail: currentTitle ? `正在由 ${aiBrandName.value} 总结: ${currentTitle}` : `正在等待 ${aiBrandName.value} 处理...`
                     };
-                    // 🌟 AI 总结完成时，关闭全局加载状态
-                    if (total > 0 && completed >= total) {
+                    // 🌟 所有任务完成：completed >= total 且 currentTitle 为空
+                    if (total > 0 && completed >= total && !currentTitle) {
                         isLoading.value = false;
                         hasPendingAiTasks.value = false;
                         statusMsg.value = '✅ 所有文章已处理完成';
