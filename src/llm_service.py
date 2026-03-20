@@ -9,6 +9,18 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger(__name__)
 
+# 全局配置服务实例（延迟初始化）
+_config_service = None
+
+def _get_config_service():
+    """获取配置服务实例（延迟导入避免循环依赖）"""
+    global _config_service
+    if _config_service is None:
+        from src.services.config_service import ConfigService
+        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.json')
+        _config_service = ConfigService(config_path)
+    return _config_service
+
 
 class LLMService:
     """
@@ -146,6 +158,14 @@ class LLMService:
         if not raw_text or len(raw_text.strip()) < 10:
             return "⚠️ 原文内容过短或抓取失败，无法进行有效的 AI 总结。"
 
+        # 🌟 检查余额状态：如果欠费，直接返回提示
+        try:
+            config_service = _get_config_service()
+            if not config_service.get_api_balance_ok():
+                return "⚠️【欠费提醒】您的 API 账户余额不足，AI 总结功能已暂停。请充值或更换密钥后点击“我已充值”恢复。"
+        except Exception as e:
+            logger.warning(f"检查余额状态失败: {e}")
+
         logger.info(f"正在调用 AI 分析公文: {title}")
         user_content = f"以下是公文《{title}》的正文内容，请按照系统设定的规范进行总结：\n\n{raw_text}"
 
@@ -175,10 +195,37 @@ class LLMService:
                 last_error = str(e)
                 error_lower = last_error.lower()
 
+                # 🌟 检测余额不足错误并更新状态
+                balance_error_patterns = [
+                    "insufficient_quota", "insufficient_balance", "402",
+                    "余额不足", "balance", "quota exceeded", "额度"
+                ]
+                if any(pattern in error_lower for pattern in balance_error_patterns):
+                    logger.error(f"AI 调用失败（余额不足）({title}): {last_error}")
+                    try:
+                        config_service = _get_config_service()
+                        config_service.set_api_balance_ok(False)
+                        logger.info("已更新欠费状态到配置文件")
+
+                        # 🌟 主动通知前端更新余额状态
+                        try:
+                            import webview
+                            if webview.windows:
+                                webview.windows[0].evaluate_js("""
+                                    if (window.updateApiBalanceStatus) {
+                                        window.updateApiBalanceStatus(false);
+                                    }
+                                """)
+                        except Exception as notify_err:
+                            logger.debug(f"通知前端失败: {notify_err}")
+                    except Exception as config_err:
+                        logger.warning(f"更新欠费状态失败: {config_err}")
+                    return f"❌ API 余额不足：{last_error}"
+
                 # 不可重试的错误：直接返回
-                if "insufficient_quota" in error_lower or "401" in error_lower:
+                if "401" in error_lower:
                     logger.error(f"AI 调用失败（不可重试）({title}): {last_error}")
-                    return f"❌ API 余额不足或认证失败：{last_error}"
+                    return f"❌ API 认证失败：{last_error}"
 
                 # 可重试的错误：执行指数退避
                 if self._is_retryable_error(last_error):
@@ -259,6 +306,27 @@ class LLMService:
                 temperature=0.1,
                 timeout=10 # 测试时使用较短的超时
             )
+
+            # 🌟 测试成功，清除欠费状态
+            try:
+                config_service = _get_config_service()
+                config_service.set_api_balance_ok(True)
+                logger.info("API 连接测试成功，已清除欠费状态")
+
+                # 🌟 主动通知前端更新余额状态
+                try:
+                    import webview
+                    if webview.windows:
+                        webview.windows[0].evaluate_js("""
+                            if (window.updateApiBalanceStatus) {
+                                window.updateApiBalanceStatus(true);
+                            }
+                        """)
+                except Exception as notify_err:
+                    logger.debug(f"通知前端失败: {notify_err}")
+            except Exception as e:
+                logger.warning(f"清除欠费状态失败: {e}")
+
             return True, "连接成功"
 
         except Exception as e:
@@ -266,7 +334,7 @@ class LLMService:
             # 增强型错误识别
             if "Authentication" in error_msg or "401" in error_msg:
                 return False, "API Key 无效或认证失败"
-            elif "insufficient_quota" in error_msg:
+            elif "insufficient_quota" in error_msg or "insufficient_balance" in error_msg:
                 return False, "API 余额不足或额度超限"
             elif "timeout" in error_msg.lower():
                 return False, "连接超时，请检查网络环境或代理设置"

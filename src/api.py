@@ -62,7 +62,8 @@ class Api:
         # 🌟 核心组件：文章处理器（传入回调函数用于唤醒窗口）
         self.article_processor = ArticleProcessor(
             self.llm, db,
-            on_article_processed=self._on_article_processed
+            on_article_processed=self._on_article_processed,
+            on_progress=self._push_ai_progress  # 🌟 新增：AI 进度回调
         )
         self.scheduler = SpiderScheduler(
             article_processor=self.article_processor,
@@ -96,6 +97,47 @@ class Api:
             webview.windows[0].evaluate_js(js_code)
         except Exception as e:
             logger.debug(f"进度推送失败: {e}")
+
+    def _push_spider_progress(self, current: int, total: int, source_name: str):
+        """
+        推送爬虫进度到前端
+
+        Args:
+            current: 当前处理的爬虫索引（从 0 开始）
+            total: 总爬虫数量
+            source_name: 当前爬虫名称
+        """
+        if not self.window:
+            logger.info("爬虫进度推送失败: 窗口对象不存在")
+            return
+        try:
+            # 转义单引号
+            safe_name = source_name.replace("'", "\\'").replace('"', '\\"')
+            js_code = f"if(window.updateSpiderProgress) window.updateSpiderProgress({current}, {total}, '{safe_name}');"
+            self.window.evaluate_js(js_code)
+            logger.info(f"爬虫进度推送: {current}/{total} - {source_name}")
+        except Exception as e:
+            logger.warning(f"爬虫进度推送失败: {e}")
+
+    def _push_ai_progress(self, completed: int, total: int, current_title: str):
+        """
+        推送 AI 总结进度到前端
+
+        Args:
+            completed: 已完成处理的文章数
+            total: 总文章数
+            current_title: 当前处理完成的文章标题
+        """
+        if not self.window:
+            return
+        try:
+            # 转义单引号
+            safe_title = current_title.replace("'", "\\'").replace('"', '\\"') if current_title else ""
+            js_code = f"if(window.updatePyProgress) window.updatePyProgress({completed}, {total}, '{safe_title}');"
+            self.window.evaluate_js(js_code)
+            logger.info(f"AI 进度推送: {completed}/{total} - {current_title[:20] if current_title else ''}")
+        except Exception as e:
+            logger.warning(f"AI 进度推送失败: {e}")
 
     def _on_article_processed(self, article_data: dict):
         """
@@ -158,6 +200,9 @@ class Api:
                     "cooldown_remaining": int(remaining)
                 }
 
+        # 🌟 无论是否手动，都先记录时间戳，防止守护线程重复执行
+        self.daemon_manager.record_manual_update()
+
         mode = self.config_service.get('trackMode', 'continuous')
 
         # 获取用户订阅的来源列表
@@ -168,7 +213,8 @@ class Api:
             mode=mode,
             is_manual=is_manual,
             wait_for_completion=False,  # 不等待处理完成，立即返回
-            enabled_sources=subscribed_sources
+            enabled_sources=subscribed_sources,
+            spider_progress_callback=self._push_spider_progress   # 🌟 新增
         )
 
         # 如果调度器返回错误，直接返回（带冷却时间）
@@ -415,6 +461,25 @@ class Api:
         if is_ok:
             return {"status": "success"}
         return {"status": "error", "message": msg}
+
+    def get_api_balance_status(self) -> dict:
+        """获取 API 余额状态"""
+        try:
+            balance_ok = self.config_service.get_api_balance_ok()
+            return {"status": "success", "balance_ok": balance_ok}
+        except Exception as e:
+            logger.error(f"获取余额状态失败: {e}")
+            return {"status": "success", "balance_ok": True}  # 出错时默认正常
+
+    def clear_api_balance_status(self) -> dict:
+        """清除欠费状态（用户充值后调用）"""
+        try:
+            self.config_service.set_api_balance_ok(True)
+            logger.info("用户已清除欠费状态")
+            return {"status": "success"}
+        except Exception as e:
+            logger.error(f"清除欠费状态失败: {e}")
+            return {"status": "error", "message": str(e)}
 
     def _set_autostart(self, enabled: bool):
         """设置开机自启"""

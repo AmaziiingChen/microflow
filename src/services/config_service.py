@@ -26,6 +26,7 @@ class AppConfig:
     polling_interval: int = 900  # 🌟 新增：守护进程轮询间隔（秒），默认 15 分钟
     is_locked: bool = False  # 🌟 新增：配置锁定状态（用于防止修改）
     articles_per_section_limit: int = 10  # 🌟 新增：每个板块处理的文章上限
+    api_balance_ok: bool = True  # 🌟 新增：API 余额状态（默认正常）
 
 
 class ConfigService:
@@ -87,6 +88,7 @@ class ConfigService:
                 polling_interval=data.get('pollingInterval', default.polling_interval),  # 🌟 新增
                 is_locked=data.get('isLocked', default.is_locked),  # 🌟 新增：配置锁定状态
                 articles_per_section_limit=data.get('articlesPerSectionLimit', default.articles_per_section_limit),  # 🌟 新增
+                api_balance_ok=data.get('apiBalanceOk', default.api_balance_ok),  # 🌟 新增：API 余额状态
             )
             return self._config
 
@@ -131,6 +133,7 @@ class ConfigService:
                 polling_interval=config_dict.get('pollingInterval', 900),  # 🌟 新增
                 is_locked=config_dict.get('isLocked', False),  # 🌟 新增：配置锁定状态
                 articles_per_section_limit=config_dict.get('articlesPerSectionLimit', 10),  # 🌟 新增
+                api_balance_ok=config_dict.get('apiBalanceOk', True),  # 🌟 新增：API 余额状态
             )
 
             logger.info("配置已成功保存")
@@ -170,6 +173,7 @@ class ConfigService:
             "pollingInterval": config.polling_interval,  # 🌟 新增
             "isLocked": config.is_locked,  # 🌟 新增：配置锁定状态
             "articlesPerSectionLimit": config.articles_per_section_limit,  # 🌟 新增
+            "apiBalanceOk": config.api_balance_ok,  # 🌟 新增：API 余额状态
         }
 
     def get(self, key: str, default: Any = None) -> Any:
@@ -210,6 +214,7 @@ class ConfigService:
             'pollingInterval': 'polling_interval',  # 🌟 新增
             'isLocked': 'is_locked',  # 🌟 新增：配置锁定状态
             'articlesPerSectionLimit': 'articles_per_section_limit',  # 🌟 新增
+            'apiBalanceOk': 'api_balance_ok',  # 🌟 新增：API 余额状态
         }
 
         # 转换键名
@@ -230,4 +235,42 @@ class ConfigService:
             return True
         except Exception as e:
             logger.error(f"配置热重载失败: {e}")
+            return False
+
+    def get_api_balance_ok(self) -> bool:
+        """获取 API 余额是否正常（默认 True）"""
+        return self.get('apiBalanceOk', True)
+
+    def set_api_balance_ok(self, ok: bool) -> bool:
+        """
+        设置 API 余额状态
+
+        Args:
+            ok: True 表示余额正常，False 表示欠费
+
+        Returns:
+            是否设置成功
+        """
+        try:
+            # 读取当前配置文件内容
+            config_dict = {}
+            if os.path.exists(self.config_path):
+                with open(self.config_path, 'r', encoding='utf-8') as f:
+                    config_dict = json.load(f)
+
+            # 更新余额状态
+            config_dict['apiBalanceOk'] = ok
+
+            # 保存回文件
+            with open(self.config_path, 'w', encoding='utf-8') as f:
+                json.dump(config_dict, f, ensure_ascii=False, indent=4)
+
+            # 更新内存中的配置
+            if self._config:
+                self._config.api_balance_ok = ok
+
+            logger.info(f"API 余额状态已更新: {ok}")
+            return True
+        except Exception as e:
+            logger.error(f"设置 API 余额状态失败: {e}")
             return False

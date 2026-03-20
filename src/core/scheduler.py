@@ -160,7 +160,8 @@ class SpiderScheduler:
         is_manual: bool = False,
         wait_for_completion: bool = False,
         skip_network_check: bool = False,
-        enabled_sources: Optional[List[str]] = None
+        enabled_sources: Optional[List[str]] = None,
+        spider_progress_callback: Optional[Callable[[int, int, str], None]] = None   # 🌟 新增
     ) -> Dict[str, Any]:
         """
         执行所有爬虫的抓取任务（异步提交到处理队列）
@@ -250,10 +251,19 @@ class SpiderScheduler:
 
                 spiders_to_run.append(spider)
 
-            # 5. 使用线程池并发执行爬虫
+            # 5. 发送爬虫总数通知（前端初始化进度条）
+            total_spiders = len(spiders_to_run)
+            if spider_progress_callback and total_spiders > 0:
+                try:
+                    # 发送初始通知：0/total，表示开始
+                    spider_progress_callback(0, total_spiders, "正在启动...")
+                except Exception as e:
+                    logger.debug(f"爬虫进度回调失败: {e}")
+
+            # 6. 使用线程池并发执行爬虫
             with ThreadPoolExecutor(max_workers=5) as executor:
                 futures = {}
-                for spider in spiders_to_run:
+                for idx, spider in enumerate(spiders_to_run):
                     future = executor.submit(
                         self._process_spider,
                         spider=spider,
@@ -262,11 +272,21 @@ class SpiderScheduler:
                         is_manual=is_manual,
                         total_tasks=total_tasks
                     )
-                    futures[future] = spider.SOURCE_NAME
+                    futures[future] = (spider.SOURCE_NAME, idx)  # 🌟 保存索引用于进度更新
 
-                # 使用 as_completed 收集结果
+                # 使用 as_completed 收集结果，并在每个完成时更新进度
+                completed_count = 0
                 for future in as_completed(futures):
-                    source_name = futures[future]
+                    source_name, idx = futures[future]
+                    completed_count += 1
+
+                    # 🌟 每个爬虫完成时推送进度
+                    if spider_progress_callback:
+                        try:
+                            spider_progress_callback(completed_count, total_spiders, source_name)
+                        except Exception as e:
+                            logger.debug(f"爬虫进度回调失败: {e}")
+
                     try:
                         result_name, count, error_list = future.result()
                         submitted_count += count

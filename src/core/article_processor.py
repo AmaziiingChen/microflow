@@ -85,7 +85,8 @@ class ArticleProcessor:
         llm_service,
         database,
         on_task_complete: Optional[Callable[[bool, str, Optional[Dict]], None]] = None,
-        on_article_processed: Optional[OnArticleProcessedCallback] = None
+        on_article_processed: Optional[OnArticleProcessedCallback] = None,
+        on_progress: Optional[Callable[[int, int, str], None]] = None  # 🌟 新增：AI 进度回调
     ):
         """
         初始化文章处理器
@@ -95,11 +96,13 @@ class ArticleProcessor:
             database: 数据库管理器实例
             on_task_complete: 任务完成回调 (success, reason, article_data)
             on_article_processed: 单篇文章处理成功回调 (title, summary_preview, source_name)
+            on_progress: AI 进度回调 (completed, total, current_title)
         """
         self.llm = llm_service
         self.db = database
         self.on_task_complete = on_task_complete
         self.on_article_processed = on_article_processed
+        self.on_progress = on_progress  # 🌟 新增
 
         # 任务队列（线程安全）
         self._task_queue: queue.Queue[Optional[ProcessingTask]] = queue.Queue()
@@ -164,6 +167,17 @@ class ArticleProcessor:
                             self._stats['success'] += 1
                         else:
                             self._stats['failed'] += 1
+                        # 🌟 获取当前进度用于回调
+                        current_processed = self._stats['processed']
+                        total_submitted = self._stats['submitted']
+
+                    # 🌟 推送 AI 进度（每处理完一篇文章）
+                    if self.on_progress and total_submitted > 0:
+                        try:
+                            title = article_data.get('title', '') if article_data else ''
+                            self.on_progress(current_processed, total_submitted, title)
+                        except Exception as e:
+                            logger.warning(f"进度回调执行失败: {e}")
 
                     # 回调通知
                     if self.on_task_complete:

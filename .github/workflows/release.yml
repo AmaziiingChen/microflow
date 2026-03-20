@@ -105,24 +105,69 @@ jobs:
           # 🌟 东八区（北京时间）
           bj_time = datetime.now(timezone(timedelta(hours=8)))
 
+          # ============================================================
+          # 版本信息字典（用于生成 version.json）
+          # ============================================================
           version_info = {
-              'version': tag_name,
-              'release_date': bj_time.strftime('%Y-%m-%d %H:%M'),
-              'is_active': True,
-              'kill_message': '由于合规性要求，MicroFlow 已永久停止服务。感谢您的使用。',
+              # ---------- 核心版本信息 ----------
+              'version': tag_name,                     # 版本号，例如 v1.2.0
+              'release_date': bj_time.strftime('%Y-%m-%d %H:%M'),  # 发布时间（精确到分钟）
+              'is_active': True,                      # 软件是否可用（False 会触发远程锁定）
+              'kill_message': '由于合规性要求，MicroFlow 已永久停止服务。感谢您的使用。',  # 锁定时的提示
+
+              # ---------- 系统公告（前端卡片显示） ----------
               'announcement': {
-                  'id': f'notice_{tag_name}',
-                  'title': f'MicroFlow {tag_name} 更新公告',
-                  'version': tag_name,
-                  'publish_time': bj_time.strftime('%Y年%m月%d日'),
-                  'department': '系统公告',
-                  'tags': ['系统通知', tag_name],
-                  'summary': '初次见面！为了让 AI 能够为您智能总结公文，请先配置您的 API 密钥。',
-                  'content': '亲爱的同学/老师，欢迎使用 MicroFlow！<br><br>为了让 AI 能够为您智能总结长篇公文，您需要先配置 AI 的 API 密钥。<br><br>👉 **配置方法**：请点击本界面**左上角的「设置/齿轮」图标**，在弹出的面板中填入您的 API 信息。<br><br>配置完成后，您就可以体验极速的公文摘要功能了。'
+                  'id': f'notice_{tag_name}',          # 唯一标识，用于去重
+                  'title': f'MicroFlow {tag_name} 更新公告',  # 卡片标题
+                  'version': tag_name,                 # 关联的版本号
+                  'publish_time': bj_time.strftime('%Y年%m月%d日'),  # 显示时间
+                  'department': '系统公告',            # 发布部门
+                  'tags': ['系统通知', tag_name],       # 标签（用于分类）
+
+                  # ---------- 公告摘要（列表页展示） ----------
+                  'summary': '''MicroFlow {tag_name} 版本现已发布！本次更新包含以下内容：
+          - 新增：xxx 功能
+          - 优化：xxx 体验
+          - 修复：xxx 问题
+          '''.format(tag_name=tag_name).strip(),      # 使用 .strip() 去掉首尾空白
+
+                  # ---------- 公告详情（点击卡片后展示） ----------
+                  # 使用多行字符串（HTML 格式），支持 Markdown 语法（由前端渲染）
+                  'content': '''
+          亲爱的同学/老师：
+
+          MicroFlow {tag_name} 版本现已正式发布！本次更新带来了以下改进：
+
+          ### 🚀 新功能
+          - **xxx**：xxx 描述
+          - **xxx**：xxx 描述
+
+          ### 🔧 优化
+          - 提升 xxx 性能
+          - 优化 xxx 界面交互
+
+          ### 🐛 修复
+          - 修复 xxx 问题
+          - 修复 xxx 崩溃
+
+          ### 📥 下载方式
+          - **GitHub Releases**：[点击下载]({github_url})
+          - **网盘备用**：[点击下载]({netdisk_url})
+
+          感谢您对 MicroFlow 的支持！如有问题请提交 Issue。
+
+          —— MicroFlow 开发团队
+          '''.format(
+              tag_name=tag_name,
+              github_url=f'https://github.com/{repo}/releases/tag/{tag_name}',
+              netdisk_url='https://pan.baidu.com/s/xxxxxx'   # 替换为实际网盘链接
+          ).strip()   # 自动去除首尾多余空行
               },
+
+              # ---------- 下载链接（用于更新弹窗） ----------
               'downloads': {
-                  'github': f'https://github.com/{repo}/releases/tag/{tag_name}',
-                  'netdisk': 'https://pan.baidu.com/s/5KcZI1k3dFynbCOk4j5PmiA'
+                  'github': f'https://github.com/{repo}/releases/tag/{tag_name}',  # GitHub 发布页
+                  'netdisk': 'https://pan.baidu.com/s/5KcZI1k3dFynbCOk4j5PmiA'    # 网盘备用链接
               }
           }
 
