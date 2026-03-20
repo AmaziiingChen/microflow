@@ -122,7 +122,7 @@ jobs:
               },
               'downloads': {
                   'github': f'https://github.com/{repo}/releases/tag/{tag_name}',
-                  'netdisk': '这里未来可以填入国内网盘链接兜底'
+                  'netdisk': 'https://pan.baidu.com/s/5KcZI1k3dFynbCOk4j5PmiA'
               }
           }
 

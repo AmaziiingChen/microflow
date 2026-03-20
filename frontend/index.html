@@ -125,17 +125,34 @@
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02); /* 按下时阴影变小，符合物理直觉 */
         }
 
-        /* 🌟 系统公告卡片特殊样式 */
+        /* 🌟 系统公告卡片特殊样式（视觉升级） */
         .announcement-card {
-            background-color: #F0F9FF !important; /* 极浅的蓝色背景 */
-            border-color: #BAE6FD !important;
+            background: linear-gradient(135deg, #FFF9F0 0%, #FFF5E6 100%) !important;
+            border-left: 4px solid #F59E0B !important;
+            border-radius: 12px !important;
+            transition: all 0.3s ease;
+            margin-bottom: 12px;
         }
         .announcement-card:hover {
-            background-color: #E0F2FE !important;
-            border-color: #7DD3FC !important;
+            transform: translateX(2px);
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);
+        }
+        .announcement-card.read {
+            opacity: 0.7;
+            filter: grayscale(0.2);
+            border-left-color: #D1D5DB;
+        }
+        .announcement-card.read .announcement-icon {
+            filter: grayscale(0.5);
         }
         .announcement-icon {
-            margin-right: 6px;
+            font-size: 1.3rem;
+            margin-right: 8px;
+            filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1));
+        }
+        .list-card.announcement-card .list-card-title {
+            font-weight: 700;
+            color: #B45309;
         }
 
         /* 标题行：标题 + 附件图标 弹性布局 */
@@ -1119,34 +1136,6 @@
         .subs-chip.active-morandi-6 { background-color: #D8E0E0; color: #6B8080; box-shadow: 0 2px 6px rgba(107, 128, 128, 0.15); }
         .subs-chip.active-morandi-7 { background-color: #E4DCD4; color: #7B6B5B; box-shadow: 0 2px 6px rgba(123, 107, 91, 0.15); }
 
-        /* ================= 新增：软件更新弹窗 ================= */
-        .update-modal-overlay {
-            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(17, 24, 39, 0.4); backdrop-filter: blur(4px);
-            display: flex; align-items: center; justify-content: center;
-            z-index: 9999; animation: fadeIn 0.2s;
-        }
-        .update-modal {
-            background: #fff; width: 360px; max-width: 90%; border-radius: 16px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.15); overflow: hidden;
-            display: flex; flex-direction: column; animation: slideUp 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
-        }
-        .update-header {
-            background: linear-gradient(135deg, #EFF6FF, #DBEAFE); color: #1E3A8A;
-            padding: 20px; font-size: 18px; font-weight: 800; text-align: center;
-            border-bottom: 1px solid #BFDBFE;
-        }
-        .update-body {
-            padding: 20px; max-height: 300px; overflow-y: auto;
-            font-size: 13px; line-height: 1.6; color: #4B5563;
-        }
-        .update-footer {
-            padding: 16px 20px; background: #F9FAFB; border-top: 1px solid #E5E7EB;
-            display: flex; gap: 12px;
-        }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-
         /* ================= 新增：置顶图钉按钮 ================= */
         .badge-pin {
             display: inline-flex; align-items: center; justify-content: center; gap: 4px;
@@ -1252,7 +1241,7 @@
             </div>
 
             <div v-for="(item, index) in processedArticles" :key="item.id || item.url"
-                :class="['list-card', { 'announcement-card': item.is_announcement }]"
+                :class="['list-card', { 'announcement-card': item.is_announcement, 'read': item.is_read && item.is_announcement }]"
                 @click="item.is_announcement ? handleNoticeClick(item) : openDetail(item)">
                 <!-- 标题行：标题 + 附件图标 -->
                 <div class="title-row">
@@ -1396,31 +1385,34 @@
 
             <div class="detail-content markdown-body" id="scroll-container">
 
-                <!-- 🌟 公告详情页：特殊排版 -->
+                <!-- 🌟 公告详情页：特殊排版（视觉升级版） -->
                 <template v-if="activeArticle.is_announcement">
-                    <div class="announcement-detail-wrapper" style="background: linear-gradient(135deg, #F0F9FF 0%, #E0F2FE 100%); border-radius: 16px; padding: 24px; margin-bottom: 20px;">
-                        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
-                            <span style="font-size: 32px;">📢</span>
+                    <div class="announcement-detail-wrapper" style="background: linear-gradient(135deg, #FEF3E8 0%, #FFEAD2 100%); border-radius: 20px; padding: 28px; margin-bottom: 20px; border: 1px solid rgba(245, 158, 11, 0.2);">
+                        <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 20px;">
+                            <span style="font-size: 48px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));">📢</span>
                             <div>
-                                <div style="font-size: 14px; color: #3B82F6; font-weight: 700;">系统公告</div>
-                                <div style="font-size: 12px; color: #6B7280;">版本 v{{ activeArticle.version }}</div>
+                                <div style="font-size: 22px; font-weight: 800; color: #B45309;">系统公告</div>
+                                <div style="font-size: 13px; color: #D97706; margin-top: 2px;">
+                                    {{ activeArticle.version || '1.0.0' }}
+                                    <span v-if="activeArticle.publish_time" style="margin-left: 8px;">· {{ activeArticle.publish_time }}</span>
+                                </div>
                             </div>
                         </div>
-                        <div style="background: rgba(255,255,255,0.7); border-radius: 12px; padding: 16px; font-size: 15px; line-height: 1.8; color: #374151;">
+                        <div style="background: rgba(255,255,250,0.85); border-radius: 16px; padding: 20px; font-size: 15px; line-height: 1.8; color: #5B3E1F; border: 1px solid rgba(245, 158, 11, 0.15);">
                             <div v-html="renderMarkdown(activeArticle.parsedBody || activeArticle.summary)"></div>
                         </div>
                     </div>
 
-                    <!-- 公告专属操作提示 -->
-                    <div style="background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 12px; padding: 16px; margin-top: 16px;">
-                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                            <span style="font-size: 18px;">⚙️</span>
-                            <span style="font-weight: 700; color: #92400E;">配置 AI 引擎</span>
+                    <!-- 公告专属操作提示
+                    <div style="background: linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%); border: 1px solid #FDE68A; border-radius: 14px; padding: 18px; margin-top: 16px;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                            <span style="font-size: 20px;">⚙️</span>
+                            <span style="font-weight: 700; color: #92400E; font-size: 15px;">配置 AI 引擎</span>
                         </div>
-                        <p style="margin: 0; font-size: 14px; color: #78350F; line-height: 1.6;">
+                        <p style="margin: 0; font-size: 14px; color: #78350F; line-height: 1.7;">
                             点击左上角的 <strong>齿轮图标</strong> 进入设置界面，配置您的 API 密钥即可启用智能摘要功能。
                         </p>
-                    </div>
+                    </div> -->
                 </template>
 
                 <!-- 普通公文：原有渲染逻辑 -->
@@ -1652,18 +1644,6 @@
                 {{ settingsMsg }}
             </div>
         </div>
-
-        <!-- 🌟 新增：软件更新弹窗 -->
-        <div v-if="updateInfo" class="update-modal-overlay">
-            <div class="update-modal">
-                <div class="update-header">🚀 发现新版本 {{ updateInfo.version }}</div>
-                <div class="update-body markdown-body" v-html="renderMarkdown(updateInfo.notes)"></div>
-                <div class="update-footer">
-                    <button class="action-btn btn-secondary" style="flex: 1;" @click="updateInfo = null">暂不更新</button>
-                    <button class="action-btn btn-primary" style="flex: 1.5; background: #2563EB; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);" @click="openBrowser(updateInfo.download_url)">下载高速版</button>
-                </div>
-            </div>
-        </div>
     </div>
 
     <script>
@@ -1736,7 +1716,6 @@
                 const articles = ref([]);
                 const isLoading = ref(false);
                 const statusMsg = ref('');
-                const updateInfo = ref(null); // 🌟 新增：存储新版本信息
 
                 // 🎯 更新按钮冷却时间相关变量
                 const updateCooldown = ref(0); // 剩余冷却秒数
@@ -2353,12 +2332,6 @@
                                 }
                                 return; // 强制终止后续正常初始化流程
                             }
-
-                            // 检查是否有新版本更新
-                            if (checkResult.has_update) {
-                                updateInfo.value = checkResult;
-                                console.log(`发现新版本: ${checkResult.latest_version}`);
-                            }
                         } catch (e) {
                             console.warn('启动安全检查失败，采取默认放行策略:', e);
                         }
@@ -2399,16 +2372,6 @@
                                 console.warn('同步冷却时间失败:', e);
                             }
                         }, 500);
-
-                        // 👇 附加：静默检查软件更新
-                        try {
-                            const updateRes = await pywebview.api.check_software_update();
-                            if (updateRes && updateRes.has_update) {
-                                updateInfo.value = updateRes;
-                            }
-                        } catch (e) {
-                            console.warn('检查更新失败:', e);
-                        }
 
                         // 1. 软件打开时，先只拉取第 1 页的数据
                         try {
@@ -3155,7 +3118,7 @@
                     if (!filename) return null;
                     const ext = filename.split('.').pop().toLowerCase();
                     if (ext === 'pdf') return 'pdf';
-                    if (['doc', 'docx'].includes(ext)) return 'doc';
+                    if (['doc', 'docx', 'wps'].includes(ext)) return 'doc';
                     if (['ppt', 'pptx'].includes(ext)) return 'ppt';
                     if (['xls', 'xlsx', 'csv'].includes(ext)) return 'xls';
                     if (['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'ico', 'tiff', 'tif'].includes(ext)) return 'pic';
@@ -3193,7 +3156,7 @@
                 return {
                     // 视图与状态
                     currentView, activeArticle, lastArticle, isNavigatingBack,
-                    processedArticles, isLoading, statusMsg, updateInfo,
+                    processedArticles, isLoading, statusMsg,
 
                     // 🌟 冷却倒计时（修复白屏）
                     isUpdateDisabled, updateCooldown,
