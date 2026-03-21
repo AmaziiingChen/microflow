@@ -347,10 +347,10 @@
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         
-        .detail-header { padding: 20px 24px 12px; border-bottom: 1px solid var(--border-color); flex-shrink: 0; }
+        .detail-header { padding: 16px 24px 12px; border-bottom: 1px solid var(--border-color); flex-shrink: 0; }
         
         /* 顶部 DEEPSEEK 与 附件标识栏 */
-        .provider-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .provider-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
         .provider-info { font-size: 12px; color: #9CA3AF; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;white-space: nowrap; }
         /* 🌟 核心补丁：确保内联 SVG 图标完美对齐文字 */
         .inline-ai-icon {
@@ -954,9 +954,9 @@
         .filter-scroll-container {
             display: flex;
             overflow-x: auto;
-            padding: 0 0 12px 0;
+            padding: 0 0 0px 0;
             gap: 10px;
-            margin-bottom: 12px;
+            margin-bottom: 14px;
             scrollbar-width: none;
         }
         .filter-scroll-container::-webkit-scrollbar {
@@ -992,7 +992,7 @@
             height: 4px;
             background: #E5E7EB;
             border-radius: 2px;
-            margin-bottom: 12px;
+            margin-bottom: 1px;
             overflow: hidden;
             width: 100%;
         }
@@ -1323,14 +1323,13 @@
                 </div>
                 
                 <div style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
-                    <button class="btn-check" :class="{ loading: isLoading && updatePhase !== 'ai' }"
-                            @click="isLoading && updatePhase === 'ai' ? cancelAITasks() : checkUpdates()"
+                    <button class="btn-check" :class="{ loading: isLoading }"
+                            @click="isLoading ? cancelAITasks() : checkUpdates()"
                             :disabled="isUpdateDisabled || (isLoading && updatePhase === 'spider')">
                         <span v-if="!isLoading && isUpdateDisabled">{{ updateCooldown }}s</span>
                         <span v-else-if="!isLoading && !isUpdateDisabled">更新</span>
-                        <span v-else-if="isLoading && updatePhase === 'ai'">终止</span>
-                        <!-- 加载状态显示旋转 SVG -->
-                        <svg v-if="isLoading && updatePhase !== 'ai'" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" width="18" height="18">
+                        <!-- 加载状态显示旋转 SVG（爬虫和AI阶段都显示） -->
+                        <svg v-if="isLoading" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" width="18" height="18">
                             <path d="M320 512a32 32 0 0 0-32-32h-128A32 32 0 0 0 128 512a32 32 0 0 0 32 32h128A32 32 0 0 0 320 512zM507.52 128a32 32 0 0 0-32 32v128a32 32 0 0 0 32 32 32 32 0 0 0 32-32v-128a32 32 0 0 0-32-32zM507.52 810.88a32.64 32.64 0 0 0-32 32v17.92a32.64 32.64 0 0 0 32 32 32 32 0 0 0 32-32v-17.92a32 32 0 0 0-32-32zM296.32 432a33.28 33.28 0 0 0 18.56 5.76 32 32 0 0 0 26.24-14.08 32.64 32.64 0 0 0-8.32-44.8L224.64 305.28A32 32 0 1 0 192 358.4zM350.08 192a32.64 32.64 0 0 0-44.8-8.96 32 32 0 0 0-8.32 44.8l72.96 109.44a32 32 0 0 0 26.24 14.08 34.56 34.56 0 0 0 17.92-5.12 32.64 32.64 0 0 0 8.96-44.8zM674.56 423.68a31.36 31.36 0 0 0 44.16 8.32l108.16-73.6a32 32 0 0 0-35.84-53.12l-108.16 73.6a32 32 0 0 0-8.32 44.8zM718.72 229.12a32.64 32.64 0 0 0-8.96-44.8 32 32 0 0 0-44.16 7.68L592.64 301.44a32 32 0 0 0 8.32 44.8 36.48 36.48 0 0 0 17.92 5.12 33.28 33.28 0 0 0 26.88-14.08zM771.2 626.56a32.64 32.64 0 0 0-44.16 8.32 32 32 0 0 0 8.32 44.8l56.32 38.4a29.44 29.44 0 0 0 17.92 5.12 31.36 31.36 0 0 0 26.24-13.44 32 32 0 0 0-8.32-44.8zM696.32 760.32a32 32 0 0 0-53.12 35.84l23.04 33.92a30.72 30.72 0 0 0 26.24 14.08 29.44 29.44 0 0 0 17.92-5.12 32.64 32.64 0 0 0 8.96-44.8zM857.6 480h-128a32 32 0 0 0-32 32 32 32 0 0 0 32 32h128a32 32 0 0 0 32-32 32 32 0 0 0-32-32z" fill="currentColor"></path>
                             <path d="M337.28 812.16m-32 0a32 32 0 1 0 64 0 32 32 0 1 0-64 0Z" fill="currentColor"></path>
                         </svg>
@@ -1339,7 +1338,7 @@
             </div>
 
             <!-- 🎯 爬虫进度条 -->
-            <div v-if="isLoading && updatePhase === 'spider'" style="margin-bottom: 16px; padding: 0 4px;">
+            <div v-if="isLoading && updatePhase === 'spider'" style="margin-bottom: 8px; padding: 0 4px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #6B7280; margin-bottom: 4px; font-weight: 600;">
                     <div class="progress-left-text">
                         {{ spiderProgress.detail || (spiderProgress.completed === 0 ? '正在启动爬虫...' : '') }}
@@ -1357,29 +1356,25 @@
             </div>
 
             <!-- 🎯 AI 总结进度条 -->
-            <div v-if="isLoading && updatePhase === 'ai'" style="margin-bottom: 16px; padding: 0 4px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #6B7280; margin-bottom: 4px; font-weight: 600;">
-                    <div class="progress-left-text">
-                        <span v-if="aiProgress.total > 0 || aiProgress.detail">
-                            {{ aiProgress.detail }}
-                        </span>
-                        <span v-else>
-                            等待 {{ aiBrandName }} 处理...
-                        </span>
-                    </div>
-                    <!-- 🌟 进度显示：处理中显示 (completed+1)/total，完成时显示 total/total -->
-                    <div class="progress-right-stats" v-if="aiProgress.total > 0">
-                        <template v-if="aiProgress.completed >= aiProgress.total">
-                            {{ Math.round(100) }}% ( {{ aiProgress.total }} / {{ aiProgress.total }} )
-                        </template>
-                        <template v-else>
-                            {{ Math.round((aiProgress.completed + 1) / aiProgress.total * 100) }}% ( {{ aiProgress.completed + 1 }} / {{ aiProgress.total }} )
-                        </template>
+            <div v-if="isLoading && updatePhase === 'ai'" style="margin-bottom: 8px; padding: 0 4px;">
+                <!-- 🌟 标题行：只显示文章标题，不显示其他文字 -->
+                <div style="font-size: 11px; color: #6B7280; margin-bottom: 1px; font-weight: 600;">
+                    <div class="progress-left-text" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                        {{ aiProgress.detail || '等待处理...' }}
                     </div>
                 </div>
+                <!-- 进度条 -->
                 <div class="progress-track">
-                    <!-- 🌟 进度条宽度：处理中包含正在处理的那一篇，完成时为100% -->
                     <div class="progress-fill" :style="{ width: (aiProgress.total > 0 ? Math.min((aiProgress.completed + 1) / aiProgress.total * 100, 100) : 0) + '%' }"></div>
+                </div>
+                <!-- 🌟 百分比和数量：放在进度条下方右侧 -->
+                <div style="display: flex; justify-content: flex-end; font-size: 10px; color: #9CA3AF; margin-top: 0px; line-height: 1;" v-if="aiProgress.total > 0">
+                    <template v-if="aiProgress.completed >= aiProgress.total">
+                        100% ( {{ aiProgress.total }} / {{ aiProgress.total }} )
+                    </template>
+                    <template v-else>
+                        {{ Math.round((aiProgress.completed + 1) / aiProgress.total * 100) }}% ( {{ aiProgress.completed + 1 }} / {{ aiProgress.total }} )
+                    </template>
                 </div>
             </div>
 
@@ -2788,8 +2783,8 @@
                     aiProgress.value = {
                         total,
                         completed,
-                        // 🌟 文案：正在由 AI 分析
-                        detail: currentTitle ? `正在由 ${aiBrandName.value} 总结: ${currentTitle}` : `正在等待 ${aiBrandName.value} 处理...`
+                        // 🌟 只显示模型名和标题，不显示其他文字，最大化标题显示
+                        detail: currentTitle ? `${aiBrandName.value}: ${currentTitle}` : aiBrandName.value
                     };
                     // 🌟 所有任务完成：processed >= submitted（在 _worker_loop 中处理）
                 };
@@ -2917,6 +2912,8 @@
                             const count = res.submitted_count || 0;
                             if (count > 0) {
                                 statusMsg.value = `找到 ${count} 篇新内容，正在由 ${aiBrandName.value} 总结...`;
+                                // 🌟 3秒后自动消失
+                                setTimeout(() => { if (statusMsg.value.includes('正在由')) statusMsg.value = ''; }, 3000);
                                 // 🌟 有新文章，切换到 AI 阶段，等待 AI 总结完成
                                 hasPendingAiTasks.value = true;
                                 updatePhase.value = 'ai';

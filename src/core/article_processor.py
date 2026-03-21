@@ -264,7 +264,12 @@ class ArticleProcessor:
         if not is_changed:
             return False, "unchanged", None
 
-        # 5. 🌟 在调用 AI 之前，通知前端"正在调用 AI 分析"
+        # 5. 🌟 在调用 AI 之前，检查是否已取消
+        if self.is_cancel_requested():
+            logger.info(f"[{ctx.source_name}] 任务已取消，跳过 AI 调用: {ctx.title}")
+            return False, "cancelled", None
+
+        # 6. 通知前端"正在调用 AI 分析"
         # 统计：已完成数量 / 总数量
         with self._stats_lock:
             total_submitted = self._stats['submitted']
@@ -277,7 +282,7 @@ class ArticleProcessor:
             except Exception as e:
                 logger.warning(f"进度回调执行失败: {e}")
 
-        # 6. AI 生成摘要（此处已有指数退避重试）
+        # 7. AI 生成摘要（此处已有指数退避重试）
         logger.info(f"[{ctx.source_name}] 发现变动 ({reason}) -> {ctx.title}")
         try:
             summary = self.llm.summarize_article(ctx.title, raw_text)

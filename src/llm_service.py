@@ -162,6 +162,17 @@ class LLMService:
         try:
             config_service = _get_config_service()
             if not config_service.get_api_balance_ok():
+                # 🌟 通知前端显示欠费卡片（用户可能之前点击了"不再提醒"）
+                try:
+                    import webview
+                    if webview.windows:
+                        webview.windows[0].evaluate_js("""
+                            if (window.updateApiBalanceStatus) {
+                                window.updateApiBalanceStatus(false);
+                            }
+                        """)
+                except Exception as notify_err:
+                    logger.debug(f"通知前端失败: {notify_err}")
                 return "⚠️【欠费提醒】您的 API 账户余额不足，AI 总结功能已暂停。请充值或更换密钥后点击“我已充值”恢复。"
         except Exception as e:
             logger.warning(f"检查余额状态失败: {e}")

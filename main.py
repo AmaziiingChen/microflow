@@ -176,9 +176,14 @@ if __name__ == '__main__':
     # 2. 系统托盘交互逻辑
     def on_show_window(icon, item):
         """点击菜单：显示窗口"""
-        if window is not None:  # 👈 新增安全判断，消除 Pylance 警告
+        if window is not None:
             window.show()
-            window.restore() # 如果被最小化了则恢复居中
+            window.restore() 
+            
+            # 🚀 核心黑科技：在 macOS 上强行抢夺应用焦点
+            window.on_top = True
+            window.on_top = False
+            
             # 用户主动唤醒窗口时，清除托盘红点
             clear_tray_alert()
 
@@ -190,9 +195,11 @@ if __name__ == '__main__':
         os._exit(0)            # 彻底杀掉 Python 进程
 
     # 构建托盘右键菜单
+    # 构建托盘右键菜单
     tray_menu = pystray.Menu(
-        pystray.MenuItem('详情', on_show_window, default=True),  # 🌟 设为默认，点击图标直接显示窗口
-        pystray.MenuItem('退出', on_quit_app)
+        pystray.MenuItem('　详 情　', on_show_window), 
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem('　退 出　', on_quit_app)
     )
 
     # 实例化托盘图标
@@ -222,4 +229,4 @@ if __name__ == '__main__':
                 window.show()
 
     # 启动应用，并将回调函数注入进去，强制开启 HTTP 服务
-    webview.start(func=on_app_start, debug=False, http_server=True)
+    webview.start(func=on_app_start, debug=True, http_server=True)
