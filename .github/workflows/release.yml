@@ -7,7 +7,7 @@ permissions:
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 jobs:
   build:
@@ -31,7 +31,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install dependencies
         run: |
@@ -64,7 +64,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install COS SDK
         run: pip install cos-python-sdk-v5
@@ -160,7 +160,7 @@ jobs:
           '''.format(
               tag_name=tag_name,
               github_url=f'https://github.com/{repo}/releases/tag/{tag_name}',
-              netdisk_url='https://pan.baidu.com/s/xxxxxx'   # 替换为实际网盘链接
+              netdisk_url='https://pan.baidu.com/s/5KcZI1k3dFynbCOk4j5PmiA'
           ).strip()   # 自动去除首尾多余空行
               },
 
