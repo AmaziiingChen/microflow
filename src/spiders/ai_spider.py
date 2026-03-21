@@ -80,14 +80,9 @@ class AiSpider(BaseSpider):
 
             soup = BeautifulSoup(response.text, 'html.parser')
 
-            # 查找图文列表容器下的所有文章链接
-            # 容器定位：.havePictureList_list 下的直接子级 a 标签
-            container = soup.find('div', class_='havePictureList_list')
-            if not container:
-                # 备用选择器
-                container = soup
-
-            a_tags = container.select('.havePictureList_list > a') if container != soup else container.select('a')
+            # 查找文章列表
+            # 页面结构：<a class="filterList_row"> 包含 <h5>标题</h5> 和 <dl><dd>日期</dd></dl>
+            a_tags = soup.find_all('a', class_='filterList_row')
 
             for a_tag in a_tags:
                 try:
@@ -111,6 +106,14 @@ class AiSpider(BaseSpider):
         """
         解析列表项
 
+        页面结构：
+        <a class="filterList_row" href="...">
+            <i>序号</i>
+            <h5>标题</h5>
+            <p>摘要<em>[详情]</em></p>
+            <dl><dd>日期</dd><dt>类别</dt></dl>
+        </a>
+
         Args:
             a_tag: BeautifulSoup a 元素
             section: 板块名称
@@ -118,13 +121,13 @@ class AiSpider(BaseSpider):
         Returns:
             标准化的文章数据
         """
-        # 提取标题：h4.text_single_lines
-        h4 = a_tag.find('h4', class_='text_single_lines')
-        if not h4:
+        # 提取标题：h5 标签
+        h5 = a_tag.find('h5')
+        if h5:
+            title = h5.get_text(strip=True)
+        else:
             # 备用：直接获取 a 标签文本
             title = a_tag.get_text(strip=True)
-        else:
-            title = h4.get_text(strip=True)
 
         # 提取链接
         href = a_tag.get('href', '')
@@ -134,15 +137,13 @@ class AiSpider(BaseSpider):
         # 转换为绝对 URL
         full_url = self.safe_urljoin(self.BASE_URL, href)
 
-        # 提取日期：.time-more 下的 span
+        # 提取日期：<dl><dd>日期</dd></dl>
         date_str = ""
-        time_more = a_tag.find('div', class_='time-more') or a_tag.find('span', class_='time-more')
-        if time_more:
-            span = time_more.find('span')
-            if span:
-                date_str = span.get_text(strip=True)
-            else:
-                date_str = time_more.get_text(strip=True)
+        dl = a_tag.find('dl')
+        if dl:
+            dd = dl.find('dd')
+            if dd:
+                date_str = dd.get_text(strip=True)
 
         return {
             'title': title,
