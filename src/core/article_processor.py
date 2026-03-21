@@ -123,10 +123,12 @@ class ArticleProcessor:
         # 统计信息（线程安全）
         self._stats_lock = threading.Lock()
         self._stats = {
-            'submitted': 0,
-            'processed': 0,
-            'success': 0,
-            'failed': 0
+            'submitted': 0,      # 提交到队列的任务数
+            'processed': 0,      # 已处理完成的任务数
+            'success': 0,        # 成功入库的任务数
+            'failed': 0,         # 失败的任务数
+            'ai_total': 0,       # 🌟 新增：真正需要调用 AI 的任务数
+            'ai_completed': 0    # 🌟 新增：AI 调用完成的任务数
         }
 
         # 启动 Workers
@@ -162,36 +164,34 @@ class ArticleProcessor:
     def _worker_loop(self, worker_id: int):
         """
         Worker 主循环：从队列获取任务并处理
-
+        
         Args:
             worker_id: Worker 编号（用于日志）
         """
         logger.debug(f"Worker #{worker_id} 已启动")
 
         while not self._shutdown_event.is_set():
-            # 🌟 检查取消请求
-            if self.is_cancel_requested():
-                logger.info(f"Worker #{worker_id} 检测到取消请求，停止处理新任务")
-                break
+            # ❌ 已删除：最开头的 if self.is_cancel_requested(): break
+            # 绝不能在这里 break，否则会导致线程死亡
 
             try:
-                # 从队列获取任务（带超时，便于检查 shutdown 信号）
+                # 从队列获取任务（带超时，这是线程保持监听的核心）
                 try:
                     task = self._task_queue.get(timeout=1.0)
                 except queue.Empty:
                     continue
 
-                # 🌟 再次检查取消（防止在获取任务期间被取消）
-                if self.is_cancel_requested():
-                    logger.info(f"Worker #{worker_id} 取消请求，丢弃任务: {task.ctx.title if task else 'None'}")
-                    self._task_queue.task_done()
-                    break
-
-                # None 是哨兵值，表示退出
+                # None 是哨兵值，表示程序真的要彻底关闭了（走 shutdown 逻辑）
                 if task is None:
                     break
 
-                # 处理任务
+                # 🌟 核心修复：检查取消状态。如果用户点击了取消，充当“黑洞”瞬间清空队列
+                if self.is_cancel_requested():
+                    logger.info(f"Worker #{worker_id} 处于取消状态，快速丢弃任务: {task.ctx.title if task else 'None'}")
+                    self._task_queue.task_done()
+                    continue  # ✅ 关键：使用 continue 而不是 break！丢弃任务后回去继续监听队列！
+
+                # 处理任务（正常流程）
                 try:
                     success, reason, article_data = self._process_task(task)
 
@@ -217,13 +217,13 @@ class ArticleProcessor:
                         self._stats['failed'] += 1
 
                 finally:
+                    # 无论成功失败，必须标记任务完成，防止队列阻塞
                     self._task_queue.task_done()
 
             except Exception as e:
                 logger.error(f"Worker #{worker_id} 循环异常: {e}")
 
-        logger.debug(f"Worker #{worker_id} 已退出")
-
+        logger.debug(f"Worker #{worker_id} 已安全退出")
     def _process_task(self, task: ProcessingTask) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
         """
         处理单个任务（Worker 线程内执行）
@@ -269,16 +269,18 @@ class ArticleProcessor:
             logger.info(f"[{ctx.source_name}] 任务已取消，跳过 AI 调用: {ctx.title}")
             return False, "cancelled", None
 
-        # 6. 通知前端"正在调用 AI 分析"
-        # 统计：已完成数量 / 总数量
+        # 6. 🌟 统计真正调用 AI 的任务，并通知前端进度
+        # 分子：已完成 AI 调用的数量
+        # 分母：总共提交的任务数
         with self._stats_lock:
+            self._stats['ai_total'] += 1
+            ai_completed = self._stats['ai_completed']
             total_submitted = self._stats['submitted']
-            already_processed = self._stats['processed']
 
         if self.on_progress and total_submitted > 0:
             try:
-                # 回调参数：(已处理数量, 总数, 当前正在调用AI的标题)
-                self.on_progress(already_processed, total_submitted, ctx.title)
+                # 回调参数：(已完成AI调用数量, 总提交任务数, 当前正在调用AI的标题)
+                self.on_progress(ai_completed, total_submitted, ctx.title)
             except Exception as e:
                 logger.warning(f"进度回调执行失败: {e}")
 
@@ -288,7 +290,14 @@ class ArticleProcessor:
             summary = self.llm.summarize_article(ctx.title, raw_text)
         except Exception as e:
             logger.warning(f"AI 摘要生成异常 ({ctx.title}): {e}")
+            # 🌟 AI 调用完成（失败也算完成）
+            with self._stats_lock:
+                self._stats['ai_completed'] += 1
             return False, "ai_error", None
+
+        # 🌟 AI 调用完成
+        with self._stats_lock:
+            self._stats['ai_completed'] += 1
 
         # 7. 核心防线：拦截 AI 失败的情况
         if summary.startswith(self.AI_FAILURE_PREFIXES):

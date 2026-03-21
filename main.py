@@ -148,7 +148,7 @@ if __name__ == '__main__':
         title='Microflow',
         url=html_url,
         js_api=api,
-        width=470,
+        width=475,
         height=750,
         min_size=(470, 750),   # 限制最小宽高
         frameless=False,       # 使用原生系统边框

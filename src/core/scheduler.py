@@ -89,6 +89,8 @@ class SpiderScheduler:
         # 线程安全进度条支持
         self._progress_lock = threading.Lock()
         self._current_scanned = 0
+        # 🌟 使用 threading.Event 确保线程可见性
+        self._cancel_event = threading.Event()  # 全局终止信号
 
         # 初始化爬虫
         self._init_spiders()
@@ -183,6 +185,8 @@ class SpiderScheduler:
                 "network_status": str      # 网络状态
             }
         """
+        self._cancel_event.clear()  # 🌟 每次重新启动时，重置刹车标志
+
         # 1. 尝试获取锁（防止并发调度）
         if not self._update_lock.acquire(blocking=False):
             logger.warning("⚠️ 拦截到并发请求：当前已有更新任务在运行")
@@ -369,6 +373,8 @@ class SpiderScheduler:
         sections = self._get_sections(spider)
 
         for section_name in sections:
+            if self._cancel_event.is_set():  # 🌟 核心防御：板块循环前检查是否刹车
+                break
             try:
                 # 获取文章列表（传入 limit，让爬虫层控制抓取数量）
                 limit = self.articles_per_section_limit
@@ -381,6 +387,8 @@ class SpiderScheduler:
 
                 for article in articles:
                     # 创建文章上下文
+                    if self._cancel_event.is_set():  # 🌟 核心防御：文章解析循环前检查是否刹车
+                        break
                     ctx = self.article_processor.create_context(
                         article=article,
                         source_name=source_name,
@@ -438,3 +446,13 @@ class SpiderScheduler:
             "stats": self.article_processor.get_stats(),
             "queue_size": self.article_processor.get_queue_size()
         }
+    
+    def request_cancel(self):
+        """🌟 外部调用：紧急终止所有爬虫任务"""
+        logger.info("【3】调度器 request_cancel() 被调用，_cancel_event 即将 set")
+        self._cancel_event.set()
+        logger.info("【3.1】调度器 _cancel_event 已 set，所有爬虫线程应该能检测到")
+
+    def is_cancelled(self) -> bool:
+        """🌟 供外部调用的线程安全检查方法"""
+        return self._cancel_event.is_set()

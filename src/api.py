@@ -321,9 +321,13 @@ class Api:
 
     def cancel_ai_tasks(self) -> dict:
         """取消所有待处理的AI任务（用户主动终止）"""
+        logger.info("【2】后端 API 已接收到取消指令")
         try:
+            logger.info("【2.1】正在调用 scheduler.request_cancel()...")
+            self.scheduler.request_cancel()         # 🌟 新增：一脚踩死爬虫抓取线程
+            logger.info("【2.2】正在调用 article_processor.request_cancel()...")
             self.article_processor.request_cancel()
-            logger.info("用户请求取消 AI 任务")
+            logger.info("【2.3】取消指令已发送完毕")
             return {"status": "success", "message": "已请求取消 AI 任务"}
         except Exception as e:
             logger.error(f"取消 AI 任务失败: {e}")
@@ -943,6 +947,7 @@ class Api:
                 if resp.status_code == 200 and resp.text.startswith('<svg'):
                     svg_content = resp.text
                     # 下载后顺手存进本地库，下次就不用下电了
+                    os.makedirs(icons_dir, exist_ok=True)
                     with open(os.path.join(icons_dir, f"{slug}.svg"), 'w', encoding='utf-8') as f:
                         f.write(svg_content)
 

@@ -879,6 +879,18 @@
             border: 2px solid transparent;
             min-width: 0 !important; /* 🌟 核心防溢出：允许 Flexbox 极限压缩 */
         }
+        /* 🌟 新增：鼠标悬浮时的微交互反馈 */
+        .search-container:hover {
+            background: #DFE2E6; /* 比默认的 #E5E7EB 稍深，比聚焦的 #D1D5DB 浅 */
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04); /* 增加极其柔和的底部阴影，产生“浮起”的物理错觉 */
+        }
+        
+        /* 🌟 联动特效：悬浮整个搜索框时，里面的放大镜图标也跟着微微变深 */
+        .search-container:hover .search-svg-icon {
+            color: #828A97; /* 介于默认的 9CA3AF 和聚焦时的 6B7280 之间 */
+            transform: scale(1.05); /* 图标极其轻微的放大，增加呼吸感 */
+        }
+
         /* 🌟 搜索框聚焦时加深颜色，增强交互反馈 */
         .search-container:focus-within {
             background: #D1D5DB;
@@ -1325,7 +1337,7 @@
                 <div style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
                     <button class="btn-check" :class="{ loading: isLoading }"
                             @click="isLoading ? cancelAITasks() : checkUpdates()"
-                            :disabled="isUpdateDisabled || (isLoading && updatePhase === 'spider')">
+                            :disabled="isUpdateDisabled && !isLoading">
                         <span v-if="!isLoading && isUpdateDisabled">{{ updateCooldown }}s</span>
                         <span v-else-if="!isLoading && !isUpdateDisabled">更新</span>
                         <!-- 加载状态显示旋转 SVG（爬虫和AI阶段都显示） -->
@@ -1341,11 +1353,11 @@
             <div v-if="isLoading && updatePhase === 'spider'" style="margin-bottom: 8px; padding: 0 4px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #6B7280; margin-bottom: 4px; font-weight: 600;">
                     <div class="progress-left-text">
-                        {{ spiderProgress.detail || (spiderProgress.completed === 0 ? '正在启动爬虫...' : '') }}
+                        {{ spiderProgress.detail || (spiderProgress.completed === 0 ? '正在启动...' : '') }}
                     </div>
                     <div class="progress-right-stats">
                         <!-- 🌟 爬虫阶段只显示已扫描数量，不显示预估值 -->
-                        <span v-if="spiderProgress.completed > 0">已扫描 {{ spiderProgress.completed }} 篇</span>
+                        <span v-if="spiderProgress.completed > 0"> {{ spiderProgress.completed }} </span>
                         <span v-else-if="spiderProgress.total > 0 && spiderProgress.completed === 0">准备中...</span>
                     </div>
                 </div>
@@ -1822,6 +1834,8 @@
     document.body.innerHTML = '<div style="padding:20px;color:red;">无法加载核心库，请检查网络后重启软件</div>';
     return;
 }
+                const isCancelledFlag = ref(false); // 🌟 新增：用于拦截迟到的回调和请求结果
+
                 const showSystemToast = (msg, type = 'info') => {
                     statusMsg.value = msg;
                     setTimeout(() => statusMsg.value = '', 3000);
@@ -1960,7 +1974,7 @@
 
                 // 🎯 进度标题（根据阶段显示）
                 const progressTitle = computed(() => {
-                    if (updatePhase.value === 'spider') return '爬虫进度';
+                    if (updatePhase.value === 'spider') return '检索进度';
                     if (updatePhase.value === 'ai') return 'AI 总结进度';
                     return '';
                 });
@@ -2427,13 +2441,18 @@
                         // ======= 2. 全新增入的：解析爬虫抓取到的【附件 JSON】 =======
                         let parsedAttachments = [];
                         try {
-                            // 检查是否有附件数据，且不是当初默认的 '0' 或空字符串
                             if (item.attachments && item.attachments !== '0' && item.attachments !== '') {
-                                // 把 Python 存入的 JSON 字符串还原成 JS 数组
-                                parsedAttachments = JSON.parse(item.attachments);
+                                // 🌟 核心修复：先判断类型！
+                                if (typeof item.attachments === 'string') {
+                                    // 如果是字符串，才需要 JSON.parse
+                                    parsedAttachments = JSON.parse(item.attachments);
+                                } else if (Array.isArray(item.attachments)) {
+                                    // 如果 pywebview 已经把它自动转成了数组，直接拿来用！
+                                    parsedAttachments = item.attachments;
+                                }
                             }
                         } catch (e) {
-                            console.error("附件解析失败", e);
+                            console.error("附件解析失败, 原数据:", item.attachments, e);
                             parsedAttachments = [];
                         }
 
@@ -2577,6 +2596,29 @@
                 // 🌟 新增：按来源筛选方法
                 const filterBySource = async (source) => {
                     if (activeSource.value === source) return; // 点击已选中的不重复请求
+
+                    // 🌟 滚动居中逻辑：将被点击的筛选标签滚动到容器中间
+                    const container = document.querySelector('.filter-scroll-container');
+                    if (container) {
+                        const chips = container.querySelectorAll('.filter-chip');
+                        const sourceIndex = sources.value.indexOf(source);
+                        const totalSources = sources.value.length;
+
+                        // 只有当不是第一个也不是最后两个元素时才居中（避免两侧不平衡）
+                        if (sourceIndex > 0 && sourceIndex < totalSources - 2 && chips[sourceIndex]) {
+                            const chip = chips[sourceIndex];
+                            const containerWidth = container.clientWidth;
+                            const chipLeft = chip.offsetLeft;
+                            const chipWidth = chip.clientWidth;
+                            // 计算让元素居中所需的滚动位置
+                            const scrollTarget = chipLeft - (containerWidth / 2) + (chipWidth / 2);
+                            container.scrollTo({
+                                left: Math.max(0, scrollTarget),
+                                behavior: 'smooth'
+                            });
+                        }
+                    }
+
                     activeSource.value = source;
                     page.value = 1;
                     articles.value = [];
@@ -2766,6 +2808,8 @@
                 // total: 总共需要 AI 分析的文章数
                 // currentTitle: 当前正在调用 AI 分析的文章标题
                 window.updatePyProgress = (completed, total, currentTitle) => {
+                    if (isCancelledFlag.value) return; // 🌟 4. 拦截 AI 总结的诈尸回调
+
                     // 没有文章需要处理，关闭加载
                     if (total === 0 && completed === 0) {
                         isLoading.value = false;
@@ -2794,6 +2838,7 @@
                 // total: 总爬虫数量
                 // sourceName: 刚完成的爬虫名称（或 "正在启动..."）
                 window.updateSpiderProgress = (current, total, sourceName) => {
+                    if (isCancelledFlag.value) return; // 🌟 4. 拦截爬虫的诈尸回调
                     // 🌟 没有爬虫可运行，关闭加载
                     if (total === 0) {
                         isLoading.value = false;
@@ -2808,8 +2853,8 @@
                         total,
                         completed: current,
                         detail: sourceName === '正在启动...'
-                            ? `正在启动爬虫 (共 ${total} 个)...`
-                            : `已追踪 ${sourceName} (${current}/${total})`
+                            ? `正在启动 (共 ${total} 个)...`
+                            : `正在检索： ${sourceName}`
                     };
                 };
 
@@ -2819,7 +2864,7 @@
                     // 立即显示进度条
                     isLoading.value = true;
                     updatePhase.value = 'spider';
-                    spiderProgress.value = { total: 0, completed: 0, detail: '正在启动爬虫...' };
+                    spiderProgress.value = { total: 0, completed: 0, detail: '正在启动...' };
                     aiProgress.value = { total: 0, completed: 0, detail: '' };
                     // 立即进入 120s 冷却倒计时
                     if (typeof startCooldown === 'function') {
@@ -2847,8 +2892,12 @@
 
                 // 🌟 新增：取消 AI 任务
                 const cancelAITasks = async () => {
+                    isCancelledFlag.value = true; // 🌟 1. 立刻打上取消标记，拦截一切后续动画
+                    console.log("【1】前端按钮已点击，准备呼叫后端 cancel_ai_tasks");
                     try {
+                        console.log("【1.1】正在调用 pywebview.api.cancel_ai_tasks()...");
                         const res = await pywebview.api.cancel_ai_tasks();
+                        console.log("【1.2】后端返回结果:", res);
                         if (res.status === 'success') {
                             statusMsg.value = '已终止 AI 总结';
                             setTimeout(() => statusMsg.value = '', 3000);
@@ -2863,12 +2912,14 @@
                         }
                     } catch (e) {
                         statusMsg.value = '终止失败，请重试';
-                        console.error('取消AI任务失败:', e);
+                        console.error('【1.3】取消AI任务失败:', e);
                     }
                 };
 
                 const checkUpdates = async () => {
                     if (isUpdateDisabled.value) { return; }
+
+                    isCancelledFlag.value = false; // 🌟 2. 每次重新开始更新时，重置拦截标记
 
                     // 🌟 清除之前的取消标志，为新任务做准备
                     try {
@@ -2879,7 +2930,7 @@
 
                     // 🌟 重置阶段和进度
                     updatePhase.value = 'spider';
-                    spiderProgress.value = { total: 0, completed: 0, detail: '正在启动爬虫...' };
+                    spiderProgress.value = { total: 0, completed: 0, detail: '正在启动...' };
                     aiProgress.value = { total: 0, completed: 0, detail: '' };
                     hasPendingAiTasks.value = false;
                     isLoading.value = true;  // 开启加载状态，直到 AI 总结完成才关闭
@@ -2894,6 +2945,13 @@
 
                     try {
                         const res = await pywebview.api.check_updates(true);
+
+                        // 🌟 3. 核心修复：如果在我等待后端的这段时间里，用户点击了取消，直接把结果扔进垃圾桶
+                        if (isCancelledFlag.value) {
+                            isLoading.value = false;
+                            return;
+                        }
+
                         if (res.status === 'success') {
                             articles.value = res.data;
                             page.value = 1;
@@ -3605,7 +3663,7 @@
                     // 核心功能
                     checkUpdates, openDetail, backToList, goToLastArticle,
                     renderMarkdown, openBrowser, copyText, downloadFile,
-                    scrollToAttachments, takeSnapshot, regenerateSummary,
+                    scrollToAttachments, takeSnapshot, regenerateSummary,cancelAITasks,
 
                     // 搜索与分页
                     page, isLoadingMore, noMoreData, loadMoreArticles,
