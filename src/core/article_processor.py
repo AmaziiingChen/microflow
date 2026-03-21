@@ -116,6 +116,10 @@ class ArticleProcessor:
         # 控制标志
         self._shutdown_event = threading.Event()
 
+        # 🌟 取消标志（用于用户主动终止 AI 任务）
+        self._cancel_requested = False
+        self._cancel_lock = threading.Lock()
+
         # 统计信息（线程安全）
         self._stats_lock = threading.Lock()
         self._stats = {
@@ -129,6 +133,26 @@ class ArticleProcessor:
         self._start_workers()
 
         logger.info(f"🚀 ArticleProcessor 已启动，Worker 数量: {self.WORKER_COUNT}")
+
+    # ==================== 取消控制 ====================
+
+    def request_cancel(self) -> None:
+        """请求取消所有待处理的AI任务"""
+        with self._cancel_lock:
+            self._cancel_requested = True
+        logger.info("🛑 已请求取消所有 AI 任务")
+
+    def clear_cancel(self) -> None:
+        """清除取消标志（用于新的一轮任务）"""
+        with self._cancel_lock:
+            self._cancel_requested = False
+
+    def is_cancel_requested(self) -> bool:
+        """检查是否请求了取消"""
+        with self._cancel_lock:
+            return self._cancel_requested
+
+    # ==================== Worker 管理 ====================
 
     def _start_workers(self):
         """启动 Worker 线程"""
@@ -145,12 +169,23 @@ class ArticleProcessor:
         logger.debug(f"Worker #{worker_id} 已启动")
 
         while not self._shutdown_event.is_set():
+            # 🌟 检查取消请求
+            if self.is_cancel_requested():
+                logger.info(f"Worker #{worker_id} 检测到取消请求，停止处理新任务")
+                break
+
             try:
                 # 从队列获取任务（带超时，便于检查 shutdown 信号）
                 try:
                     task = self._task_queue.get(timeout=1.0)
                 except queue.Empty:
                     continue
+
+                # 🌟 再次检查取消（防止在获取任务期间被取消）
+                if self.is_cancel_requested():
+                    logger.info(f"Worker #{worker_id} 取消请求，丢弃任务: {task.ctx.title if task else 'None'}")
+                    self._task_queue.task_done()
+                    break
 
                 # None 是哨兵值，表示退出
                 if task is None:
@@ -328,6 +363,11 @@ class ArticleProcessor:
         """
         if self._shutdown_event.is_set():
             logger.warning("ArticleProcessor 已关闭，拒绝新任务")
+            return False
+
+        # 🌟 检查取消请求
+        if self.is_cancel_requested():
+            logger.debug(f"AI 任务已取消，跳过提交: {ctx.title}")
             return False
 
         task = ProcessingTask(

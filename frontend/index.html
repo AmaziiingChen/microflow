@@ -1005,6 +1005,17 @@
             transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
+        /* 🌟 爬虫阶段的不确定进度动画（脉冲效果） */
+        .progress-indeterminate {
+            width: 30% !important;
+            animation: progress-pulse 1.5s ease-in-out infinite;
+        }
+        @keyframes progress-pulse {
+            0% { width: 10%; opacity: 0.6; }
+            50% { width: 50%; opacity: 1; }
+            100% { width: 10%; opacity: 0.6; }
+        }
+
         /* 进度条左侧文本（自动省略） */
         .progress-left-text {
             flex: 1;
@@ -1247,6 +1258,33 @@
             100% { transform: scale(1) translateY(0) rotate(0deg); }
         }
         .pin-anim { animation: pin-push 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+        /* 更新按钮加载状态 - 圆形样式 */
+        .btn-check.loading {
+            width: 36px !important;
+            height: 36px !important;
+            padding: 0 !important;
+            border-radius: 50% !important;
+            background: var(--accent-color) !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            transition: all 0.2s ease !important;
+        }
+        .btn-check.loading span {
+            display: none !important;
+        }
+        .btn-check.loading svg {
+            width: 18px;
+            height: 18px;
+            display: block !important;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -1285,10 +1323,17 @@
                 </div>
                 
                 <div style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
-                    <button class="btn-check" @click="checkUpdates" :disabled="isLoading || isUpdateDisabled">
-                        <span v-if="isLoading">...</span>
-                        <span v-else-if="isUpdateDisabled">{{ updateCooldown }}s</span>
-                        <span v-else>更新</span>
+                    <button class="btn-check" :class="{ loading: isLoading && updatePhase !== 'ai' }"
+                            @click="isLoading && updatePhase === 'ai' ? cancelAITasks() : checkUpdates()"
+                            :disabled="isUpdateDisabled || (isLoading && updatePhase === 'spider')">
+                        <span v-if="!isLoading && isUpdateDisabled">{{ updateCooldown }}s</span>
+                        <span v-else-if="!isLoading && !isUpdateDisabled">更新</span>
+                        <span v-else-if="isLoading && updatePhase === 'ai'">终止</span>
+                        <!-- 加载状态显示旋转 SVG -->
+                        <svg v-if="isLoading && updatePhase !== 'ai'" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" width="18" height="18">
+                            <path d="M320 512a32 32 0 0 0-32-32h-128A32 32 0 0 0 128 512a32 32 0 0 0 32 32h128A32 32 0 0 0 320 512zM507.52 128a32 32 0 0 0-32 32v128a32 32 0 0 0 32 32 32 32 0 0 0 32-32v-128a32 32 0 0 0-32-32zM507.52 810.88a32.64 32.64 0 0 0-32 32v17.92a32.64 32.64 0 0 0 32 32 32 32 0 0 0 32-32v-17.92a32 32 0 0 0-32-32zM296.32 432a33.28 33.28 0 0 0 18.56 5.76 32 32 0 0 0 26.24-14.08 32.64 32.64 0 0 0-8.32-44.8L224.64 305.28A32 32 0 1 0 192 358.4zM350.08 192a32.64 32.64 0 0 0-44.8-8.96 32 32 0 0 0-8.32 44.8l72.96 109.44a32 32 0 0 0 26.24 14.08 34.56 34.56 0 0 0 17.92-5.12 32.64 32.64 0 0 0 8.96-44.8zM674.56 423.68a31.36 31.36 0 0 0 44.16 8.32l108.16-73.6a32 32 0 0 0-35.84-53.12l-108.16 73.6a32 32 0 0 0-8.32 44.8zM718.72 229.12a32.64 32.64 0 0 0-8.96-44.8 32 32 0 0 0-44.16 7.68L592.64 301.44a32 32 0 0 0 8.32 44.8 36.48 36.48 0 0 0 17.92 5.12 33.28 33.28 0 0 0 26.88-14.08zM771.2 626.56a32.64 32.64 0 0 0-44.16 8.32 32 32 0 0 0 8.32 44.8l56.32 38.4a29.44 29.44 0 0 0 17.92 5.12 31.36 31.36 0 0 0 26.24-13.44 32 32 0 0 0-8.32-44.8zM696.32 760.32a32 32 0 0 0-53.12 35.84l23.04 33.92a30.72 30.72 0 0 0 26.24 14.08 29.44 29.44 0 0 0 17.92-5.12 32.64 32.64 0 0 0 8.96-44.8zM857.6 480h-128a32 32 0 0 0-32 32 32 32 0 0 0 32 32h128a32 32 0 0 0 32-32 32 32 0 0 0-32-32z" fill="currentColor"></path>
+                            <path d="M337.28 812.16m-32 0a32 32 0 1 0 64 0 32 32 0 1 0-64 0Z" fill="currentColor"></path>
+                        </svg>
                     </button>
                 </div>
             </div>
@@ -1297,14 +1342,17 @@
             <div v-if="isLoading && updatePhase === 'spider'" style="margin-bottom: 16px; padding: 0 4px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #6B7280; margin-bottom: 4px; font-weight: 600;">
                     <div class="progress-left-text">
-                        {{ spiderProgress.detail || (spiderProgress.total === 0 ? '正在启动爬虫...' : '') }}
+                        {{ spiderProgress.detail || (spiderProgress.completed === 0 ? '正在启动爬虫...' : '') }}
                     </div>
-                    <div class="progress-right-stats" v-if="spiderProgress.total > 0">
-                        {{ Math.round(spiderProgress.completed / spiderProgress.total * 100) }}% ( {{ spiderProgress.completed }} / {{ spiderProgress.total }} )
+                    <div class="progress-right-stats">
+                        <!-- 🌟 爬虫阶段只显示已扫描数量，不显示预估值 -->
+                        <span v-if="spiderProgress.completed > 0">已扫描 {{ spiderProgress.completed }} 篇</span>
+                        <span v-else-if="spiderProgress.total > 0 && spiderProgress.completed === 0">准备中...</span>
                     </div>
                 </div>
                 <div class="progress-track">
-                    <div class="progress-fill" :style="{ width: (spiderProgress.total > 0 ? (spiderProgress.completed / spiderProgress.total * 100) : 0) + '%' }"></div>
+                    <!-- 🌟 爬虫阶段使用脉冲动画，不显示具体百分比 -->
+                    <div class="progress-fill progress-indeterminate"></div>
                 </div>
             </div>
 
@@ -2000,10 +2048,12 @@
                         const res = await pywebview.api.get_api_balance_status();
                         if (res.status === 'success') {
                             if (!res.balance_ok) {
-                                // 余额不足，如果用户之前未主动关闭，则显示
-                                if (!isBalanceWarningDismissed.value) {
-                                    balanceWarningVisible.value = true;
-                                }
+                                // 🌟 余额不足：直接显示欠费卡片，忽略"不再提醒"状态
+                                // 因为这是重要的账户状态，应该始终通知用户
+                                balanceWarningVisible.value = true;
+                                // 重置"不再提醒"状态
+                                isBalanceWarningDismissed.value = false;
+                                localStorage.removeItem('balance_warning_dismissed');
                             } else {
                                 // 余额充足，隐藏卡片并重置关闭标志
                                 balanceWarningVisible.value = false;
@@ -2207,8 +2257,6 @@
                     clearTimeout(searchTimeout);
                     searchTimeout = setTimeout(async () => {
                         const keyword = searchQuery.value.trim();
-                        // 🌟 修复 1：提取当前的来源参数
-                        const sourceParam = activeSource.value !== '全部' ? activeSource.value : null;
 
                         // 如果用户清空了搜索框，恢复正常的分页列表
                         if (!keyword) {
@@ -2216,12 +2264,27 @@
                             page.value = 1;
                             noMoreData.value = false;
 
-                            const res = await pywebview.api.get_history_paged(1, 20, sourceParam);
+                            // 🌟 修复：当 activeSource 为"全部"且有订阅时，传递订阅来源列表
+                            let sourceParam = null;
+                            let sourceNamesParam = null;
+                            if (activeSource.value === '全部') {
+                                const subscribed = config.value.subscribedSources || [];
+                                if (subscribed.length > 0) {
+                                    sourceNamesParam = subscribed;
+                                }
+                            } else {
+                                sourceParam = activeSource.value;
+                            }
+
+                            const res = await pywebview.api.get_history_paged(1, 20, sourceParam, sourceNamesParam);
                             if (res.status === 'success') {
                                 articles.value = res.data;
                             }
                             return;
                         }
+
+                        // 🌟 修复 1：提取当前的来源参数
+                        const sourceParam = activeSource.value !== '全部' ? activeSource.value : null;
 
                         // 开始执行搜索
                         isSearching.value = true;
@@ -2409,20 +2472,6 @@
                     // 👇 变化 4：整合系统公告 (🌟 增加严格的显示门槛)
                     // 只有在【没有进行搜索】且【分类筛选为"全部"】时，才允许显示公告
                     if (!isSearching.value && !searchQuery.value.trim() && activeSource.value === '全部') {
-                        // 🌟 欠费卡片：优先插入到最顶部
-                        if (balanceWarningVisible.value) {
-                            const balanceCard = {
-                                ...balanceWarning.value,
-                                is_read: 1,  // 不标记为未读
-                                parsedTags: ['欠费提醒'],
-                                parsedBody: balanceWarning.value.content,
-                                summary: balanceWarning.value.content,
-                                formattedTime: new Date().toLocaleString(),
-                                source_name: '系统通知'
-                            };
-                            mapped.unshift(balanceCard);
-                        }
-
                         const noticeItem = {
                             id: systemNotice.value.id,
                             title: systemNotice.value.title,
@@ -2445,6 +2494,20 @@
                         } else {
                             mapped.push(noticeItem);    // 已读沉底
                         }
+                    }
+
+                    // 🌟 欠费卡片：无论当前页面和搜索状态，始终显示在最顶部
+                    if (balanceWarningVisible.value) {
+                        const balanceCard = {
+                            ...balanceWarning.value,
+                            is_read: 1,  // 不标记为未读
+                            parsedTags: ['欠费提醒'],
+                            parsedBody: balanceWarning.value.content,
+                            summary: balanceWarning.value.content,
+                            formattedTime: new Date().toLocaleString(),
+                            source_name: '系统通知'
+                        };
+                        mapped.unshift(balanceCard);
                     }
 
                     // 👇 变化 5：最后把整合好的数组 return 出去
@@ -2492,9 +2555,19 @@
                     isLoadingMore.value = true;
                     page.value += 1;
 
-                    // 🌟 根据 activeSource 决定是否传递 source_name 参数
-                    const sourceParam = activeSource.value !== '全部' ? activeSource.value : null;
-                    const res = await pywebview.api.get_history_paged(page.value, 20, sourceParam);
+                    // 🌟 修复：当 activeSource 为"全部"且有订阅时，传递订阅来源列表
+                    let sourceParam = null;
+                    let sourceNamesParam = null;
+                    if (activeSource.value === '全部') {
+                        const subscribed = config.value.subscribedSources || [];
+                        if (subscribed.length > 0) {
+                            sourceNamesParam = subscribed;
+                        }
+                    } else {
+                        sourceParam = activeSource.value;
+                    }
+
+                    const res = await pywebview.api.get_history_paged(page.value, 20, sourceParam, sourceNamesParam);
                     if (res.status === 'success') {
                         if (res.data.length === 0) {
                             noMoreData.value = true;
@@ -2514,7 +2587,18 @@
                     articles.value = [];
                     noMoreData.value = false;
 
-                    const sourceParam = source !== '全部' ? source : null;
+                    // 🌟 修复：当点击"全部"且有订阅时，传递订阅来源列表，避免返回未订阅的文章
+                    let sourceParam = null;
+                    let sourceNamesParam = null;
+
+                    if (source === '全部') {
+                        const subscribed = config.value.subscribedSources || [];
+                        if (subscribed.length > 0) {
+                            sourceNamesParam = subscribed;
+                        }
+                    } else {
+                        sourceParam = source;
+                    }
 
                     // 🌟 修复 3：如果搜索框里有内容，切换来源时应该在【当前搜索词】下进行过滤，而不是重置列表
                     if (isSearching.value || searchQuery.value.trim()) {
@@ -2525,7 +2609,7 @@
                         }
                     } else {
                         // 正常无搜索时的切换逻辑
-                        const res = await pywebview.api.get_history_paged(1, 20, sourceParam);
+                        const res = await pywebview.api.get_history_paged(1, 20, sourceParam, sourceNamesParam);
                         if (res.status === 'success') {
                             articles.value = res.data;
                             if (res.data.length < 20) noMoreData.value = true;
@@ -2624,7 +2708,11 @@
 
                         // 1. 软件打开时，先只拉取第 1 页的数据
                         try {
-                            const res = await pywebview.api.get_history_paged(page.value, 20, null);
+                            // 🌟 修复：启动时如果有订阅，只加载订阅来源的文章
+                            const subscribed = config.value.subscribedSources || [];
+                            const sourceNamesParam = subscribed.length > 0 ? subscribed : null;
+
+                            const res = await pywebview.api.get_history_paged(page.value, 20, null, sourceNamesParam);
 
                             if (res.status === 'success') {
                                 articles.value = res.data;
@@ -2688,6 +2776,13 @@
                         isLoading.value = false;
                         hasPendingAiTasks.value = false;
                         return;
+                    }
+                    // 🌟 所有任务完成：关闭加载状态
+                    if (completed >= total && total > 0) {
+                        isLoading.value = false;
+                        hasPendingAiTasks.value = false;
+                        // 🌟 可选：清除取消标志，为下一轮做准备
+                        pywebview.api.clear_ai_cancel().catch(() => {});
                     }
                     updatePhase.value = 'ai';
                     aiProgress.value = {
@@ -2755,8 +2850,38 @@
                     }
                 };
 
+                // 🌟 新增：取消 AI 任务
+                const cancelAITasks = async () => {
+                    try {
+                        const res = await pywebview.api.cancel_ai_tasks();
+                        if (res.status === 'success') {
+                            statusMsg.value = '已终止 AI 总结';
+                            setTimeout(() => statusMsg.value = '', 3000);
+                            // 重置前端状态
+                            isLoading.value = false;
+                            updatePhase.value = 'idle';
+                            aiProgress.value = { total: 0, completed: 0, detail: '' };
+                            spiderProgress.value = { total: 0, completed: 0, detail: '' };
+                            hasPendingAiTasks.value = false;
+                        } else {
+                            statusMsg.value = '终止失败: ' + res.message;
+                        }
+                    } catch (e) {
+                        statusMsg.value = '终止失败，请重试';
+                        console.error('取消AI任务失败:', e);
+                    }
+                };
+
                 const checkUpdates = async () => {
                     if (isUpdateDisabled.value) { return; }
+
+                    // 🌟 清除之前的取消标志，为新任务做准备
+                    try {
+                        await pywebview.api.clear_ai_cancel();
+                    } catch (e) {
+                        // 忽略错误，继续执行
+                    }
+
                     // 🌟 重置阶段和进度
                     updatePhase.value = 'spider';
                     spiderProgress.value = { total: 0, completed: 0, detail: '正在启动爬虫...' };
@@ -3527,12 +3652,16 @@
                     }
                     localStorage.removeItem('balance_warning_dismissed');
                 } else {
-                    // 余额不足：显示卡片（如果用户未主动关闭）
-                    if (app.isBalanceWarningDismissed !== undefined && !app.isBalanceWarningDismissed) {
-                        if (app.balanceWarningVisible !== undefined) {
-                            app.balanceWarningVisible = true;
-                        }
+                    // 🌟 余额不足：无论用户是否点击过"不再提醒"，都显示欠费卡片
+                    // 因为这是重要的账户状态通知，不应该被忽略
+                    if (app.balanceWarningVisible !== undefined) {
+                        app.balanceWarningVisible = true;
                     }
+                    // 重置"不再提醒"状态，确保下次启动时也能显示
+                    if (app.isBalanceWarningDismissed !== undefined) {
+                        app.isBalanceWarningDismissed = false;
+                    }
+                    localStorage.removeItem('balance_warning_dismissed');
                 }
             } catch (e) {
                 console.warn('更新余额状态失败:', e);

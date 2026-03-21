@@ -294,11 +294,18 @@ class Api:
             logger.error(f"读取历史记录失败: {e}")
             return {"status": "error", "message": "读取本地数据库失败"}
 
-    def get_history_paged(self, page: int = 1, page_size: int = 20, source_name: str = None) -> Dict[str, Any]:# type: ignore
-        """分页获取历史记录，支持按来源筛选"""
+    def get_history_paged(self, page: int = 1, page_size: int = 20, source_name: str = None, source_names: list = None) -> Dict[str, Any]:# type: ignore
+        """分页获取历史记录，支持按来源筛选
+
+        Args:
+            page: 页码
+            page_size: 每页数量
+            source_name: 单个来源筛选
+            source_names: 多个来源筛选列表（优先级高于 source_name）
+        """
         try:
             offset = (page - 1) * page_size
-            articles = db.get_articles_paged(limit=page_size, offset=offset, source_name=source_name)
+            articles = db.get_articles_paged(limit=page_size, offset=offset, source_name=source_name, source_names=source_names)
             return {"status": "success", "data": articles}
         except Exception as e:
             logger.error(f"分页读取失败: {e}")
@@ -308,6 +315,24 @@ class Api:
         """标记文章为已读"""
         try:
             db.mark_as_read(url)
+            return {"status": "success"}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    def cancel_ai_tasks(self) -> dict:
+        """取消所有待处理的AI任务（用户主动终止）"""
+        try:
+            self.article_processor.request_cancel()
+            logger.info("用户请求取消 AI 任务")
+            return {"status": "success", "message": "已请求取消 AI 任务"}
+        except Exception as e:
+            logger.error(f"取消 AI 任务失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def clear_ai_cancel(self) -> dict:
+        """清除取消标志（新一轮任务开始前调用）"""
+        try:
+            self.article_processor.clear_cancel()
             return {"status": "success"}
         except Exception as e:
             return {"status": "error", "message": str(e)}

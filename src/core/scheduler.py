@@ -229,8 +229,8 @@ class SpiderScheduler:
 
             # 3. 重置进度计数器并推送初始进度
             self._current_scanned = 0
-            total_tasks = self.estimate_total_tasks()
-            self._push_progress(0, total_tasks, "正在扫描数据源...")
+            # 🌟 不再发送预估值，total 设为 0，前端只显示已扫描数量
+            self._push_progress(0, 0, "正在扫描数据源...")
 
             # 4. 筛选需要执行的爬虫（智能过滤）
             spiders_to_run: List[BaseSpider] = []
@@ -269,8 +269,7 @@ class SpiderScheduler:
                         spider=spider,
                         mode=mode,
                         today_str=today_str,
-                        is_manual=is_manual,
-                        total_tasks=total_tasks
+                        is_manual=is_manual
                     )
                     futures[future] = (spider.SOURCE_NAME, idx)  # 🌟 保存索引用于进度更新
 
@@ -348,8 +347,7 @@ class SpiderScheduler:
         spider: BaseSpider,
         mode: str,
         today_str: str,
-        is_manual: bool,
-        total_tasks: int
+        is_manual: bool
     ) -> Tuple[str, int, List[str]]:
         """
         处理单个爬虫的所有板块（异步提交，线程安全）
@@ -359,7 +357,6 @@ class SpiderScheduler:
             mode: 追踪模式
             today_str: 今日日期字符串
             is_manual: 是否手动触发
-            total_tasks: 总任务数（用于进度条）
 
         Returns:
             (来源名称, 提交数量, 错误列表) 元组
@@ -408,7 +405,8 @@ class SpiderScheduler:
                     with self._progress_lock:
                         self._current_scanned += 1
                         current_scanned = self._current_scanned
-                    self._push_progress(current_scanned, total_tasks, ctx.title)
+                    # 🌟 不再发送预估值，total 设为 0，前端只显示已扫描数量
+                    self._push_progress(current_scanned, 0, ctx.title)
 
                     # 🌟 异步提交到处理队列（立即返回，不阻塞）
                     if self.article_processor.submit(

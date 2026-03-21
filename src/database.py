@@ -445,14 +445,27 @@ class DatabaseManager:
 
             return False, "unchanged"
 
-    def get_articles_paged(self, limit: int = 20, offset: int = 0, source_name: Optional[str] = None) -> List[Dict]:
-        """分页获取文章"""
+    def get_articles_paged(self, limit: int = 20, offset: int = 0, source_name: Optional[str] = None, source_names: Optional[List[str]] = None) -> List[Dict]:
+        """分页获取文章
+
+        Args:
+            limit: 返回数量限制
+            offset: 偏移量
+            source_name: 单个来源筛选
+            source_names: 多个来源筛选列表（当 source_name 为 None 时生效）
+        """
         with self._get_read_connection() as conn:
             cursor = conn.cursor()
             if source_name:
                 cursor.execute(
                     "SELECT * FROM articles WHERE source_name = ? ORDER BY date DESC, exact_time DESC LIMIT ? OFFSET ?",
                     (source_name, limit, offset)
+                )
+            elif source_names and len(source_names) > 0:
+                placeholders = ','.join('?' * len(source_names))
+                cursor.execute(
+                    f"SELECT * FROM articles WHERE source_name IN ({placeholders}) ORDER BY date DESC, exact_time DESC LIMIT ? OFFSET ?",
+                    (*source_names, limit, offset)
                 )
             else:
                 cursor.execute(
