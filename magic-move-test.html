@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Magic Move 组合动画极速预览</title>
+    <style>
+        :root {
+            /* 🌟神来之笔： Keynote 级物理回弹贝塞尔曲线，具有极轻微的回弹，充满活力 */
+            --curve-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+            /* 沉静灰色系 */
+            --text-main: #111827;
+            --text-muted: #9CA3AF;
+            --btn-bg: #579BF0;
+            --btn-disabled-bg: #E5E7EB;
+        }
+        
+        body {
+            display: flex; flex-direction: column; align-items: center; gap: 40px;
+            padding: 50px; background-color: #F6F6F8;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            min-height: 100vh;
+        }
+
+        /* 模拟你的软件顶部 Header Container */
+        .app-header {
+            background: #FFFFFF;
+            width: 800px;
+            height: 60px;
+            padding: 0 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .logo { font-weight: 800; color: var(--btn-bg); }
+        .settings-placeholder { color: #D1D5DB; }
+
+        /* =========================================
+           🌟核心：共享空间容器 (Center Area)
+           ========================================= */
+        .header-center {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-grow: 1; /* 占据剩余空间 */
+            margin: 0 40px; /* 两边留白 */
+        }
+
+        /* --- 搜索框样式 --- */
+        .search-container {
+            height: 36px;
+            display: flex;
+            align-items: center;
+            background: #F3F4F6;
+            border-radius: 18px;
+            padding: 0 14px;
+            box-sizing: border-box;
+            
+            /* 🌟应用物理回弹动画曲线 */
+            transition: all 0.5s var(--curve-pop);
+            
+            /* 核心布局：在容器中占据剩余空间 */
+            flex-grow: 1; 
+            min-width: 0; /* 防止内容撑破 flex 容器 */
+        }
+        
+        /* 聚焦时的悬浮光晕特效 (方案一) */
+        .search-container:focus-within {
+            background: #FFFFFF;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.06), 0 0 0 3px rgba(87,155,240,0.15);
+            transform: translateY(-1px);
+        }
+        
+        .search-svg { width: 16px; height: 16px; color: var(--text-muted); transition: color 0.3s;}
+        .search-container:focus-within .search-svg { color: var(--btn-bg); }
+        .search-input { border: none; background: transparent; outline: none; flex: 1; font-size: 14px; margin-left: 8px; color: var(--text-main); font-weight: 500; min-width: 0; }
+        .search-input::placeholder { color: var(--text-muted); font-weight: 400;}
+
+        /* --- 更新按钮样式 (Morphing Button) --- */
+        .btn-check {
+            height: 36px;
+            display: inline-flex; align-items: center; justify-content: center;
+            background: var(--btn-bg); color: white; border: none;
+            cursor: pointer;
+            box-sizing: border-box;
+            font-size: 13px; font-weight: 700;
+            
+            /* 🌟应用物理回弹动画曲线，极其关键 */
+            transition: all 0.5s var(--curve-pop);
+            
+            /* 平时是长条圆角矩形 */
+            width: 80px; 
+            border-radius: 18px;
+            overflow: hidden; /* 核心：在缩放时裁剪内部内容 */
+            white-space: nowrap; /* 核心：防止文字在收缩时折行 */
+            position: relative; /* 为 spinning-svg 定位 */
+        }
+        
+        .btn-check:hover { background: #6AA5F2; }
+
+        /* 🌟核心：加载中状态 (缩成圆) */
+        .btn-check.loading {
+            width: 36px !important; /* 收缩成圆的宽度 */
+            padding: 0 !important;
+            border-radius: 50% !important; /* 彻底变圆 */
+            color: transparent !important; /* 隐藏原本的文字 */
+            background: #FFFFFF !important; /* 背景变纯白 */
+            box-shadow: 0 0 12px rgba(87, 155, 240, 0.4) !important; /* AI 呼吸光晕 */
+            cursor: wait;
+        }
+        
+        /* --- 按钮内的加载环 SVG (方案一方案) --- */
+        .spinning-svg {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            /* 初始隐藏 */
+            opacity: 0;
+            transition: opacity 0.3s;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .btn-check.loading .spinning-svg {
+            opacity: 1; /* 加载时浮现 */
+        }
+        .spinning-svg svg {
+            width: 20px; height: 20px; color: var(--btn-bg);
+            animation: apple-spin 0.9s cubic-bezier(0.4, 0.1, 0.4, 0.9) infinite !important;
+        }
+        
+        @keyframes apple-spin {
+            0% { transform: rotate(0deg) scale(1); }
+            50% { transform: rotate(180deg) scale(1.05); }
+            100% { transform: rotate(360deg) scale(1); }
+        }
+
+        /* --- 冷却中状态 (方案一方案：沉寂等宽) --- */
+        .btn-check:disabled {
+            background: var(--btn-disabled-bg) !important;
+            color: var(--text-muted) !important;
+            cursor: not-allowed !important;
+            font-variant-numeric: tabular-nums !important;
+            box-shadow: none !important;
+            transform: none !important;
+            width: 80px; /* 恢复为矩形 */
+        }
+
+        /* =========================================
+           测试控制面板
+           ========================================= */
+        .controls {
+            margin-top: 50px; text-align: center;
+            padding: 20px; background: #FFF; border-radius: 12px;
+            border: 1px solid #E5E7EB;
+        }
+        h4 { margin: 0 0 10px 0; font-size: 14px; }
+        .btn-test {
+            height: 30px; padding: 0 15px; border-radius: 4px; border: 1px solid #D1D5DB; background: #FFF; font-size: 12px; cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-header">
+        <span class="logo">MicroFlow</span>
+        
+        <div class="header-center">
+            
+            <div class="search-container">
+                <svg class="search-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <input type="text" class="search-input" placeholder="搜索标题、正文、标签...">
+            </div>
+            
+            <button class="btn-check" id="updateBtn">
+                更新
+                <div class="spinning-svg">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity="0.2"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>
+                </div>
+            </button>
+        </div>
+
+        <span class="settings-placeholder">图标</span>
+    </div>
+
+    <div class="controls">
+        <h4>测试状态手动切换 (模拟爬虫逻辑)</h4>
+        <button class="btn-test" onclick="setLoading()">1. 点击更新 (morphing)</button>
+        <button class="btn-test" onclick="setCooldown()">2. 模拟爬虫结束 (进入冷却)</button>
+        <button class="btn-test" onclick="resetState()">3. 复位到初始状态</button>
+    </div>
+
+    <script>
+        const btn = document.getElementById('updateBtn');
+        const textSpan = btn.firstChild; // 获取文本节点
+
+        // 模拟 isLoading = true
+        function setLoading() {
+            btn.classList.add('loading');
+            btn.disabled = false; // 确保按钮可用
+        }
+
+        // 模拟 isLoading = false, 但在冷却中
+        function setCooldown() {
+            btn.classList.remove('loading');
+            btn.disabled = true;
+            document.getElementById('updateBtn').lastChild.previousSibling.textContent = '120s'; // 强行模拟冷却文字变化
+        }
+        
+        // 模拟 冷却结束，可以再次点击
+        function resetState() {
+            btn.classList.remove('loading');
+            btn.disabled = false;
+            document.getElementById('updateBtn').lastChild.previousSibling.textContent = '更新';
+        }
+
+    </script>
+</body>
+</html>

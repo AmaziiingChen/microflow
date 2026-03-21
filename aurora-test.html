@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apple 级联动与极光特效测试</title>
+    <style>
+        :root {
+            /* 🌟 Apple Store 级物理回弹曲线 */
+            --curve-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+            
+            /* 品牌主题色 */
+            --btn-bg: #579BF0;
+            --btn-hover: #3A7EE0;
+            --btn-yield: #7CAFF4;
+            --btn-disabled: #E5E7EB;
+            
+            --text-main: #111827;
+            --text-muted: #9CA3AF;
+        }
+
+        body {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            height: 100vh; margin: 0; background-color: #F6F6F8;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        .app-header {
+            background: #FFFFFF; width: 800px; height: 70px; padding: 0 20px;
+            border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+
+        .header-center {
+            display: flex; align-items: center; gap: 12px;
+            flex-grow: 1; margin: 0 40px;
+        }
+
+        /* --- 1. 搜索框样式 --- */
+        .search-container {
+            height: 38px; display: flex; align-items: center;
+            background: #F3F4F6; border-radius: 19px; padding: 0 14px;
+            border: 1px solid transparent; box-sizing: border-box;
+            flex-grow: 1; min-width: 0; 
+            transition: all 0.5s var(--curve-pop);
+        }
+
+        .search-container:focus-within {
+            background: #FFFFFF; border-color: #E5E7EB;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.06), 0 0 0 3px rgba(87,155,240,0.15);
+            transform: translateY(-1px);
+        }
+
+        .search-svg { width: 16px; height: 16px; color: var(--text-muted); transition: color 0.3s;}
+        .search-container:focus-within .search-svg { color: var(--btn-bg); }
+        .search-input { border: none; background: transparent; outline: none; flex: 1; font-size: 14px; margin-left: 8px; color: var(--text-main); font-weight: 500; min-width: 0; }
+        .search-input::placeholder { color: var(--text-muted); }
+
+        /* --- 2. 更新按钮样式 --- */
+        .btn-check {
+            height: 38px; width: 110px; border-radius: 19px;
+            background: var(--btn-bg); color: white; border: none;
+            cursor: pointer; box-sizing: border-box; font-size: 14px; font-weight: 700;
+            display: inline-flex; align-items: center; justify-content: center;
+            position: relative; flex-shrink: 0; white-space: nowrap;
+            transition: all 0.5s var(--curve-pop), background-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .btn-check:hover:not(:disabled):not(.loading) {
+            background: var(--btn-hover); transform: scale(1.03);
+            box-shadow: 0 6px 16px rgba(58, 126, 224, 0.3);
+        }
+
+        .search-container:focus-within + .btn-check:not(.loading):not(:disabled) {
+            width: 76px; background: var(--btn-yield); transform: scale(0.97); box-shadow: none;
+        }
+        
+        .search-container:focus-within + .btn-check:hover:not(.loading):not(:disabled) {
+            background: var(--btn-hover); transform: scale(1.02); box-shadow: 0 4px 12px rgba(58, 126, 224, 0.3);
+        }
+
+        /* --- 3. 按钮加载状态 (缩成圆) --- */
+        .btn-check.loading {
+            width: 38px !important; border-radius: 50% !important; padding: 0 !important;
+            background: transparent !important; color: transparent !important;
+            transform: scale(1) !important;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06) !important; cursor: wait;
+        }
+
+        .btn-text { transition: opacity 0.2s; }
+        .btn-check.loading .btn-text { opacity: 0; }
+
+        /* =========================================
+           🌟 全新设计：极光 (Aurora) 动画组件
+           ========================================= */
+        .aurora-light, .aurora-inner {
+            position: absolute; opacity: 0; pointer-events: none; transition: opacity 0.5s ease;
+        }
+        .btn-check.loading .aurora-light,
+        .btn-check.loading .aurora-inner { opacity: 1; } /* 加载时显现 */
+
+        .aurora-light {
+            inset: -3px; /* 稍微溢出按钮边界，让光晕散发出去 */
+            border-radius: 50%;
+            /* 极光色带：蓝 -> 紫 -> 绿 -> 青 -> 蓝 */
+            background: conic-gradient(from 0deg, 
+                #579BF0, 
+                #A855F7, 
+                #10B981, 
+                #38BDF8, 
+                #579BF0
+            );
+            /* 🌟核心魔法：高斯模糊，彻底消除锐利感，打造成一团淡淡的极光 */
+            filter: blur(4px);
+            animation: aurora-spin 2.5s linear infinite; /* 转速放慢，极光应该是悠长的 */
+            
+            /* ⚠️ 极其关键的小细节：见文末解释 */
+            transform: translateZ(0); 
+            will-change: transform;
+        }
+
+        .aurora-inner {
+            inset: 3px; /* 挖空内部，留下发光的极光环边框 */
+            border-radius: 50%;
+            background: #FFFFFF; /* 纯白内圆 */
+            z-index: 1;
+        }
+
+        @keyframes aurora-spin { 100% { transform: rotate(360deg); } }
+
+        /* --- 4. 冷却沉寂状态 --- */
+        .btn-check:disabled {
+            width: 110px; background: var(--btn-disabled) !important;
+            color: var(--text-muted) !important; cursor: not-allowed !important;
+            font-variant-numeric: tabular-nums !important; letter-spacing: 0.5px;
+            box-shadow: none !important; transform: none !important;
+        }
+
+        /* 控制面板 */
+        .controls { margin-top: 40px; display: flex; gap: 10px; }
+        button.tester { padding: 8px 16px; border-radius: 6px; border: 1px solid #D1D5DB; background: #FFF; cursor: pointer; transition: 0.2s; }
+        button.tester:hover { background: #F3F4F6; }
+    </style>
+</head>
+<body>
+    <div class="app-header">
+        <span style="font-weight: 800; color: #579BF0;">MicroFlow</span>
+        
+        <div class="header-center">
+            <div class="search-container">
+                <svg class="search-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <input type="text" class="search-input" placeholder="点击这里输入试试...">
+            </div>
+            
+            <button class="btn-check" id="updateBtn">
+                <span class="btn-text">立即更新</span>
+                <div class="aurora-light"></div>
+                <div class="aurora-inner"></div>
+            </button>
+        </div>
+
+        <span style="color: #D1D5DB;">⚙️</span>
+    </div>
+
+    <div class="controls">
+        <button class="tester" onclick="document.querySelector('.search-input').focus()">1. 聚焦搜索框</button>
+        <button class="tester" onclick="setLoading()">2. 点击更新 (极光加载)</button>
+        <button class="tester" onclick="setCooldown()">3. 进入冷却</button>
+        <button class="tester" onclick="resetState()">4. 重置</button>
+    </div>
+
+    <script>
+        const btn = document.getElementById('updateBtn');
+        const textSpan = btn.querySelector('.btn-text');
+        function setLoading() { btn.classList.add('loading'); btn.disabled = false; }
+        function setCooldown() { btn.classList.remove('loading'); btn.disabled = true; textSpan.textContent = '120s'; }
+        function resetState() { btn.classList.remove('loading'); btn.disabled = false; textSpan.textContent = '立即更新'; }
+    </script>
+</body>
+</html>

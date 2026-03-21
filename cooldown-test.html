@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>冷却倒计时动画极速预览</title>
+    <style>
+        body {
+            display: flex; flex-direction: column; align-items: center; gap: 30px;
+            padding: 50px; background-color: #F6F6F8;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        .preview-card {
+            background: #FFFFFF; padding: 30px; border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05); text-align: center; width: 300px;
+        }
+        h3 { margin-top: 0; color: #111827; font-size: 16px; margin-bottom: 20px;}
+
+        /* 基础按钮样式 */
+        .btn-check {
+            height: 36px; display: inline-flex; align-items: center; justify-content: center;
+            padding: 0 16px; border-radius: 18px; font-size: 13px; font-weight: 600; 
+            border: none; transition: all 0.3s ease; box-sizing: border-box;
+        }
+
+        /* =========================================
+           方案一：Apple 级极简等宽
+           ========================================= */
+        .btn-1 {
+            background: #E5E7EB; color: #9CA3AF; cursor: not-allowed;
+            /* 🌟 核心魔法：让所有数字等宽，彻底解决倒计时文字左右横跳的问题 */
+            font-variant-numeric: tabular-nums; 
+            letter-spacing: 0.5px;
+        }
+
+        /* =========================================
+           方案二：Stripe 级流体进度
+           ========================================= */
+        .btn-2 {
+            position: relative; overflow: hidden;
+            background: #F3F4F6; color: #6B7280; cursor: not-allowed;
+            font-variant-numeric: tabular-nums;
+        }
+        .btn-2::before {
+            content: ''; position: absolute; top: 0; left: 0; bottom: 0;
+            background: #D1D5DB; /* 进度条的颜色 */
+            z-index: 0;
+            /* width 由外部 CSS 变量或 JS 动态控制 */
+            width: var(--progress, 100%);
+            transition: width 1s linear; /* 保证每秒平滑过渡，不卡顿 */
+        }
+        .btn-2 span { position: relative; z-index: 1; } /* 确保文字在进度条上方 */
+
+        /* =========================================
+           方案三：iOS 滚轮微滑
+           ========================================= */
+        .btn-3 {
+            background: #E5E7EB; color: #6B7280; cursor: not-allowed;
+            font-variant-numeric: tabular-nums;
+        }
+        /* 数字变化时挂载这个类 */
+        .number-slide {
+            display: inline-block;
+            animation: slide-up-fade 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+        @keyframes slide-up-fade {
+            0% { opacity: 0; transform: translateY(4px) scale(0.95); }
+            100% { opacity: 1; transform: translateY(0) scale(1); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="preview-card">
+        <h3>方案一：极简等宽沉寂</h3>
+        <button class="btn-check btn-1"><span id="time-1">120</span>s</button>
+    </div>
+
+    <div class="preview-card">
+        <h3>方案二：沙漏流体注水</h3>
+        <button class="btn-check btn-2" id="btn-2"><span id="time-2">120</span>s</button>
+    </div>
+
+    <div class="preview-card">
+        <h3>方案三：丝滑微滑滚轮</h3>
+        <button class="btn-check btn-3"><span id="time-3">120</span>s</button>
+    </div>
+
+    <script>
+        let time = 120;
+        const total = 120;
+
+        setInterval(() => {
+            time--;
+            if (time <= 0) time = 120;
+
+            // 更新方案一
+            document.getElementById('time-1').innerText = time;
+
+            // 更新方案二 (同时更新文字和进度条宽度)
+            document.getElementById('time-2').innerText = time;
+            document.getElementById('btn-2').style.setProperty('--progress', `${(time / total) * 100}%`);
+
+            // 更新方案三 (每次改变时重新挂载动画类)
+            const span3 = document.getElementById('time-3');
+            span3.innerText = time;
+            span3.classList.remove('number-slide');
+            void span3.offsetWidth; // 触发重绘，使动画可以重复执行
+            span3.classList.add('number-slide');
+
+        }, 1000);
+    </script>
+</body>
+</html>

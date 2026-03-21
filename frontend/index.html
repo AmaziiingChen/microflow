@@ -119,6 +119,18 @@
             transform: scale(0.98);
             transition: transform 0.05s;
         }
+
+        /* 当按钮处于禁用/冷却状态时 */
+        .btn-check:disabled {
+            background: #E5E7EB;           /* 柔和的底层灰 */
+            color: #9CA3AF;                /* 沉静的文字灰 */
+            cursor: not-allowed;           /* 鼠标变为禁止符号 */
+            font-variant-numeric: tabular-nums; /* 🌟神来之笔：等宽数字，拒绝横跳 */
+            box-shadow: none;              /* 移除任何阴影 */
+            transform: none;               /* 禁用任何悬浮缩放 */
+        }
+
+
         /* 点击缩放动画类 */
         .btn-click-scale {
             transform: scale(0.96) !important;
@@ -1271,28 +1283,30 @@
         }
         .pin-anim { animation: pin-push 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
 
-        /* 更新按钮加载状态 - 圆形样式 */
-        .btn-check.loading {
-            width: 36px !important;
-            height: 36px !important;
-            padding: 0 !important;
-            border-radius: 50% !important;
-            background: var(--accent-color) !important;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
-            display: inline-flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            transition: all 0.2s ease !important;
-        }
-        .btn-check.loading span {
-            display: none !important;
-        }
-        .btn-check.loading svg {
-            width: 18px;
-            height: 18px;
-            display: block !important;
-            animation: spin 1s linear infinite;
-        }
+        /* 方案一：苹果级原生流光圆环 */
+.btn-check.loading {
+    width: 36px !important;
+    height: 36px !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+    background: transparent !important; /* 背景变透明 */
+    /* 核心：半透明底环 + 纯白高亮缺口 */
+    border: 3px solid rgba(87, 155, 240, 0.2) !important;
+    border-top-color: var(--accent-color) !important;
+    /* 加上极其柔和的呼吸阴影 */
+    box-shadow: 0 0 12px rgba(87, 155, 240, 0.4) !important;
+    display: inline-flex !important;
+    /* 采用物理缓动曲线，而不是死板的 linear */
+    animation: apple-spin 0.9s cubic-bezier(0.4, 0.1, 0.4, 0.9) infinite !important;
+}
+.btn-check.loading span {
+    display: none !important;
+}
+@keyframes apple-spin {
+    0% { transform: rotate(0deg) scale(1); }
+    50% { transform: rotate(180deg) scale(1.05); } /* 旋转时微微放大，充满呼吸感 */
+    100% { transform: rotate(360deg) scale(1); }
+}
         @keyframes spin {
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
@@ -1340,11 +1354,6 @@
                             :disabled="isUpdateDisabled && !isLoading">
                         <span v-if="!isLoading && isUpdateDisabled">{{ updateCooldown }}s</span>
                         <span v-else-if="!isLoading && !isUpdateDisabled">更新</span>
-                        <!-- 加载状态显示旋转 SVG（爬虫和AI阶段都显示） -->
-                        <svg v-if="isLoading" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" width="18" height="18">
-                            <path d="M320 512a32 32 0 0 0-32-32h-128A32 32 0 0 0 128 512a32 32 0 0 0 32 32h128A32 32 0 0 0 320 512zM507.52 128a32 32 0 0 0-32 32v128a32 32 0 0 0 32 32 32 32 0 0 0 32-32v-128a32 32 0 0 0-32-32zM507.52 810.88a32.64 32.64 0 0 0-32 32v17.92a32.64 32.64 0 0 0 32 32 32 32 0 0 0 32-32v-17.92a32 32 0 0 0-32-32zM296.32 432a33.28 33.28 0 0 0 18.56 5.76 32 32 0 0 0 26.24-14.08 32.64 32.64 0 0 0-8.32-44.8L224.64 305.28A32 32 0 1 0 192 358.4zM350.08 192a32.64 32.64 0 0 0-44.8-8.96 32 32 0 0 0-8.32 44.8l72.96 109.44a32 32 0 0 0 26.24 14.08 34.56 34.56 0 0 0 17.92-5.12 32.64 32.64 0 0 0 8.96-44.8zM674.56 423.68a31.36 31.36 0 0 0 44.16 8.32l108.16-73.6a32 32 0 0 0-35.84-53.12l-108.16 73.6a32 32 0 0 0-8.32 44.8zM718.72 229.12a32.64 32.64 0 0 0-8.96-44.8 32 32 0 0 0-44.16 7.68L592.64 301.44a32 32 0 0 0 8.32 44.8 36.48 36.48 0 0 0 17.92 5.12 33.28 33.28 0 0 0 26.88-14.08zM771.2 626.56a32.64 32.64 0 0 0-44.16 8.32 32 32 0 0 0 8.32 44.8l56.32 38.4a29.44 29.44 0 0 0 17.92 5.12 31.36 31.36 0 0 0 26.24-13.44 32 32 0 0 0-8.32-44.8zM696.32 760.32a32 32 0 0 0-53.12 35.84l23.04 33.92a30.72 30.72 0 0 0 26.24 14.08 29.44 29.44 0 0 0 17.92-5.12 32.64 32.64 0 0 0 8.96-44.8zM857.6 480h-128a32 32 0 0 0-32 32 32 32 0 0 0 32 32h128a32 32 0 0 0 32-32 32 32 0 0 0-32-32z" fill="currentColor"></path>
-                            <path d="M337.28 812.16m-32 0a32 32 0 1 0 64 0 32 32 0 1 0-64 0Z" fill="currentColor"></path>
-                        </svg>
                     </button>
                 </div>
             </div>
@@ -1938,22 +1947,22 @@
                     setTimeout(() => btnElement.classList.remove('btn-pulse'), 500);
                 };
 
-                // 监听 updateCooldown 变化，触发数字动画
-                watch(updateCooldown, (newVal, oldVal) => {
-                    if (isUpdateDisabled.value && newVal !== oldVal) {
-                        const btn = document.querySelector('.btn-check');
-                        if (btn) {
-                            // 给数字部分添加跳动效果
-                            const textSpan = btn.querySelector('span');
-                            if (textSpan && textSpan.innerText.includes('s')) {
-                                textSpan.classList.add('number-pop');
-                                setTimeout(() => textSpan.classList.remove('number-pop'), 200);
-                            }
-                            // 按钮整体脉冲
-                            pulseButton(btn);
-                        }
-                    }
-                });
+                // // 监听 updateCooldown 变化，触发数字动画
+                // watch(updateCooldown, (newVal, oldVal) => {
+                //     if (isUpdateDisabled.value && newVal !== oldVal) {
+                //         const btn = document.querySelector('.btn-check');
+                //         if (btn) {
+                //             // 给数字部分添加跳动效果
+                //             const textSpan = btn.querySelector('span');
+                //             if (textSpan && textSpan.innerText.includes('s')) {
+                //                 textSpan.classList.add('number-pop');
+                //                 setTimeout(() => textSpan.classList.remove('number-pop'), 200);
+                //             }
+                //             // 按钮整体脉冲
+                //             pulseButton(btn);
+                //         }
+                //     }
+                // });
 
                 // 🎯 进度条相关变量
                 const totalTasks = ref(0);

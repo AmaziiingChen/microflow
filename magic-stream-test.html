@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apple 级联动与流光特效测试</title>
+    <style>
+        :root {
+            /* 🌟 Apple Store 级物理回弹曲线 */
+            --curve-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+            
+            /* 品牌主题色 */
+            --btn-bg: #579BF0;
+            --btn-hover: #3A7EE0;
+            --btn-yield: #7CAFF4; /* 视觉让渡时的柔和浅蓝色 */
+            --btn-disabled: #E5E7EB;
+            
+            --text-main: #111827;
+            --text-muted: #9CA3AF;
+        }
+
+        body {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            height: 100vh; margin: 0; background-color: #F6F6F8;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        /* 模拟你的软件顶部区域 */
+        .app-header {
+            background: #FFFFFF; width: 800px; height: 70px; padding: 0 20px;
+            border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+
+        /* =========================================
+           🌟 核心交互区：搜索框与按钮的共享空间
+           ========================================= */
+        .header-center {
+            display: flex; align-items: center; gap: 12px;
+            flex-grow: 1; margin: 0 40px;
+        }
+
+        /* --- 1. 搜索框样式 --- */
+        .search-container {
+            height: 38px; display: flex; align-items: center;
+            background: #F3F4F6; border-radius: 19px; padding: 0 14px;
+            border: 1px solid transparent; box-sizing: border-box;
+            
+            /* 🌟 Flex 核心：占据全部剩余空间，随按钮收缩而自动拉长 */
+            flex-grow: 1; 
+            min-width: 0; 
+            transition: all 0.5s var(--curve-pop);
+        }
+
+        .search-container:focus-within {
+            background: #FFFFFF;
+            border-color: #E5E7EB;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.06), 0 0 0 3px rgba(87,155,240,0.15);
+            transform: translateY(-1px);
+        }
+
+        .search-svg { width: 16px; height: 16px; color: var(--text-muted); transition: color 0.3s;}
+        .search-container:focus-within .search-svg { color: var(--btn-bg); }
+        .search-input { border: none; background: transparent; outline: none; flex: 1; font-size: 14px; margin-left: 8px; color: var(--text-main); font-weight: 500; min-width: 0; }
+        .search-input::placeholder { color: var(--text-muted); }
+
+        /* --- 2. 更新按钮样式 --- */
+        .btn-check {
+            height: 38px;
+            width: 110px; /* 适当增加默认长度，显得稳重 */
+            border-radius: 19px;
+            background: var(--btn-bg); color: white; border: none;
+            cursor: pointer; box-sizing: border-box;
+            font-size: 14px; font-weight: 700;
+            display: inline-flex; align-items: center; justify-content: center;
+            position: relative; flex-shrink: 0; white-space: nowrap;
+            
+            /* 🌟 同步应用贝塞尔曲线，宽度和颜色一起丝滑渐变 */
+            transition: all 0.5s var(--curve-pop), background-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        /* 【状态 A：平时悬浮】 */
+        .btn-check:hover:not(:disabled):not(.loading) {
+            background: var(--btn-hover);
+            transform: scale(1.03); /* 物理悬浮感 */
+            box-shadow: 0 6px 16px rgba(58, 126, 224, 0.3);
+        }
+
+        /* 【状态 B：搜索框输入文本时】 
+           🌟 CSS 神器：兄弟选择器。当搜索框获取焦点，它后面的按钮自动收缩让位！*/
+        .search-container:focus-within + .btn-check:not(.loading):not(:disabled) {
+            width: 76px; /* 按钮适当收缩，搜索框瞬间弹长 */
+            background: var(--btn-yield); /* 颜色微微变淡，视觉焦点让给搜索框 */
+            transform: scale(0.97); /* 轻微后退压感 */
+            box-shadow: none;
+        }
+        
+        /* 搜索框聚焦时，仍然允许用户悬浮在收缩的按钮上 */
+        .search-container:focus-within + .btn-check:hover:not(.loading):not(:disabled) {
+            background: var(--btn-hover);
+            transform: scale(1.02);
+            box-shadow: 0 4px 12px rgba(58, 126, 224, 0.3);
+        }
+
+        /* 【状态 C：点击更新 (AI 流光加载状态)】 */
+        .btn-check.loading {
+            width: 38px !important; /* 收缩成完美的正圆形，搜索框达到最长 */
+            border-radius: 50% !important;
+            padding: 0 !important;
+            background: transparent !important; /* 底色掏空，交给内部流光 */
+            color: transparent !important; /* 文字消失 */
+            transform: scale(1) !important;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06) !important;
+            cursor: wait;
+        }
+
+        .btn-text { transition: opacity 0.2s; }
+        .btn-check.loading .btn-text { opacity: 0; }
+
+        /* --- 3. 🌟 全新设计：流光 (Streaming Light) 动画组件 --- */
+        .stream-light, .stream-inner {
+            position: absolute; opacity: 0; pointer-events: none; transition: opacity 0.3s;
+        }
+        .btn-check.loading .stream-light,
+        .btn-check.loading .stream-inner { opacity: 1; } /* 加载时显现 */
+
+        /* 外层：圆锥渐变作为流光的彗星尾巴 */
+        .stream-light {
+            inset: -2px; /* 🌟 向外延展，形成发光的边缘 */
+            border-radius: 50%;
+            background: conic-gradient(from 0deg, transparent 0%, transparent 50%, var(--btn-bg) 100%);
+            animation: spin 1s linear infinite;
+        }
+
+        /* 高光点：在流光头部加一个明亮的圆点，拉满科技感 */
+        .stream-light::after {
+            content: ''; position: absolute;
+            top: 0; left: 50%; width: 4px; height: 4px;
+            background: #FFFFFF; border-radius: 50%;
+            box-shadow: 0 0 8px 3px var(--btn-bg);
+            transform: translateX(-50%);
+        }
+
+        /* 内层：白底遮罩，把内部掏空，只留下边缘的光环 */
+        .stream-inner {
+            inset: 2px; /* 留出外层光环的厚度 */
+            border-radius: 50%;
+            background: #FFFFFF;
+        }
+
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        /* 【状态 D：冷却沉寂状态】 */
+        .btn-check:disabled {
+            width: 110px; background: var(--btn-disabled) !important;
+            color: var(--text-muted) !important; cursor: not-allowed !important;
+            font-variant-numeric: tabular-nums !important; letter-spacing: 0.5px;
+            box-shadow: none !important; transform: none !important;
+        }
+
+        /* 控制面板 */
+        .controls { margin-top: 40px; display: flex; gap: 10px; }
+        button.tester { padding: 8px 16px; border-radius: 6px; border: 1px solid #D1D5DB; background: #FFF; cursor: pointer; transition: 0.2s; }
+        button.tester:hover { background: #F3F4F6; }
+    </style>
+</head>
+<body>
+
+    <div class="app-header">
+        <span style="font-weight: 800; color: #579BF0;">MicroFlow</span>
+        
+        <div class="header-center">
+            <div class="search-container">
+                <svg class="search-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <input type="text" class="search-input" placeholder="点击这里输入试试...">
+            </div>
+            
+            <button class="btn-check" id="updateBtn">
+                <span class="btn-text">立即更新</span>
+                <div class="stream-light"></div>
+                <div class="stream-inner"></div>
+            </button>
+        </div>
+
+        <span style="color: #D1D5DB;">⚙️</span>
+    </div>
+
+    <div class="controls">
+        <button class="tester" onclick="document.querySelector('.search-input').focus()">1. 聚焦搜索框</button>
+        <button class="tester" onclick="setLoading()">2. 点击更新 (流光加载)</button>
+        <button class="tester" onclick="setCooldown()">3. 爬虫结束 (进入冷却)</button>
+        <button class="tester" onclick="resetState()">4. 重置</button>
+    </div>
+
+    <script>
+        const btn = document.getElementById('updateBtn');
+        const textSpan = btn.querySelector('.btn-text');
+
+        function setLoading() {
+            btn.classList.add('loading');
+            btn.disabled = false;
+        }
+
+        function setCooldown() {
+            btn.classList.remove('loading');
+            btn.disabled = true;
+            textSpan.textContent = '120s'; 
+        }
+        
+        function resetState() {
+            btn.classList.remove('loading');
+            btn.disabled = false;
+            textSpan.textContent = '立即更新';
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>顶级搜索框方案预览</title>
+    <style>
+        body {
+            display: flex; flex-direction: column; align-items: center; gap: 40px;
+            padding: 50px; background-color: #F6F6F8;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        .preview-card {
+            background: #FFFFFF; padding: 30px; border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05); text-align: center; width: 450px;
+            display: flex; flex-direction: column; align-items: center;
+        }
+        h3 { margin-top: 0; color: #111827; font-size: 16px; margin-bottom: 20px;}
+
+        /* 公共基础样式 */
+        .search-base {
+            height: 38px; display: flex; align-items: center; 
+            border-radius: 19px; padding: 0 14px; box-sizing: border-box;
+            width: 100%;
+        }
+        .search-input {
+            border: none; background: transparent; outline: none; flex: 1;
+            font-size: 14px; margin-left: 8px; color: #111827; font-weight: 500;
+        }
+        .search-input::placeholder { color: #9CA3AF; font-weight: 400; }
+        .search-svg { width: 16px; height: 16px; color: #9CA3AF; transition: color 0.3s; }
+
+        /* =========================================
+           方案一：macOS Spotlight 级“悬浮透亮”
+           ========================================= */
+        .search-1 {
+            background: #F3F4F6; /* 平时是非常极其柔和的浅灰 */
+            border: 1px solid transparent;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+        .search-1:hover { background: #E5E7EB; }
+        .search-1:focus-within {
+            background: #FFFFFF; /* 聚焦时瞬间变白，仿佛亮起一盏灯 */
+            border-color: #E5E7EB;
+            /* 核心：一层用来浮起组件的物理阴影 + 一层主题色的柔和光晕 */
+            box-shadow: 0 8px 20px rgba(0,0,0,0.06), 0 0 0 3px rgba(87,155,240,0.15);
+            transform: translateY(-1px); /* 极其轻微的物理上浮 */
+        }
+        .search-1:focus-within .search-svg { color: #579BF0; } /* 图标点亮为品牌色 */
+
+        /* =========================================
+           方案二：Linear / Notion 级“极客快捷键”
+           ========================================= */
+        .search-2 {
+            background: #FFFFFF;
+            border: 1px solid #E5E7EB;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.04); /* 平时就有细微的实体感 */
+            transition: all 0.2s ease;
+            border-radius: 8px; /* 极客风更偏爱稍微硬朗的圆角，而不是大药丸 */
+        }
+        .search-2:focus-within {
+            border-color: #579BF0;
+            box-shadow: 0 0 0 3px rgba(87,155,240,0.15);
+        }
+        .cmd-badge {
+            background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 4px;
+            font-size: 12px; padding: 2px 6px; color: #9CA3AF; font-weight: 600;
+            font-family: monospace; display: flex; align-items: center; gap: 2px;
+            transition: opacity 0.2s;
+        }
+        .search-2:focus-within .cmd-badge { opacity: 0; pointer-events: none; } /* 输入时隐藏快捷键提示 */
+
+        /* =========================================
+           方案三：Vercel / Apple 官网级“呼吸伸缩”
+           ========================================= */
+        .search-3-wrapper { display: flex; justify-content: flex-end; width: 100%; }
+        .search-3 {
+            width: 180px; /* 初始状态极其克制，不占空间 */
+            background: #E5E7EB;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .search-3:hover { background: #D1D5DB; }
+        .search-3:focus-within {
+            width: 100%; /* 聚焦时瞬间夺取整个顶部的视觉重心 */
+            background: #FFFFFF;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+        }
+        .search-3:focus-within .search-svg { color: #111827; }
+    </style>
+</head>
+<body>
+
+    <div class="preview-card">
+        <h3>方案一：macOS 聚焦级“悬浮透亮”</h3>
+        <div class="search-base search-1">
+            <svg class="search-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input type="text" class="search-input" placeholder="搜索标题、正文、日期或标签...">
+        </div>
+    </div>
+
+    <div class="preview-card">
+        <h3>方案二：Notion 级“极客快捷键”</h3>
+        <div class="search-base search-2">
+            <svg class="search-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input type="text" class="search-input" placeholder="搜索...">
+            <span class="cmd-badge">⌘ K</span>
+        </div>
+    </div>
+
+    <div class="preview-card">
+        <h3>方案三：Apple 官网级“呼吸伸缩”</h3>
+        <div class="search-3-wrapper">
+            <div class="search-base search-3">
+                <svg class="search-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <input type="text" class="search-input" placeholder="搜索...">
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>
