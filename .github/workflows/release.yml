@@ -151,8 +151,8 @@ jobs:
           - 修复 xxx 崩溃
 
           ### 📥 下载方式
-          - **GitHub Releases**：[点击下载]({github_url})
-          - **网盘备用**：[点击下载]({netdisk_url})
+          - **GitHub**：[点击下载]({github_url})
+          - **百度网盘**：[点击下载]({netdisk_url})
 
           感谢您对 MicroFlow 的支持！如有问题请提交 Issue。
 

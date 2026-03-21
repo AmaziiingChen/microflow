@@ -12,6 +12,7 @@ pillow>=10.0                # 图像处理 (托盘图标/截图)
 # === 网络请求 ===
 requests>=2.28              # HTTP 请求库
 urllib3>=2.0                # HTTP 底层连接池
+truststore>=0.8.0           # 🛡️ 系统原生 SSL 信任库注入
 beautifulsoup4>=4.12        # HTML/XML 解析
 
 # === AI 能力 ===

@@ -94,7 +94,7 @@ class DownloadService:
             }
 
             response = self._session.get(
-                url, stream=True, timeout=30, headers=headers, verify=False
+                url, stream=True, timeout=30, headers=headers
             )
 
             # 4. 检测是否被服务器拦截（返回 HTML 页面）

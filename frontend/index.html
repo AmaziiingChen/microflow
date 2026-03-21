@@ -1993,7 +1993,7 @@
         .list-pop-enter-active,
         .list-pop-leave-active {
         transition: all 0.5s var(--curve-pop);
-        pointer-events: none; /* 在动画期间，彻底禁用卡片的鼠标交互 */
+        /* pointer-events: none; 在动画期间，彻底禁用卡片的鼠标交互 */
       }
 
       /* 进场的初始状态：透明 + 微微向下偏移 + 稍微缩小 */
@@ -3285,6 +3285,8 @@
             // 新增：详情页快照生成状态
             const isCapturing = ref(false);
             const currentView = ref("list");
+            const pendingReadUrls = ref([]); // 待更新普通公文队列
+            const pendingNoticeVersion = ref(null); // 待更新公告队列
             const activeArticle = ref(null);
             const lastArticle = ref(null); // 🌟 新增：记录最后一次查看的文章，用于前进键
             const isNavigatingBack = ref(false); // 🌟 新增：控制返回动画状态
@@ -4029,19 +4031,20 @@
               iconLoadError.value = true;
             };
 
+            // 🌟 修复后的公告点击
             const handleNoticeClick = (item) => {
               if (item.is_announcement) {
-                // 1. 先执行页面跳转，让用户立刻看到流畅的侧滑动画
                 activeArticle.value = item;
                 lastArticle.value = item;
                 currentView.value = "detail";
 
-                // 2. 🚀 修复点：将状态更新推迟 400ms，避开 Vue 页面切换动画的高峰期
-                // 这样既能成功标记已读，又彻底杜绝了动画引擎的计算死锁
-                setTimeout(() => {
+                const isNoticeRead = readNoticeVersion.value >= item.version;
+                if (!isNoticeRead) {
+                  // A. 立即写入 LocalStorage，保证数据落盘
                   localStorage.setItem("microflow_read_notice", item.version);
-                  readNoticeVersion.value = item.version;
-                }, 400);
+                  // B. 将版本号推入队列，暂不更新 Vue 变量
+                  pendingNoticeVersion.value = item.version;
+                }
               }
             };
 
@@ -4604,11 +4607,9 @@
               }
             };
 
+            // 🌟 修复后的公文点击
             const openDetail = async (item) => {
-              // 🌟 修复附件响应式问题：确保 parsedAttachments 存在
               let parsedAttachments = item.parsedAttachments || [];
-
-              // 如果没有 parsedAttachments，尝试从 attachments 解析
               if (
                 (!parsedAttachments || parsedAttachments.length === 0) &&
                 item.attachments
@@ -4618,26 +4619,28 @@
                     parsedAttachments = JSON.parse(item.attachments);
                   }
                 } catch (e) {
-                  console.error("附件解析失败", e);
                   parsedAttachments = [];
                 }
               }
 
-              // 🌟 强制创建新对象触发 Vue 响应式更新
               const enrichedItem = {
                 ...item,
                 parsedAttachments: parsedAttachments,
               };
-
               activeArticle.value = enrichedItem;
-              lastArticle.value = enrichedItem; // 🌟 更新最后查看的文章
+              lastArticle.value = enrichedItem;
               currentView.value = "detail";
+
+              // 🚀 修复点 2：拆分数据落盘与 UI 渲染
               if (item.is_read === 0) {
-                const index = articles.value.findIndex(
-                  (a) => a.url === item.url,
-                );
-                if (index !== -1) articles.value[index].is_read = 1;
-                await pywebview.api.mark_as_read(item.url);
+                // A. 立即通知后端更新数据库，保证数据绝对安全
+                pywebview.api
+                  .mark_as_read(item.url)
+                  .catch((e) => console.error("标记已读失败", e));
+                // B. 将其推入队列，暂不更新 Vue 响应式数组，避免隐藏时触发动画
+                if (!pendingReadUrls.value.includes(item.url)) {
+                  pendingReadUrls.value.push(item.url);
+                }
               }
             };
             // 👇 终极版：接收后台强提醒 -> 直接在右上角展示新内容详情
@@ -4798,6 +4801,25 @@
               isNavigatingBack.value = true;
               currentView.value = "list";
               activeArticle.value = null;
+
+              // 🚀 修复点 3：在列表重新变为可见 (display: block) 之后，再更新卡片 UI。
+              // 这彻底避开了 v-show="false" 时执行 Vue transition 的恐怖底层 Bug。
+              setTimeout(() => {
+                // 结算普通公文
+                if (pendingReadUrls.value.length > 0) {
+                  pendingReadUrls.value.forEach((url) => {
+                    const idx = articles.value.findIndex((a) => a.url === url);
+                    if (idx !== -1) articles.value[idx].is_read = 1;
+                  });
+                  pendingReadUrls.value = [];
+                }
+                // 结算系统公告
+                if (pendingNoticeVersion.value) {
+                  readNoticeVersion.value = pendingNoticeVersion.value;
+                  pendingNoticeVersion.value = null;
+                }
+              }, 50); // 50ms 足以让浏览器完成 display: block 的渲染上下文切换
+
               setTimeout(() => {
                 isNavigatingBack.value = false;
               }, 300);

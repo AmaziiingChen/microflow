@@ -8,17 +8,27 @@ V2 版本后端调度引擎 - 多源数据订阅架构
 """
 import sys
 import logging
+
+# 🛡️ 安全模块：SSL 原生信任库注入 (必须在 requests 导入前执行)
+try:
+    if sys.version_info >= (3, 10):
+        import truststore
+        truststore.inject_into_ssl()
+        logging.info("🛡️ 已成功注入系统原生 SSL 信任库 (truststore)")
+except ImportError:
+    logging.warning("⚠️ 未安装 truststore，打包后可能无法验证内网 SSL 证书")
+except Exception as e:
+    logging.error(f"⚠️ 注入 truststore 失败: {e}")
+
 import webview
 import os
 import json
 import shutil
 import requests
-import urllib3
 import tempfile
 import platform
 import subprocess
 import base64
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from typing import Dict, Any, Optional
 import time
 from src.database import db
@@ -693,7 +703,7 @@ class Api:
         if not data:
             # 缓存为空，发起网络请求
             try:
-                response = requests.get(VERSION_URL, timeout=5, verify=False)
+                response = requests.get(VERSION_URL, timeout=5)
                 if response.status_code == 200:
                     data = response.json()
                     self._version_info = data  # 缓存结果
@@ -731,15 +741,18 @@ class Api:
 
         return {"has_update": False}
 
+    # 🔐 离线存活期常量：7 天（单位：秒）
+    OFFLINE_TTL_SECONDS = 7 * 24 * 3600
+
     def perform_startup_check(self) -> Dict[str, Any]:
         """
         启动时执行的安全检查（唯一请求 version.json 的入口）
 
         检查步骤：
-        1. 检查本地锁定状态（isLocked）
-        2. 检查网络环境（必须是校园网）
-        3. 请求远程 version.json，缓存到实例属性
-        4. 检查 is_active 字段，如果为 False 执行自毁逻辑
+        1. 检查本地锁定状态（isLocked）和签名验证
+        2. 请求远程 version.json，缓存到实例属性
+        3. 检查 is_active 字段，如果为 False 执行自毁逻辑
+        4. 网络异常时，检查离线 TTL 存活期
 
         Returns:
             {
@@ -751,40 +764,29 @@ class Api:
                 "announcement": dict  # 公告信息，供前端使用
             }
         """
-        # 🌟 步骤 1：检查本地锁定状态
-        if self.config_service.get('isLocked', False):
-            logger.warning("🚫 启动检查：软件已被锁定")
-            return {
-                "status": "locked",
-                "reason": "该软件已被永久禁用"
-            }
+        # 🌟 步骤 1：重新加载本地配置（触发签名验证）
+        self.config_service.load()
 
-        # # 🌟 步骤 2：检查网络环境 [已禁用 - 允许公网环境运行]
-        # network_status = check_network_status()
-        # if network_status != NetworkStatus.PUBLIC_AND_INTRANET:
-        #     logger.warning(f"🚫 启动检查：网络环境不符合要求 ({network_status.value})")
-        #     return {
-        #         "status": "network_error",
-        #         "reason": "请连接深圳技术大学校园网后使用"
-        #     }
-
-        # 🌟 步骤 3：请求远程 version.json（唯一请求点）
+        # 🌟 步骤 2：请求远程 version.json（云端最高仲裁）
         try:
-            response = requests.get(VERSION_URL, timeout=5, verify=False)
+            response = requests.get(VERSION_URL, timeout=5)
 
+            # ===== 场景 A：网络请求成功 =====
             if response.status_code != 200:
                 logger.warning(f"启动检查：无法获取远程配置 (HTTP {response.status_code})，默认放行")
-                return self._build_success_response({})
+                # 非正常 HTTP 状态码，视为网络问题，走离线 TTL 检查
+                return self._check_offline_ttl()
 
             data = response.json()
 
             # 🌟 缓存版本信息（供后续 check_software_update 和前端使用）
             self._version_info = data
 
-            # 🌟 步骤 4：检查 is_active 字段
+            # 🌟 步骤 3：检查 is_active 字段（云端最高仲裁）
             is_active = data.get('is_active', True)
 
             if is_active is False:
+                # 🔐 云端标记为不可用，执行自毁逻辑
                 kill_reason = data.get('kill_message', '该软件已被禁用')
                 logger.warning(f"🚫 启动检查：远程配置标记为不可用，原因: {kill_reason}")
                 self._execute_self_destruct(kill_reason)
@@ -793,24 +795,80 @@ class Api:
                     "reason": kill_reason
                 }
 
+            # 🌟 步骤 4：云端验证成功，更新本地同步时间戳
+            self._update_cloud_sync_time()
+
             # 🌟 步骤 5：一切正常，返回成功响应
             return self._build_success_response(data)
 
         except requests.exceptions.Timeout:
-            logger.warning("启动检查：请求超时，默认放行")
-            return self._build_success_response({})
+            logger.warning("启动检查：请求超时，检查离线 TTL")
+            return self._check_offline_ttl()
 
         except requests.exceptions.RequestException as e:
-            logger.warning(f"启动检查：网络请求失败 ({e})，默认放行")
-            return self._build_success_response({})
+            logger.warning(f"启动检查：网络请求失败 ({e})，检查离线 TTL")
+            return self._check_offline_ttl()
 
         except json.JSONDecodeError as e:
-            logger.warning(f"启动检查：JSON 解析失败 ({e})，默认放行")
-            return self._build_success_response({})
+            logger.warning(f"启动检查：JSON 解析失败 ({e})，检查离线 TTL")
+            return self._check_offline_ttl()
 
         except Exception as e:
-            logger.error(f"启动检查：未知错误 ({e})，默认放行")
-            return self._build_success_response({})
+            logger.error(f"启动检查：未知错误 ({e})，检查离线 TTL")
+            return self._check_offline_ttl()
+
+    def _check_offline_ttl(self) -> Dict[str, Any]:
+        """
+        检查离线 TTL 存活期（网络异常时调用）
+
+        决策逻辑：
+        1. 如果本地配置已锁定，直接返回锁定状态
+        2. 如果超过 7 天未同步，触发锁定
+        3. 如果在 TTL 期内，放行
+
+        Returns:
+            响应字典
+        """
+        # 步骤 1：检查本地锁定状态
+        if self.config_service.current.is_locked:
+            logger.warning("🚫 离线检查：配置校验失败或软件已被锁定")
+            return {
+                "status": "locked",
+                "reason": "配置校验失败或软件已被锁定"
+            }
+
+        # 步骤 2：检查 TTL
+        last_sync = self.config_service.current.last_cloud_sync_time
+        current_time = time.time()
+        elapsed_seconds = current_time - last_sync
+
+        logger.info(f"🔐 离线 TTL 检查：上次同步时间 = {last_sync:.0f}，已过 {elapsed_seconds / 86400:.1f} 天")
+
+        if elapsed_seconds > self.OFFLINE_TTL_SECONDS:
+            # 超过 7 天未连接授权服务器，触发锁定
+            logger.warning(f"🚫 离线检查：已连续 {elapsed_seconds / 86400:.1f} 天未连接授权服务器")
+            self._execute_self_destruct("已连续7天未连接授权服务器，为保障安全已暂停服务")
+            return {
+                "status": "locked",
+                "reason": "已连续7天未连接授权服务器，为保障安全已暂停服务"
+            }
+
+        # 步骤 3：在 TTL 期内，放行
+        remaining_days = (self.OFFLINE_TTL_SECONDS - elapsed_seconds) / 86400
+        logger.info(f"✅ 离线检查：TTL 有效，剩余 {remaining_days:.1f} 天")
+        return self._build_success_response({})
+
+    def _update_cloud_sync_time(self) -> None:
+        """
+        更新云端同步时间戳（云端验证成功后调用）
+        """
+        try:
+            current_config = self.config_service.to_dict()
+            current_config['lastCloudSyncTime'] = time.time()
+            self.config_service.save(current_config)
+            logger.info("🔐 已更新云端同步时间戳")
+        except Exception as e:
+            logger.error(f"更新云端同步时间戳失败: {e}")
 
     def _execute_self_destruct(self, reason: str) -> None:
         """
@@ -897,7 +955,7 @@ class Api:
 
         # 缓存为空，发起网络请求
         try:
-            response = requests.get(VERSION_URL, timeout=5, verify=False)
+            response = requests.get(VERSION_URL, timeout=5)
             if response.status_code == 200:
                 data = response.json()
                 self._version_info = data  # 缓存结果
@@ -968,7 +1026,7 @@ class Api:
             # 5. 回退逻辑：如果本地 800 个都没中，去云端抓取
             if not svg_content:
                 url = f"https://unpkg.com/@lobehub/icons-static-svg@latest/icons/{slug}-color.svg"
-                resp = requests.get(url, timeout=3, verify=False)
+                resp = requests.get(url, timeout=3)
                 if resp.status_code == 200 and resp.text.startswith('<svg'):
                     svg_content = resp.text
                     # 下载后顺手存进本地库，下次就不用下电了

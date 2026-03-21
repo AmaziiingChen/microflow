@@ -3,6 +3,10 @@
 import json
 import os
 import logging
+import hmac
+import hashlib
+import uuid
+import time
 from typing import Dict, Any, Optional
 from dataclasses import dataclass, field, asdict
 
@@ -27,6 +31,10 @@ class AppConfig:
     is_locked: bool = False  # 🌟 新增：配置锁定状态（用于防止修改）
     articles_per_section_limit: int = 10  # 🌟 新增：每个板块处理的文章上限
     api_balance_ok: bool = True  # 🌟 新增：API 余额状态（默认正常）
+    # 🔐 安全字段：防篡改签名
+    config_sign: str = ""  # HMAC-SHA256 签名
+    last_cloud_sync_time: float = 0.0  # 最后一次成功获取云端授权的时间戳
+    device_id: str = ""  # 设备唯一标识（基于 MAC 地址）
 
 
 class ConfigService:
@@ -38,6 +46,9 @@ class ConfigService:
         config = config_service.load()
         config_service.save(new_config)
     """
+
+    # 🔐 安全常量：用于 HMAC 签名的加盐密钥
+    _SECRET_KEY = b"MicroFlow_Secure_Salt_2026"
 
     def __init__(self, config_path: str, default_prompt: str = ""):
         """
@@ -56,6 +67,55 @@ class ConfigService:
         if config_dir and not os.path.exists(config_dir):
             os.makedirs(config_dir, exist_ok=True)
 
+    def _get_device_fingerprint(self) -> str:
+        """
+        获取设备唯一指纹（基于 MAC 地址）
+
+        Returns:
+            设备指纹字符串
+        """
+        try:
+            # uuid.getnode() 返回设备的 MAC 地址（整数形式）
+            mac = uuid.getnode()
+            return f"device_{mac:x}"
+        except Exception as e:
+            logger.warning(f"获取设备指纹失败: {e}")
+            return "device_unknown"
+
+    def _generate_signature(self, config_dict: Dict[str, Any]) -> str:
+        """
+        生成配置的 HMAC-SHA256 签名
+
+        签名算法：将关键字段（isLocked, last_cloud_sync_time, device_id）拼接后
+        使用 HMAC-SHA256 进行签名，确保配置不被篡改。
+
+        Args:
+            config_dict: 配置字典（前端格式）
+
+        Returns:
+            签名的 hex 字符串
+        """
+        try:
+            # 提取用于签名的关键字段
+            is_locked = str(config_dict.get('isLocked', False))
+            sync_time = str(config_dict.get('lastCloudSyncTime', 0.0))
+            device_id = str(config_dict.get('deviceId', ''))
+
+            # 拼接签名字符串
+            sign_payload = f"{is_locked}|{sync_time}|{device_id}"
+
+            # 计算 HMAC-SHA256 签名
+            signature = hmac.new(
+                self._SECRET_KEY,
+                sign_payload.encode('utf-8'),
+                hashlib.sha256
+            ).hexdigest()
+
+            return signature
+        except Exception as e:
+            logger.error(f"生成签名失败: {e}")
+            return ""
+
     def load(self) -> AppConfig:
         """
         从文件加载配置
@@ -73,6 +133,29 @@ class ConfigService:
             with open(self.config_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
 
+            # 🔐 安全检查：验证签名
+            stored_sign = data.get('configSign', '')
+            is_locked_from_file = data.get('isLocked', False)
+
+            # 🔐 向后兼容：如果缺少签名字段，视为旧版首次升级，自动放行
+            if not stored_sign:
+                logger.info("检测到旧版配置文件（无签名），自动升级为新版签名机制")
+                # 不强制锁定，后续 save() 会自动添加签名
+                is_locked = is_locked_from_file
+            else:
+                # 重新计算签名并验证
+                expected_sign = self._generate_signature(data)
+
+                if stored_sign != expected_sign:
+                    logger.warning(f"🔐 配置签名校验失败！文件可能被篡改。")
+                    logger.warning(f"  - 存储签名: {stored_sign[:16]}...")
+                    logger.warning(f"  - 计算签名: {expected_sign[:16]}...")
+                    # 🔐 强制锁定：签名不匹配，视为被篡改
+                    is_locked = True
+                else:
+                    is_locked = is_locked_from_file
+                    logger.debug("🔐 配置签名校验通过")
+
             self._config = AppConfig(
                 base_url=data.get('baseUrl', default.base_url),
                 api_key=data.get('apiKey', default.api_key),
@@ -86,9 +169,13 @@ class ConfigService:
                 custom_font_name=data.get('customFontName', default.custom_font_name),  # 🌟 新增
                 subscribed_sources=data.get('subscribedSources', default.subscribed_sources),  # 🌟 新增
                 polling_interval=data.get('pollingInterval', default.polling_interval),  # 🌟 新增
-                is_locked=data.get('isLocked', default.is_locked),  # 🌟 新增：配置锁定状态
+                is_locked=is_locked,  # 🔐 使用签名验证后的锁定状态
                 articles_per_section_limit=data.get('articlesPerSectionLimit', default.articles_per_section_limit),  # 🌟 新增
                 api_balance_ok=data.get('apiBalanceOk', default.api_balance_ok),  # 🌟 新增：API 余额状态
+                # 🔐 安全字段
+                config_sign=data.get('configSign', ''),
+                last_cloud_sync_time=data.get('lastCloudSyncTime', 0.0),
+                device_id=data.get('deviceId', ''),
             )
             return self._config
 
@@ -113,6 +200,24 @@ class ConfigService:
             if config_dir:
                 os.makedirs(config_dir, exist_ok=True)
 
+            # 🔐 安全步骤 1：自动更新设备指纹
+            device_id = self._get_device_fingerprint()
+            config_dict['deviceId'] = device_id
+
+            # 🔐 安全步骤 2：确保时间戳字段存在（如果未设置则使用当前时间）
+            if 'lastCloudSyncTime' not in config_dict or config_dict['lastCloudSyncTime'] == 0:
+                # 尝试保留旧值
+                old_sync_time = 0.0
+                if self._config and hasattr(self._config, 'last_cloud_sync_time'):
+                    old_sync_time = self._config.last_cloud_sync_time
+                config_dict['lastCloudSyncTime'] = old_sync_time
+
+            # 🔐 安全步骤 3：计算并添加签名
+            signature = self._generate_signature(config_dict)
+            config_dict['configSign'] = signature
+
+            logger.debug(f"🔐 已生成配置签名: {signature[:16]}... (设备: {device_id})")
+
             # 写入文件
             with open(self.config_path, 'w', encoding='utf-8') as f:
                 json.dump(config_dict, f, ensure_ascii=False, indent=4)
@@ -134,6 +239,10 @@ class ConfigService:
                 is_locked=config_dict.get('isLocked', False),  # 🌟 新增：配置锁定状态
                 articles_per_section_limit=config_dict.get('articlesPerSectionLimit', 10),  # 🌟 新增
                 api_balance_ok=config_dict.get('apiBalanceOk', True),  # 🌟 新增：API 余额状态
+                # 🔐 安全字段
+                config_sign=signature,
+                last_cloud_sync_time=config_dict.get('lastCloudSyncTime', 0.0),
+                device_id=device_id,
             )
 
             logger.info("配置已成功保存")
@@ -174,6 +283,10 @@ class ConfigService:
             "isLocked": config.is_locked,  # 🌟 新增：配置锁定状态
             "articlesPerSectionLimit": config.articles_per_section_limit,  # 🌟 新增
             "apiBalanceOk": config.api_balance_ok,  # 🌟 新增：API 余额状态
+            # 🔐 安全字段
+            "configSign": config.config_sign,
+            "lastCloudSyncTime": config.last_cloud_sync_time,
+            "deviceId": config.device_id,
         }
 
     def get(self, key: str, default: Any = None) -> Any:
@@ -215,6 +328,10 @@ class ConfigService:
             'isLocked': 'is_locked',  # 🌟 新增：配置锁定状态
             'articlesPerSectionLimit': 'articles_per_section_limit',  # 🌟 新增
             'apiBalanceOk': 'api_balance_ok',  # 🌟 新增：API 余额状态
+            # 🔐 安全字段
+            'configSign': 'config_sign',
+            'lastCloudSyncTime': 'last_cloud_sync_time',
+            'deviceId': 'device_id',
         }
 
         # 转换键名
@@ -252,25 +369,15 @@ class ConfigService:
             是否设置成功
         """
         try:
-            # 读取当前配置文件内容
-            config_dict = {}
-            if os.path.exists(self.config_path):
-                with open(self.config_path, 'r', encoding='utf-8') as f:
-                    config_dict = json.load(f)
+            # 使用 to_dict() 获取当前完整配置，确保签名一致性
+            config_dict = self.to_dict()
 
             # 更新余额状态
             config_dict['apiBalanceOk'] = ok
 
-            # 保存回文件
-            with open(self.config_path, 'w', encoding='utf-8') as f:
-                json.dump(config_dict, f, ensure_ascii=False, indent=4)
+            # 调用 save() 方法，自动更新签名
+            return self.save(config_dict)
 
-            # 更新内存中的配置
-            if self._config:
-                self._config.api_balance_ok = ok
-
-            logger.info(f"API 余额状态已更新: {ok}")
-            return True
         except Exception as e:
             logger.error(f"设置 API 余额状态失败: {e}")
             return False
