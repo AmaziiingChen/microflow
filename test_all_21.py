@@ -40,7 +40,7 @@ except ImportError as e:
 
 def run_comprehensive_test():
     spiders = [
-        HseeSpider(),
+        AiSpider(),
 
     ]
     # 如果有 AiSpider，可以加进去: AiSpider()

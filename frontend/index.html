@@ -2678,10 +2678,10 @@
                 });
 
                 // 暴露给 Python 底层调用的全局方法
-                // 🌟 AI 进度回调：在开始处理每篇文章时触发
-                // completed: 已完成处理的文章数（不包括正在处理的）
-                // total: 总共需要处理的文章数
-                // currentTitle: 当前正在处理的文章标题（空字符串表示全部完成）
+                // 🌟 AI 进度回调：在真正调用 AI 分析时触发
+                // completed: 已完成 AI 分析的文章数
+                // total: 总共需要 AI 分析的文章数
+                // currentTitle: 当前正在调用 AI 分析的文章标题
                 window.updatePyProgress = (completed, total, currentTitle) => {
                     // 没有文章需要处理，关闭加载
                     if (total === 0 && completed === 0) {
@@ -2693,16 +2693,10 @@
                     aiProgress.value = {
                         total,
                         completed,
-                        // 🌟 文案显示"正在由 xxx 总结：标题"
+                        // 🌟 文案：正在由 AI 分析
                         detail: currentTitle ? `正在由 ${aiBrandName.value} 总结: ${currentTitle}` : `正在等待 ${aiBrandName.value} 处理...`
                     };
-                    // 🌟 所有任务完成：completed >= total 且 currentTitle 为空
-                    if (total > 0 && completed >= total && !currentTitle) {
-                        isLoading.value = false;
-                        hasPendingAiTasks.value = false;
-                        statusMsg.value = '✅ 所有文章已处理完成';
-                        setTimeout(() => statusMsg.value = '', 3000);
-                    }
+                    // 🌟 所有任务完成：processed >= submitted（在 _worker_loop 中处理）
                 };
 
                 // 🌟 接收爬虫进度（由后端调用）

@@ -78,7 +78,7 @@ class ArticleProcessor:
     AI_FAILURE_PREFIXES = ("❌", "⏳", "⚠️")
 
     # Worker 配置
-    WORKER_COUNT = 4
+    WORKER_COUNT = 1
 
     def __init__(
         self,
@@ -158,37 +158,15 @@ class ArticleProcessor:
 
                 # 处理任务
                 try:
-                    # 🌟 在开始处理前，通知前端"正在处理"哪篇文章
-                    with self._stats_lock:
-                        total_submitted = self._stats['submitted']
-                        already_completed = self._stats['processed']  # 已完成数量
-
-                    if self.on_progress and total_submitted > 0:
-                        try:
-                            # 回调参数：(已完成数量, 总数, 当前标题)
-                            self.on_progress(already_completed, total_submitted, task.ctx.title)
-                        except Exception as e:
-                            logger.warning(f"进度回调执行失败: {e}")
-
                     success, reason, article_data = self._process_task(task)
 
-                    # 更新统计并检查是否所有任务完成
-                    all_done = False
+                    # 更新统计
                     with self._stats_lock:
                         self._stats['processed'] += 1
                         if success:
                             self._stats['success'] += 1
                         else:
                             self._stats['failed'] += 1
-                        # 🌟 检查是否所有任务都已处理完成
-                        all_done = self._stats['processed'] >= self._stats['submitted']
-
-                    # 🌟 所有任务完成时，发送完成通知
-                    if all_done and self.on_progress:
-                        try:
-                            self.on_progress(total_submitted, total_submitted, "")
-                        except Exception as e:
-                            logger.warning(f"完成回调执行失败: {e}")
 
                     # 回调通知
                     if self.on_task_complete:
@@ -251,7 +229,20 @@ class ArticleProcessor:
         if not is_changed:
             return False, "unchanged", None
 
-        # 5. AI 生成摘要（此处已有指数退避重试）
+        # 5. 🌟 在调用 AI 之前，通知前端"正在调用 AI 分析"
+        # 统计：已完成数量 / 总数量
+        with self._stats_lock:
+            total_submitted = self._stats['submitted']
+            already_processed = self._stats['processed']
+
+        if self.on_progress and total_submitted > 0:
+            try:
+                # 回调参数：(已处理数量, 总数, 当前正在调用AI的标题)
+                self.on_progress(already_processed, total_submitted, ctx.title)
+            except Exception as e:
+                logger.warning(f"进度回调执行失败: {e}")
+
+        # 6. AI 生成摘要（此处已有指数退避重试）
         logger.info(f"[{ctx.source_name}] 发现变动 ({reason}) -> {ctx.title}")
         try:
             summary = self.llm.summarize_article(ctx.title, raw_text)
@@ -259,7 +250,7 @@ class ArticleProcessor:
             logger.warning(f"AI 摘要生成异常 ({ctx.title}): {e}")
             return False, "ai_error", None
 
-        # 6. 核心防线：拦截 AI 失败的情况
+        # 7. 核心防线：拦截 AI 失败的情况
         if summary.startswith(self.AI_FAILURE_PREFIXES):
             logger.warning(f"AI 分析失败，本次不入库: {ctx.title}")
             return False, "ai_failed", None
