@@ -17,10 +17,12 @@ jobs:
         include:
           - os: windows-latest
             artifact_name: microflow_win.exe
-            build_cmd: pyinstaller --onefile --windowed --name "MicroFlow" --add-data "frontend;frontend" --icon "frontend/icons/icon_white.png" main.py && cp dist/MicroFlow.exe ./microflow_win.exe
+            # 🌟 核心修改 1：Windows 环境使用 spec 文件打包
+            build_cmd: pyinstaller MicroFlow.spec --clean && cp dist/MicroFlow.exe ./microflow_win.exe
           - os: macos-latest
             artifact_name: microflow_mac.zip
-            build_cmd: pyinstaller --windowed --name "MicroFlow" --add-data "frontend:frontend" --icon "frontend/icons/icon_white.png" main.py && cd dist && zip -r ../microflow_mac.zip MicroFlow.app
+            # 🌟 核心修改 2：macOS 环境使用 spec 文件打包
+            build_cmd: pyinstaller MicroFlow.spec --clean && cd dist && zip -r ../microflow_mac.zip MicroFlow.app
 
     runs-on: ${{ matrix.os }}
 
@@ -38,6 +40,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyinstaller
           pip install -r requirements.txt
+
+      # 🌟 核心修改 3：在 macOS 云端机上安装 UPX
+      - name: Install UPX (macOS)
+        if: matrix.os == 'macos-latest'
+        run: brew install upx
+
+      # 🌟 核心修改 4：在 Windows 云端机上安装 UPX
+      - name: Install UPX (Windows)
+        if: matrix.os == 'windows-latest'
+        run: choco install upx
 
       - name: Build with PyInstaller
         run: |

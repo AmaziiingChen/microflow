@@ -21,29 +21,6 @@
         --btn-yield: #7caff4;
       }
 
-      /* ================= 新增：本地思源宋体引入 ================= */
-      @font-face {
-        font-family: "Source Han Serif SC";
-        src: url("SimplifiedChinese/SourceHanSerifSC-Regular.otf")
-          format("opentype");
-        font-weight: 400;
-        font-style: normal;
-      }
-      @font-face {
-        font-family: "Source Han Serif SC";
-        src: url("SimplifiedChinese/SourceHanSerifSC-Medium.otf")
-          format("opentype");
-        font-weight: 500;
-        font-style: normal;
-      }
-      @font-face {
-        font-family: "Source Han Serif SC";
-        src: url("SimplifiedChinese/SourceHanSerifSC-Bold.otf")
-          format("opentype");
-        font-weight: 700;
-        font-style: normal;
-      }
-
       .list-date {
         margin-left: auto; /* 核心：在 flex 容器中把元素推向最右边 */
         font-weight: 700; /* 加粗 */
@@ -54,12 +31,12 @@
         flex-shrink: 0; /* 防止在小屏幕下时间被挤压换行 */
       }
 
-      /* 衬线体模式：全局覆盖字体 */
+      /* 衬线体模式：全局覆盖字体 (调用系统原生经典宋体) */
       .serif-mode {
         font-family:
-          "Source Han Serif SC", "Songti SC", "Noto Serif SC", "SimSun", serif !important;
+          "Songti SC", "Noto Serif CJK SC", "SimSun", "STSong", serif !important;
       }
-      /* 确保正文内的元素也被完美覆盖 */
+
       /* 确保正文内的元素、输入框、按钮等也被完美覆盖 */
       .serif-mode .markdown-body,
       .serif-mode .list-card-title,
@@ -70,7 +47,7 @@
       .serif-mode button,
       .serif-mode input {
         font-family:
-          "Source Han Serif SC", "Songti SC", "Noto Serif SC", "SimSun", serif !important;
+          "Songti SC", "Noto Serif CJK SC", "SimSun", "STSong", serif !important;
       }
 
       * {
@@ -78,8 +55,8 @@
       }
       body {
         font-family:
-          "Helvetica Neue", Helvetica, "Segoe UI", Arial, "Microsoft YaHei",
-          sans-serif;
+          -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei",
+          "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         margin: 0;
         padding: 0;
         display: flex;
@@ -2914,11 +2891,12 @@
                 :class="{ active: config.fontFamily === 'sans-serif' }"
                 @click="config.fontFamily = 'sans-serif'"
               >
-                <span style="font-weight: 700; font-size: 15px; color: #111"
-                  >现代黑体</span
-                >
+                <span style="font-weight: 700; font-size: 15px; color: #111">
+                  现代黑体
+                </span>
                 <span class="row-check">✓</span>
               </div>
+
               <div
                 class="list-row-item"
                 :class="{ active: config.fontFamily === 'serif' }"
@@ -2929,12 +2907,17 @@
                     font-weight: 700;
                     font-size: 15px;
                     color: #111;
-                    font-family: &quot;Source Han Serif SC&quot;, serif;
+                    /* 使用跨平台的高级系统宋体调用栈 */
+                    font-family:
+                      &quot;Songti SC&quot;, &quot;Noto Serif CJK SC&quot;,
+                      &quot;SimSun&quot;, serif;
                   "
-                  >思源宋体</span
                 >
+                  经典宋体
+                </span>
                 <span class="row-check">✓</span>
               </div>
+
               <div
                 class="list-row-item"
                 :class="{ active: config.fontFamily === 'custom' }"
@@ -2955,8 +2938,9 @@
                       color: #111;
                       font-family: &quot;UserCustomFont&quot;, sans-serif;
                     "
-                    >外部导入</span
                   >
+                    外部导入
+                  </span>
                   <span
                     style="
                       font-size: 12px;

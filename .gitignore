@@ -36,7 +36,8 @@ wheels/
 
 # === PyInstaller ===
 *.manifest
-*.spec
+# 🌟 核心修改 1：取消对 .spec 的屏蔽，确保 MicroFlow.spec 能推送到 GitHub
+# *.spec  
 
 # === 虚拟环境 ===
 .venv/
@@ -59,12 +60,17 @@ env/
 # === Claude Code ===
 .claude/
 
-# === 数据与日志 ===
-data/
+# === 数据与日志 (白名单控制) ===
+# 🌟 核心修改 2：只忽略动态生成的文件，放行静态资源(如图标和默认配置)
+data/*
+!data/icons/
+!data/config.json
 *.db
 *.log
 *.sqlite
 *.sqlite3
+data/analysis_plots/
+data/analysis_plots_1/
 
 # === 前端 ===
 frontend/fonts/custom_font.ttf
