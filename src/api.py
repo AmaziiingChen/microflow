@@ -107,15 +107,16 @@ class Api:
             total: 总爬虫数量
             source_name: 当前爬虫名称
         """
-        if not self.window:
-            logger.info("爬虫进度推送失败: 窗口对象不存在")
-            return
         try:
+            # 🌟 修复：使用 webview.windows[0] 而不是 self.window，与 _push_progress 保持一致
+            if not webview.windows:
+                logger.debug("爬虫进度推送失败: 窗口列表为空")
+                return
             # 转义单引号
             safe_name = source_name.replace("'", "\\'").replace('"', '\\"')
             js_code = f"if(window.updateSpiderProgress) window.updateSpiderProgress({current}, {total}, '{safe_name}');"
-            self.window.evaluate_js(js_code)
-            logger.info(f"爬虫进度推送: {current}/{total} - {source_name}")
+            webview.windows[0].evaluate_js(js_code)
+            logger.debug(f"爬虫进度推送: {current}/{total} - {source_name}")
         except Exception as e:
             logger.warning(f"爬虫进度推送失败: {e}")
 
@@ -128,14 +129,15 @@ class Api:
             total: 总文章数
             current_title: 当前处理完成的文章标题
         """
-        if not self.window:
-            return
         try:
+            # 🌟 修复：使用 webview.windows[0] 而不是 self.window
+            if not webview.windows:
+                return
             # 转义单引号
             safe_title = current_title.replace("'", "\\'").replace('"', '\\"') if current_title else ""
             js_code = f"if(window.updatePyProgress) window.updatePyProgress({completed}, {total}, '{safe_title}');"
-            self.window.evaluate_js(js_code)
-            logger.info(f"AI 进度推送: {completed}/{total} - {current_title[:20] if current_title else ''}")
+            webview.windows[0].evaluate_js(js_code)
+            logger.debug(f"AI 进度推送: {completed}/{total} - {current_title[:20] if current_title else ''}")
         except Exception as e:
             logger.warning(f"AI 进度推送失败: {e}")
 
@@ -250,6 +252,29 @@ class Api:
                 **result,
                 "cooldown_remaining": self.daemon_manager.get_cooldown_remaining()
             }
+
+        # 🌟 关键修复：爬虫阶段完成后，通知前端切换状态
+        submitted_count = result.get("submitted_count", 0)
+        try:
+            if webview.windows:
+                if submitted_count > 0:
+                    # 有新文章，切换到 AI 阶段
+                    webview.windows[0].evaluate_js("""
+                        if (window.onSpiderComplete) {
+                            window.onSpiderComplete(true);
+                        }
+                    """)
+                    logger.debug(f"爬虫完成，已通知前端切换到 AI 阶段（{submitted_count} 篇新文章）")
+                else:
+                    # 无新文章，直接关闭加载状态
+                    webview.windows[0].evaluate_js("""
+                        if (window.onSpiderComplete) {
+                            window.onSpiderComplete(false);
+                        }
+                    """)
+                    logger.debug("爬虫完成，已通知前端关闭加载状态（无新文章）")
+        except Exception as e:
+            logger.debug(f"通知前端爬虫完成失败: {e}")
 
         # 🌟 手动更新成功后，记录时间戳（与守护进程共享冷却状态）
         if is_manual and result.get("status") == "success":
