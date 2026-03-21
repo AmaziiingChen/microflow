@@ -5,10 +5,12 @@ import pystray
 from PIL import Image, ImageDraw
 import requests
 import urllib3
+
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # 🌟 初始化全局日志系统（必须在其他模块导入之前）
 from src.logger import setup_logging
+
 setup_logging()
 
 # 引入我们的"总调度室"
@@ -37,11 +39,15 @@ def set_tray_alert():
         center_y = red_dot_radius + 12
 
         draw.ellipse(
-            [center_x - red_dot_radius, center_y - red_dot_radius,
-             center_x + red_dot_radius, center_y + red_dot_radius],
-            fill='#FF3B30',
-            outline='#C62828',
-            width=3
+            [
+                center_x - red_dot_radius,
+                center_y - red_dot_radius,
+                center_x + red_dot_radius,
+                center_y + red_dot_radius,
+            ],
+            fill="#FF3B30",
+            outline="#C62828",
+            width=3,
         )
 
         # 🌟 超采样缩小：将画满马赛克大红点的 256 画布，使用 LANCZOS 强压到 64x64。
@@ -54,6 +60,8 @@ def set_tray_alert():
 
     except Exception as e:
         print(f"❌ 设置托盘红点失败: {e}")
+
+
 def clear_tray_alert():
     """
     清除托盘图标上的红点提醒
@@ -71,32 +79,38 @@ def clear_tray_alert():
     except Exception as e:
         print(f"❌ 清除托盘红点失败: {e}")
 
+
 def has_tray_alert() -> bool:
     """检查当前是否有红点提醒"""
     return _has_alert
+
+
 # ================================================
+
 
 def get_html_path():
     """动态计算前端页面的绝对路径，为后续 PyInstaller 打包做准备"""
     # 采用你优化的 getattr 方法，完美绕过 Pylance 静态检查
-    meipass = getattr(sys, '_MEIPASS', None)
-    
+    meipass = getattr(sys, "_MEIPASS", None)
+
     if meipass:
         base_path = meipass
     else:
         # 正常开发环境下，使用当前文件所在的目录
         base_path = os.path.dirname(os.path.abspath(__file__))
-    
-    return os.path.join(base_path, 'frontend', 'index.html')
+
+    return os.path.join(base_path, "frontend", "index.html")
+
 
 def get_icon_path():
     """获取本地 png 图标的绝对路径"""
     # 采用 PyInstaller 打包后的路径兼容方案
-    meipass = getattr(sys, '_MEIPASS', None)
+    meipass = getattr(sys, "_MEIPASS", None)
     base_path = meipass if meipass else os.path.dirname(os.path.abspath(__file__))
 
     # 图标文件已移动到 frontend/icons/ 目录
-    return os.path.join(base_path, 'frontend', 'icons', 'icon_white.png')
+    return os.path.join(base_path, "frontend", "icons", "icon_white.png")
+
 
 def load_tray_icon():
     """加载并高质量处理状态栏图标（超采样 SSAA 抗锯齿版）"""
@@ -111,9 +125,13 @@ def load_tray_icon():
             source_img = Image.open(icon_path).convert("RGBA")
 
             # 🌟 修复1：使用 thumbnail 保持比例，且抗锯齿算法更优
-            source_img.thumbnail((icon_visual_size, icon_visual_size), Image.Resampling.LANCZOS)
+            source_img.thumbnail(
+                (icon_visual_size, icon_visual_size), Image.Resampling.LANCZOS
+            )
 
-            canvas_256 = Image.new("RGBA", (target_canvas_size, target_canvas_size), (0, 0, 0, 0))
+            canvas_256 = Image.new(
+                "RGBA", (target_canvas_size, target_canvas_size), (0, 0, 0, 0)
+            )
 
             offset_x = (target_canvas_size - source_img.width) // 2
             offset_y = (target_canvas_size - source_img.height) // 2
@@ -132,30 +150,32 @@ def load_tray_icon():
             print(f"❌ 托盘图标处理失败: {e}")
     else:
         print(f"⚠️ 找不到托盘图标文件: {icon_path}")
-if __name__ == '__main__':
+
+
+if __name__ == "__main__":
     # 实例化后端桥接 API
     api = Api()
 
     # 获取前端页面路径
     # 移除 file:// 协议，让 pywebview 启用本地 HTTP 服务器，彻底绕过字体跨域拦截
     html_url = get_html_path()
-    
+
     # 🌟 检测启动参数：如果是开机自启（带了 --minimized 参数），则初始隐藏
     start_minimized = "--minimized" in sys.argv
 
     # 创建原生窗口 (保留了你设置的 450x750 尺寸和相关属性)
     window = webview.create_window(
-        title='Microflow',
+        title="Microflow",
         url=html_url,
         js_api=api,
         width=475,
         height=750,
-        min_size=(470, 750),   # 限制最小宽高
-        frameless=False,       # 使用原生系统边框
+        min_size=(470, 750),  # 限制最小宽高
+        frameless=False,  # 使用原生系统边框
         easy_drag=False,
-        transparent=False,     # 关闭透明，让原生窗口更加稳定
-        background_color='#FFFFFF',
-        hidden=start_minimized  # 👈 核心：如果是自启则初始隐藏
+        transparent=False,  # 关闭透明，让原生窗口更加稳定
+        background_color="#FFFFFF",
+        hidden=start_minimized,  # 👈 核心：如果是自启则初始隐藏
     )
 
     api.window = window
@@ -166,11 +186,11 @@ if __name__ == '__main__':
     def on_closing():
         """当用户点击系统原生的红色关闭按钮时触发"""
         if window is not None:  # 👈 新增安全判断，消除 Pylance 警告
-            window.hide() # 隐藏窗口到后台
+            window.hide()  # 隐藏窗口到后台
         return False  # 返回 False 告诉系统：拦截销毁操作，不要关掉进程！
 
     # 绑定关闭事件
-    if window is not None:      # 👈 新增安全判断，消除 Pylance 警告
+    if window is not None:  # 👈 新增安全判断，消除 Pylance 警告
         window.events.closing += on_closing
 
     # 2. 系统托盘交互逻辑
@@ -178,28 +198,28 @@ if __name__ == '__main__':
         """点击菜单：显示窗口"""
         if window is not None:
             window.show()
-            window.restore() 
-            
+            window.restore()
+
             # 🚀 核心黑科技：在 macOS 上强行抢夺应用焦点
             window.on_top = True
             window.on_top = False
-            
+
             # 用户主动唤醒窗口时，清除托盘红点
             clear_tray_alert()
 
     def on_quit_app(icon, item):
         """点击菜单：彻底退出"""
-        api.is_running = False # 停止后台线程的死循环
+        api.is_running = False  # 停止后台线程的死循环
         api.force_quit()
-        icon.stop()            # 销毁右上角的托盘图标
-        os._exit(0)            # 彻底杀掉 Python 进程
+        icon.stop()  # 销毁右上角的托盘图标
+        os._exit(0)  # 彻底杀掉 Python 进程
 
     # 构建托盘右键菜单
     # 构建托盘右键菜单
     tray_menu = pystray.Menu(
-        pystray.MenuItem('　详 情　', on_show_window), 
+        pystray.MenuItem("　详 情　", on_show_window),
         pystray.Menu.SEPARATOR,
-        pystray.MenuItem('　退 出　', on_quit_app)
+        pystray.MenuItem("　退 出　", on_quit_app),
     )
 
     # 实例化托盘图标
@@ -208,6 +228,7 @@ if __name__ == '__main__':
 
     # 🌟 保存到全局变量，供 api.py 调用
     import main as main_module
+
     main_module._tray_icon = tray_icon
     # _base_icon_256 已在 load_tray_icon() 中设置
 
@@ -229,4 +250,4 @@ if __name__ == '__main__':
                 window.show()
 
     # 启动应用，并将回调函数注入进去，强制开启 HTTP 服务
-    webview.start(func=on_app_start, debug=True, http_server=True)
+    webview.start(func=on_app_start, debug=False, http_server=True)
