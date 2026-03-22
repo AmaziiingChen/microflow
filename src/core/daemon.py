@@ -273,8 +273,12 @@ class DaemonManager:
                                     on_new_articles(new_count, result)
                                 elif submitted_count > 0:
                                     logger.info(f"📊 已提交 {submitted_count} 篇文章到处理队列")
-                        else:
-                            print(f"⚠️ [Debug] 任务返回的格式异常: {result}")
+                            elif result.get("status") == "read_only":
+                                logger.debug("💤 后台轮询被静默拦截：当前处于只读模式")
+                            elif result.get("status") == "cooldown":
+                                logger.debug(f"⏳ 触发被拦截：{result.get('message')}")
+                            else:
+                                logger.debug(f"⚠️ 任务返回异常状态: {result.get('status', 'unknown')}")
 
                     except Exception as e:
                         print(f"❌ [Debug] 守护线程发生致命错误 (已被拦截，线程继续存活): {e}")

@@ -13,10 +13,11 @@ a = Analysis(
     # 🌟 核心：强制排除掉可能被第三方库间接引入的重型包
     # 🌟 核心防御：强制排除所有重型数据/Web/AI框架
     excludes=[
-        'pandas', 'numpy', 'matplotlib', 'streamlit', 'playwright', 
-        'pyarrow', 'langchain', 'boto3', 'botocore', 'sqlalchemy', 
-        'altair', 'scipy', 'PyQt5', 'PySide6', 'tkinter', 'notebook',
-        'scrapegraph', 'trafilatura', 'tiktoken', 'huggingface_hub', 'httpx'
+        # 1. 排除我们之前用过的字体压缩工具，防止被意外打包
+        'fonttools',
+        
+        # 2. 仅仅排除 macOS 下极其巨大且你的爬虫绝对用不到的苹果原生音视频框架
+        'AVFoundation', 'CoreMedia', 'CoreAudio', 'CoreData', 'CoreLocation'
     ],
     noarchive=False,
 )
@@ -42,4 +43,19 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon='frontend/icons/icon_white.png'
+)
+
+# ==========================================
+# 🌟 新增：macOS 专属的 .app 应用程序包装指令
+# ==========================================
+app = BUNDLE(
+    exe,
+    name='MicroFlow.app',
+    icon='frontend/icons/icon_white.png', # 你的应用图标
+    bundle_identifier='com.microflow.app', # 苹果应用包名
+    info_plist={
+        'CFBundleShortVersionString': '1.1.4',
+        'LSMinimumSystemVersion': '10.13.0',
+        'NSHighResolutionCapable': True,
+    },
 )

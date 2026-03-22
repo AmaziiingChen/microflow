@@ -153,6 +153,30 @@
         cursor: not-allowed;
       }
 
+      /* 🌟 只读模式按钮样式：灰色调，保留交互动画 */
+      .btn-check.read-only-btn {
+        background: linear-gradient(
+          135deg,
+          #e5e7eb 0%,
+          #d1d5db 100%
+        ) !important;
+        color: #6b7280 !important;
+        cursor: pointer;
+        border: 1px solid #d1d5db;
+      }
+
+      .btn-check.read-only-btn:hover {
+        background: linear-gradient(
+          135deg,
+          #d1d5db 0%,
+          #c4c8cc 100%
+        ) !important;
+      }
+
+      .btn-check.read-only-btn:active {
+        transform: scale(0.98);
+      }
+
       /* 点击缩放动画类 */
       .btn-click-scale {
         transform: scale(0.96) !important;
@@ -2083,12 +2107,13 @@
           <div style="display: flex; align-items: center; flex-shrink: 0">
             <button
               class="btn-check"
-              :class="{ loading: isLoading }"
-              @click="isLoading ? cancelAITasks() : checkUpdates()"
-              :disabled="isUpdateDisabled && !isLoading"
+              :class="{ loading: isLoading, 'read-only-btn': isReadOnlyMode && !isLoading }"
+              @click="handleButtonClick()"
+              :disabled="isUpdateDisabled && !isLoading && !isReadOnlyMode"
             >
               <span v-if="!isLoading" class="btn-text">
-                <span v-if="isUpdateDisabled">{{ updateCooldown }}s</span>
+                <span v-if="isReadOnlyMode">只读</span>
+                <span v-else-if="isUpdateDisabled">{{ updateCooldown }}s</span>
                 <span v-else>更新</span>
               </span>
               <div class="aurora-light"></div>
@@ -2731,6 +2756,9 @@
                 </div>
               </div>
             </div>
+
+            <!-- 🚀 隐形阅读探测器：追踪用户是否滚动到底部 -->
+            <div id="read-detector" style="height: 1px; width: 100%; opacity: 0; pointer-events: none;"></div>
           </div>
           <div class="detail-footer">
             <div class="disclaimer">
@@ -3277,6 +3305,8 @@
             const articles = ref([]);
             const isLoading = ref(false);
             const statusMsg = ref("");
+            const isReadOnlyMode = ref(false); // 🌟 新增：只读模式标记
+            const readOnlyReason = ref(""); // 🌟 新增：只读模式原因
 
             // 🎯 更新按钮冷却时间相关变量
             const updateCooldown = ref(0); // 剩余冷却秒数
@@ -4206,6 +4236,16 @@
                     }
                     return; // 强制终止后续正常初始化流程
                   }
+
+                  // 🌟 检查只读模式
+                  if (checkResult.mode === "read_only") {
+                    isReadOnlyMode.value = true;
+                    readOnlyReason.value = checkResult.reason || "服务已暂停";
+                    console.log(
+                      "⚠️ 启动时检测到只读模式:",
+                      readOnlyReason.value,
+                    );
+                  }
                 } catch (e) {
                   console.warn("启动安全检查失败，采取默认放行策略:", e);
                 }
@@ -4483,6 +4523,25 @@
               }
             };
 
+            // 🌟 统一按钮点击处理
+            const handleButtonClick = () => {
+              // 如果正在加载，点击取消任务
+              if (isLoading.value) {
+                cancelAITasks();
+                return;
+              }
+
+              // 如果是只读模式，显示提示
+              if (isReadOnlyMode.value) {
+                statusMsg.value = "服务已暂停，当前为只读模式，感谢您的使用！";
+                setTimeout(() => (statusMsg.value = ""), 3000);
+                return;
+              }
+
+              // 正常更新
+              checkUpdates();
+            };
+
             const checkUpdates = async () => {
               if (isUpdateDisabled.value) {
                 return;
@@ -4526,6 +4585,13 @@
                 }
 
                 if (res.status === "success") {
+                  // 🌟 云端恢复正常后，解除只读模式
+                  if (isReadOnlyMode.value) {
+                    isReadOnlyMode.value = false;
+                    readOnlyReason.value = "";
+                    console.log("✅ 云端已恢复正常，解除只读模式");
+                  }
+
                   articles.value = res.data;
                   page.value = 1;
                   noMoreData.value = false;
@@ -4572,6 +4638,12 @@
                   cooldownRemaining = res.remaining || 120;
                   // 🌟 冷却状态，没有实际抓取，直接关闭加载
                   isLoading.value = false;
+                } else if (res.status === "read_only") {
+                  // 🌟 只读模式：服务已暂停，仅可查看历史数据
+                  statusMsg.value = "⚠️ 服务已暂停，当前为只读模式";
+                  setTimeout(() => (statusMsg.value = ""), 5000);
+                  cooldownRemaining = 0; // 只读模式下不触发冷却
+                  isLoading.value = false;
                 } else {
                   statusMsg.value = `${res.message || "更新失败"}`;
                   setTimeout(() => (statusMsg.value = ""), 3000);
@@ -4615,17 +4687,8 @@
               lastArticle.value = enrichedItem;
               currentView.value = "detail";
 
-              // 🚀 修复点 2：拆分数据落盘与 UI 渲染
-              if (item.is_read === 0) {
-                // A. 立即通知后端更新数据库，保证数据绝对安全
-                pywebview.api
-                  .mark_as_read(item.url)
-                  .catch((e) => console.error("标记已读失败", e));
-                // B. 将其推入队列，暂不更新 Vue 响应式数组，避免隐藏时触发动画
-                if (!pendingReadUrls.value.includes(item.url)) {
-                  pendingReadUrls.value.push(item.url);
-                }
-              }
+              // 🌟 手动点击同样受"真实阅读追踪器"保护
+              setupReadingTracker(enrichedItem);
             };
             // 👇 终极版：接收后台强提醒 -> 直接在右上角展示新内容详情
             window.showArticleDetailFromBackend = (item) => {
@@ -4699,22 +4762,8 @@
               lastArticle.value = enrichedItem; // 🌟 更新最后查看的文章
               previousView.value = "list";
 
-              // 延迟 3 秒后标记已读
-              setTimeout(async () => {
-                if (enrichedItem.is_read === 0) {
-                  const idx = articles.value.findIndex(
-                    (a) => a.url === enrichedItem.url,
-                  );
-                  if (idx !== -1) {
-                    articles.value[idx].is_read = 1;
-                  }
-                  try {
-                    await pywebview.api.mark_as_read(enrichedItem.url);
-                  } catch (e) {
-                    console.error("标记已读失败:", e);
-                  }
-                }
-              }, 3000);
+              // 🌟 启用高智能双重锁定阅读追踪（替代旧的 3 秒暴力定时器）
+              setupReadingTracker(enrichedItem);
             };
 
             // 👇 新增：静默更新文章数据（不弹出详情，仅更新列表）
@@ -4781,6 +4830,87 @@
               }
             };
 
+            // ================= 🚀 核心：双重锁定阅读追踪引擎 =================
+            let readingObserver = null;
+            let dwellTimer = null;
+            const userActivityDetected = ref(false);
+            const hasDweltEnough = ref(false);
+            const isBottomVisible = ref(false);
+
+            // 检查双重条件是否均已满足
+            const checkAndMarkRead = () => {
+              if (hasDweltEnough.value && isBottomVisible.value && activeArticle.value && activeArticle.value.is_read === 0) {
+                const url = activeArticle.value.url;
+                if (!pendingReadUrls.value.includes(url)) {
+                  pendingReadUrls.value.push(url);
+                  pywebview.api.mark_as_read(url).catch(e => console.error(e));
+                  console.log("✅ 满足双重阅读条件：卡片已在后台静默标记为已读");
+                }
+              }
+            };
+
+            // 捕捉人在屏幕前的动作
+            const handleUserActivity = () => {
+              if (!userActivityDetected.value) {
+                userActivityDetected.value = true;
+                // 只有检测到人动了鼠标或键盘，才开始计算 2 秒的有效停留时间
+                dwellTimer = setTimeout(() => {
+                  hasDweltEnough.value = true;
+                  checkAndMarkRead(); // 时间到了，检查是否看完了底部
+                }, 2000);
+              }
+            };
+
+            // 初始化追踪器
+            const setupReadingTracker = (item) => {
+              // 1. 清理上一篇文章的旧状态
+              if (readingObserver) { readingObserver.disconnect(); readingObserver = null; }
+              if (dwellTimer) { clearTimeout(dwellTimer); dwellTimer = null; }
+              window.removeEventListener('mousemove', handleUserActivity);
+              window.removeEventListener('keydown', handleUserActivity);
+              window.removeEventListener('wheel', handleUserActivity);
+
+              // 如果文章已经是已读，直接跳过，节省性能
+              if (item.is_read !== 0) return;
+
+              userActivityDetected.value = false;
+              hasDweltEnough.value = false;
+              isBottomVisible.value = false;
+
+              // 2. 布置人体活动传感器 (一次性触发)
+              window.addEventListener('mousemove', handleUserActivity, { once: true });
+              window.addEventListener('keydown', handleUserActivity, { once: true });
+              window.addEventListener('wheel', handleUserActivity, { once: true });
+
+              // 3. 激活底部视觉探测器
+              setTimeout(() => {
+                const detector = document.getElementById('read-detector');
+                if (detector) {
+                  readingObserver = new IntersectionObserver((entries) => {
+                    if (entries[0].isIntersecting) {
+                        isBottomVisible.value = true;
+                        checkAndMarkRead(); // 滚动到底部时，检查有效停留时间是否达标
+                    } else {
+                        isBottomVisible.value = false; // 往回滚了，重置状态
+                    }
+                  }, { threshold: 0.1 });
+                  readingObserver.observe(detector);
+                }
+              }, 400); // 预留一点时间让 Vue 把 Markdown 渲染完
+            };
+
+            // 强制标记已读（用于主动点击了"复制"或"查看原文"等实质性操作）
+            const forceMarkRead = () => {
+              if (activeArticle.value && activeArticle.value.is_read === 0) {
+                const url = activeArticle.value.url;
+                if (!pendingReadUrls.value.includes(url)) {
+                  pendingReadUrls.value.push(url);
+                  pywebview.api.mark_as_read(url).catch(e => console.error(e));
+                }
+              }
+            };
+            // ====================================================================
+
             const backToList = () => {
               isNavigatingBack.value = true;
               currentView.value = "list";
@@ -4838,11 +4968,14 @@
 
             // 核心：调用 Python 打开系统浏览器
             const openBrowser = (url) => {
+              forceMarkRead(); // 🚀 记录实质性交互
               pywebview.api.open_browser(url);
             };
 
             // 👇 替换原有的 copyText 函数
             const copyText = (item) => {
+              forceMarkRead(); // 🚀 记录实质性交互
+
               // 1. 获取原始 AI 摘要
               let cleanSummary = item.summary || "无总结内容";
 
@@ -5341,6 +5474,10 @@
               statusMsg,
               isCapturing,
 
+              // 🌟 只读模式
+              isReadOnlyMode,
+              readOnlyReason,
+
               // 🌟 冷却倒计时（修复白屏）
               isUpdateDisabled,
               updateCooldown,
@@ -5358,6 +5495,7 @@
               handleIconError,
 
               // 核心功能
+              handleButtonClick,
               checkUpdates,
               openDetail,
               backToList,
@@ -5365,6 +5503,7 @@
               renderMarkdown,
               openBrowser,
               copyText,
+              forceMarkRead,
               downloadFile,
               scrollToAttachments,
               takeSnapshot,

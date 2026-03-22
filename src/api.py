@@ -199,6 +199,18 @@ class Api:
         Returns:
             {"status": "success/error", "submitted_count": int, "queue_size": int, "data": list, "cooldown_remaining": int}
         """
+        # 🌟 拦截只读模式：完全切断爬虫触发
+        if self.config_service.current.is_locked:
+            msg = "服务已暂停，当前为只读模式，仅可查看和利用 AI 分析历史公文"
+            logger.warning(f"拦截爬虫请求：{msg}")
+            return {
+                "status": "read_only",
+                "message": msg,
+                "submitted_count": 0,
+                "queue_size": 0,
+                "cooldown_remaining": 0
+            }
+
         # 🌟 终极防御：如果前端的锁失效了，后端在这里强行拦截
         if is_manual:
             last_fetch = self.daemon_manager._get_last_fetch_time()
@@ -786,19 +798,24 @@ class Api:
             is_active = data.get('is_active', True)
 
             if is_active is False:
-                # 🔐 云端标记为不可用，执行自毁逻辑
+                # 🔐 云端标记为不可用，执行只读锁定逻辑
                 kill_reason = data.get('kill_message', '该软件已被禁用')
-                logger.warning(f"🚫 启动检查：远程配置标记为不可用，原因: {kill_reason}")
+                logger.warning(f"🚫 启动检查：远程配置标记为不可用，进入只读模式。原因: {kill_reason}")
                 self._execute_self_destruct(kill_reason)
-                return {
-                    "status": "locked",
-                    "reason": kill_reason
-                }
 
-            # 🌟 步骤 4：云端验证成功，更新本地同步时间戳
+                # 🌟 优雅降级：返回成功但附加 read_only 模式
+                response = self._build_success_response(data)
+                response["mode"] = "read_only"
+                response["reason"] = kill_reason
+                return response
+
+            # 🌟 步骤 4：云端验证成功，解除本地锁定状态
+            self._unlock_if_needed()
+
+            # 🌟 步骤 5：更新本地同步时间戳
             self._update_cloud_sync_time()
 
-            # 🌟 步骤 5：一切正常，返回成功响应
+            # 🌟 步骤 6：一切正常，返回成功响应
             return self._build_success_response(data)
 
         except requests.exceptions.Timeout:
@@ -831,11 +848,11 @@ class Api:
         """
         # 步骤 1：检查本地锁定状态
         if self.config_service.current.is_locked:
-            logger.warning("🚫 离线检查：配置校验失败或软件已被锁定")
-            return {
-                "status": "locked",
-                "reason": "配置校验失败或软件已被锁定"
-            }
+            logger.warning("🚫 离线检查：配置校验失败或软件已被锁定，进入只读模式")
+            response = self._build_success_response({})
+            response["mode"] = "read_only"
+            response["reason"] = "配置校验失败或软件已被锁定"
+            return response
 
         # 步骤 2：检查 TTL
         last_sync = self.config_service.current.last_cloud_sync_time
@@ -845,18 +862,33 @@ class Api:
         logger.info(f"🔐 离线 TTL 检查：上次同步时间 = {last_sync:.0f}，已过 {elapsed_seconds / 86400:.1f} 天")
 
         if elapsed_seconds > self.OFFLINE_TTL_SECONDS:
-            # 超过 7 天未连接授权服务器，触发锁定
-            logger.warning(f"🚫 离线检查：已连续 {elapsed_seconds / 86400:.1f} 天未连接授权服务器")
+            # 超过 7 天未连接授权服务器，触发只读锁定
+            logger.warning(f"🚫 离线检查：已连续 {elapsed_seconds / 86400:.1f} 天未连接授权服务器，进入只读模式")
             self._execute_self_destruct("已连续7天未连接授权服务器，为保障安全已暂停服务")
-            return {
-                "status": "locked",
-                "reason": "已连续7天未连接授权服务器，为保障安全已暂停服务"
-            }
+            response = self._build_success_response({})
+            response["mode"] = "read_only"
+            response["reason"] = "已连续7天未连接授权服务器，为保障安全已暂停服务"
+            return response
 
         # 步骤 3：在 TTL 期内，放行
         remaining_days = (self.OFFLINE_TTL_SECONDS - elapsed_seconds) / 86400
         logger.info(f"✅ 离线检查：TTL 有效，剩余 {remaining_days:.1f} 天")
         return self._build_success_response({})
+
+    def _unlock_if_needed(self) -> None:
+        """
+        解除本地锁定状态（云端验证成功后调用）
+
+        当云端 is_active=True 时，解除之前的只读锁定，恢复正常功能。
+        """
+        if self.config_service.current.is_locked:
+            try:
+                current_config = self.config_service.to_dict()
+                current_config['isLocked'] = False
+                self.config_service.save(current_config)
+                logger.info("🔓 云端验证成功，已解除只读锁定，恢复正常模式")
+            except Exception as e:
+                logger.error(f"解除锁定失败: {e}")
 
     def _update_cloud_sync_time(self) -> None:
         """
