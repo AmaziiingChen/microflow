@@ -121,7 +121,7 @@
         background: var(--accent-color);
         color: white;
         border: none;
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 700;
         cursor: pointer;
         position: relative;
@@ -1415,131 +1415,574 @@
         background: #1d4ed8;
       }
 
-      /* 2. 搜索框：平时较短，聚焦拉长 */
-      /* 1. 搜索框：加长、加深底色、改为高阻尼丝滑过渡 */
-      .search-container {
-        height: 38px;
+      /* ============================================================
+         🌟 灵动岛 Header 卡片 - 详细配置说明
+         ============================================================
+
+         【整体架构】
+         ┌─────────────────────────────────────────────────────────┐
+         │  main-card-header (外层容器)                             │
+         │  ┌──────────┐ ┌───────────────┐ ┌──────────┐            │
+         │  │ 搜索框   │ │ dock-group    │ │ 更新按钮 │            │
+         │  │ (左对齐) │ │ (今日/收藏/设置)│ │ (右对齐) │            │
+         │  └──────────┘ └───────────────┘ └──────────┘            │
+         └─────────────────────────────────────────────────────────┘
+
+         【图标来源】
+         所有图标均为【内联 SVG 自绘】，不依赖外部图标库。
+         使用 stroke 描边风格，通过 currentColor 继承文字颜色。
+         参考：Feather Icons 设计风格，简洁现代。
+
+         【颜色变量说明】
+         --pill-bg:      胶囊背景色 #f3f4f6 (极浅灰)
+         --pill-hover:   悬浮背景色 #e5e7eb (浅灰)
+         --btn-bg:       按钮背景色 #e5e7eb (与悬浮色一致)
+         --curve-silky:  丝滑弹性曲线 cubic-bezier(0.22, 0.85, 0.15, 1)
+         ============================================================ */
+      /* ============================================================
+         1. 统一背景色与悬浮色
+         ============================================================ */
+      :root {
+        --pill-bg: #f3f4f6; /* 胶囊/按钮组背景 - 极浅灰，几乎白色 */
+        --pill-hover: #e5e7eb; /* 悬浮态背景 - 稍深的灰色，提供交互反馈 */
+        /* 💡 修复：将独立按钮(搜索、更新)的底色与中间胶囊底色完全统一 */
+        --btn-bg: #f3f4f6; /* 独立按钮背景 - 与胶囊背景统一 */
+        --curve-silky: cubic-bezier(
+          0.22,
+          0.85,
+          0.15,
+          1
+        ); /* Apple 级丝滑弹性曲线 */
+      }
+
+      /* ============================================================
+         1. 完美对称外框 (消灭 justify-content 突变导致的抽动)
+         ============================================================ */
+      .main-card-header {
+        background: var(--card-bg);
+        border-radius: 30px;
+        padding: 6px 8px; /* 稍微增加一点内边距，让呼吸感更足 */
+        box-shadow:
+          0 4px 12px rgba(0, 0, 0, 0.02),
+          0 1px 3px rgba(0, 0, 0, 0.02);
+        border: 1px solid rgba(0, 0, 0, 0.03);
         display: flex;
-        flex: 1;
         align-items: center;
-        /* 👇 修改 1：底色加深，从极其通透的浅灰改为更具实体感的 #E5E7EB */
-        background: #e5e7eb;
-        border-radius: 19px;
-        padding: 0 14px;
-        box-sizing: border-box;
-        border: 1px solid transparent;
-        /* 👇 修改 2：大幅增加静默状态下的长度，填补多余的空白间隙 */
-        max-width: 100%;
+        margin-bottom: 12px;
+        /* 🌟 防止溢出 */
+        overflow: hidden;
         min-width: 0;
-        /* 👇 修改 3：核心魔法！宽度变化采用 Apple 级高阻尼曲线(ease-out-quint)，彻底消除“弹射感” */
+        max-width: 100%;
+        box-sizing: border-box;
+      }
+
+      /* 左、右护法容器：平时各占 50%，把中间元素死死挤在中心 */
+      .header-side {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        min-width: 0; /* 🌟 防止子元素撑开容器 */
+        overflow: hidden; /* 🌟 隐藏溢出内容 */
+        /* 🌟 使用更长的过渡时间让布局变化更平滑 */
+        transition: flex 1s var(--curve-silky);
+      }
+      .header-side.left {
+        justify-content: flex-start;
+      }
+      .header-side.right {
+        justify-content: flex-end;
+      }
+
+      .header-center {
+        flex: 0 0 auto;
+        display: flex;
+        justify-content: center;
+        /* 🌟 减小间距，让布局更紧凑 */
+        margin: 0 8px;
+        min-width: 0; /* 🌟 防止溢出 */
+        transition: margin 1s var(--curve-silky);
+      }
+
+      /* 搜索激活时：左侧护法疯狂膨胀，接管全屏 */
+      .main-card-header.is-searching .header-side.left {
+        flex: 100; /* 以绝对优势挤压其余空间 */
+        /* 🌟 延迟开始膨胀，给挤压动画让出时间 */
+        transition: flex 1s var(--curve-silky) 0.1s;
+      }
+      .main-card-header.is-searching .header-center {
+        /* 🌟 搜索时保持最小间距 */
+        margin: 0 4px;
+      }
+      .main-card-header.is-searching .header-side.right {
+        flex: 0 0 auto; /* 右侧收缩到最小 */
+      }
+
+      /* ============================================================
+         响应式布局：小屏幕适配（470px 以下）
+         ============================================================ */
+      @media (max-width: 470px) {
+        .main-card-header {
+          padding: 4px;
+        }
+        .header-center {
+          margin: 0 4px;
+        }
+        .dock-item {
+          width: 40px;
+          height: 34px;
+        }
+        .btn-check {
+          width: 38px !important;
+          height: 38px !important;
+        }
+        .search-morph-container {
+          height: 38px;
+          width: 38px;
+        }
+        .search-morph-container.is-active {
+          min-width: 0;
+        }
+        .btn-check:disabled,
+        .btn-check.read-only-btn {
+          width: 56px !important;
+          height: 38px !important;
+          font-size: 11px !important;
+        }
+      }
+
+      /* ============================================================
+         2. 搜索框同频弹性引擎 (替换原有的 search-morph-container)
+         ============================================================ */
+      .search-morph-container {
+        display: flex;
+        align-items: center;
+        height: 44px;
+        background: var(--btn-bg);
+        border-radius: 22px;
+        overflow: hidden;
+        position: relative;
+        /* 🌟 核心修复：用真实的 width 代替 max-width，动画速度来回绝对一致 */
+        width: 44px;
+        flex-grow: 0;
         transition:
-          max-width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1),
-          background-color 0.3s ease,
-          box-shadow 0.4s ease,
-          transform 0.4s ease;
+          width 1s var(--curve-silky),
+          flex-grow 1s var(--curve-silky),
+          background 0.6s ease;
       }
 
-      /* 👇 修改 4：悬浮时颜色同步加深，提供交互反馈 */
-      .search-container:hover:not(:focus-within) {
-        background: #d1d5db;
-        cursor: text;
+      .search-morph-container.is-active {
+        width: 100%; /* 填满左侧护法提供的庞大空间 */
+        flex-grow: 1;
+        background: var(--pill-bg);
+        /* 🌟 展开动画：先快速冲出，再平滑稳定 */
+        animation: search-expand 0.8s var(--curve-silky) forwards;
       }
 
-      .search-container:hover {
-        background: #e5e7eb;
-        cursor: text;
+      /* 🌟 搜索框展开动画 */
+      @keyframes search-expand {
+        0% {
+          width: 44px;
+        }
+        60% {
+          /* 先冲到略超过目标位置（弹性过冲） */
+        }
+        100% {
+          width: 100%;
+        }
       }
 
-      /* 🌟 联动特效：悬浮整个搜索框时，里面的放大镜图标也跟着微微变深 */
-      .search-container:hover .search-svg-icon {
-        color: #828a97; /* 介于默认的 9CA3AF 和聚焦时的 6B7280 之间 */
-        transform: scale(1.05); /* 图标极其轻微的放大，增加呼吸感 */
+      /* 🌟 搜索框收起动画：延迟开始，配合 dock-group 展开 */
+      .search-morph-container:not(.is-active) {
+        animation: search-collapse 0.6s var(--curve-silky) forwards;
       }
 
-      /* 2. 搜索框激活：夺取空间，平滑展开 */
-      .search-container:focus-within {
-        background: #ffffff;
-        max-width: 100%; /* 抢占剩余所有空间 */
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
-        transform: translateY(-1px);
-        border-color: transparent;
-      }
-      .search-container:hover:not(:focus-within) {
-        background: #e5e7eb;
-      }
-      /* 联动：搜索聚焦时，按钮收缩让位 */
-      .search-container:focus-within
-        + div
-        .btn-check:not(.loading):not(:disabled) {
-        width: 80px;
-        background: var(--btn-yield);
-        transform: scale(0.96);
+      @keyframes search-collapse {
+        0% {
+          width: 100%;
+        }
+        50% {
+          /* 先收缩到比目标更小（弹性回弹） */
+        }
+        100% {
+          width: 44px;
+        }
       }
 
-      /* 3. 🌟 新增：搜索框聚焦时，【冷却状态】按钮的变圆逻辑 (缩至38px) */
-      .search-container:focus-within + div .btn-check:disabled {
-        width: 38px !important; /* 缩成正圆的宽度 */
-        border-radius: 50% !important; /* 完美的圆角 */
-        padding: 0 !important;
-        /* 👇 核心修改：恢复灰色文字，代替原先的透明色 */
-        color: #9ca3af !important;
-        /* 👇 核心新增：由于空间从 110px 挤压到了 38px，缩小字体确保 "120s" 能完美居中显示在圆圈内 */
-        font-size: 11px !important;
-        background: #e5e7eb !important; /* 保持沉寂的灰色底色 */
-        transform: scale(0.96); /* 配合搜索框做轻微的物理后退 */
-        box-shadow: none !important;
-        letter-spacing: -0.5px; /* 稍微收紧一点字间距，防止边缘碰到圆弧 */
+      /* ============================================================
+         3. 图标组容器 dock-group
+         ============================================================ */
+      .dock-group {
+        display: flex;
+        align-items: center;
+        background: var(--pill-bg);
+        border-radius: 30px;
+        padding: 2px;
+        gap: 10%;
+        overflow: hidden;
+        will-change: max-width, background;
+        transition:
+          max-width 0.8s var(--curve-silky),
+          background 0.8s var(--curve-silky),
+          padding 0.8s var(--curve-silky);
+      }
+
+      /* 悬浮项：轻微放大 + 背景高亮 */
+      .dock-item:hover {
+        transform: scale(1.1);
+        background: var(--pill-hover);
+        z-index: 4;
+      }
+
+      /* ============================================================
+         4. 修复中间三个元素的"僵硬"点击动画
+         ============================================================ */
+      .dock-item:active {
+        transform: scale(0.95) !important;
+        transition: transform 0.1s ease;
+      }
+
+      /* ============================================================
+         4. 外部 SVG 专属遮罩渲染类 (完美解决不居中与颜色问题)
+         ============================================================ */
+      .svg-icon-mask {
+        width: 20px;
+        height: 20px;
+        background-color: var(--text-main);
+        display: block;
+
+        /* WebKit 内核兼容 */
+        -webkit-mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+
+        /* 标准属性（彻底消除 IDE 警告） */
+        mask-size: contain;
+        mask-repeat: no-repeat;
+        mask-position: center;
+      }
+
+      /* 🌟 图标尺寸调整：sm 为小号 */
+      .svg-icon-mask.sm {
+        width: 18px;
+        height: 18px;
+        z-index: 2;
+      }
+
+      /* 🌟 图标位置微调示例：取消注释并调整数值即可
+         .icon-search { transform: translate(1px, -1px); }
+         .icon-today { transform: translate(0, 1px); }
+         使用 translate(X, Y) 微调，X正右Y正下 */
+
+      /* 🌟 统一定义图标库 (使用相对路径突破本地跨域限制) */
+      .icon-search {
+        -webkit-mask-image: url("icons/search.svg");
+        mask-image: url("icons/search.svg");
+      }
+      .icon-today {
+        -webkit-mask-image: url("icons/today.svg");
+        mask-image: url("icons/today.svg");
+      }
+      .icon-star {
+        -webkit-mask-image: url("icons/star.svg");
+        mask-image: url("icons/star.svg");
+      }
+      .icon-gear {
+        -webkit-mask-image: url("icons/gear.svg");
+        mask-image: url("icons/gear.svg");
+      }
+      .icon-arrow {
+        -webkit-mask-image: url("icons/arrow.svg");
+        mask-image: url("icons/arrow.svg");
+      }
+
+      /* 🌟 图标位置微调示例（取消注释并调整数值即可）：*/
+      .icon-search {
+        transform: translate(-10px, -3px);
+      }
+      /*.icon-today { transform: translate(0, 1px); }
+      .icon-star { transform: translate(0, 0); }
+      .icon-gear { transform: translate(0, 0); }
+      .icon-arrow { transform: translate(0, 0); }
+      */
+
+      /* 悬浮项【左侧】的图标：向左微移 4px
+      .dock-item:has(~ .dock-item:hover) {
+        transform: translateX(-2px);
+      }
+      /* 悬浮项【右侧】的图标：向右微移 4px */
+      /* .dock-item:hover ~ .dock-item {
+        transform: translateX(2px);
+      } */
+
+      /* ============================================================
+         【单个图标按钮】dock-item
+         ------------------------------------------------------------
+         宽度：          44px - 与独立按钮等宽
+         高度：          38px - 短长条矩形（非正方形）
+         圆角：          12px - 圆角矩形
+         底色：          transparent - 透明，继承父容器背景
+         居中方式：      flex + align-items/justify-content: center
+
+         【图标尺寸】
+         SVG 宽高：      20px × 20px
+         描边宽度：      2px
+         颜色：          currentColor - 继承文字颜色 var(--text-main)
+         ============================================================ */
+      .dock-item {
+        width: 50px;
+        height: 38px;
+        border-radius: 19px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        background: transparent;
+        border: none;
+        color: var(--text-main);
+        will-change: transform, background, width, margin;
+        transition:
+          transform 0.5s var(--curve-silky),
+          opacity 0.4s ease,
+          background 0.3s ease,
+          width 0.8s var(--curve-silky),
+          margin 0.8s var(--curve-silky);
+      }
+      .dock-item svg {
+        width: 20px;
+        height: 20px;
+        stroke-width: 2px;
+      }
+
+      /* ============================================================
+         【搜索激活态】dock-group.is-collapsed - 灵动挤压动画
+         ------------------------------------------------------------
+         搜索展开时，dock-group 坍塌为单一的"今日"按钮：
+         - 背景渐变透明
+         - 收藏、设置按钮优雅消失
+         - 今日按钮变为圆形关闭按钮
+         ============================================================ */
+      .dock-group.is-collapsed {
+        background: transparent;
+        padding: 0;
+        gap: 0;
+        pointer-events: none;
+        /* 🌟 移除 scaleX，避免子元素被压扁成椭圆 */
+        animation: dock-collapse 0.5s var(--curve-silky) forwards;
+      }
+
+      /* 🌟 坍塌动画关键帧：只动画 gap 和 padding，不变形子元素 */
+      @keyframes dock-collapse {
+        0% {
+          gap: 10%;
+          padding: 2px;
+        }
+        100% {
+          gap: 0;
+          padding: 0;
+        }
+      }
+
+      .dock-group.is-collapsed .dock-item.hide-on-search {
+        width: 0;
+        opacity: 0;
+        margin: 0;
+        padding: 0;
+        transform: scale(0);
+        /* 🌟 延迟消失，让动画更流畅 */
+        transition:
+          width 0.4s var(--curve-silky) 0.1s,
+          opacity 0.3s ease 0.05s,
+          margin 0.4s ease 0.1s,
+          transform 0.4s var(--curve-silky) 0.05s,
+          padding 0.4s ease;
+      }
+      .dock-group.is-collapsed .dock-item.today-btn {
+        /* 🌟 保持正圆，不受父容器影响 */
+        width: 44px !important;
+        height: 44px !important;
+        border-radius: 50% !important;
+        background: var(--btn-bg);
+        transform: scale(1) !important;
+        opacity: 1;
+        pointer-events: auto;
+        flex-shrink: 0;
+        /* 🌟 今日按钮延迟出现，配合挤压动画 */
+        transition: all 0.5s var(--curve-silky) 0.15s;
+      }
+      .dock-group.is-collapsed .dock-item.today-btn:active {
+        transform: scale(0.9) !important;
+      }
+
+      /* 🌟 恢复动画：平滑展开 */
+      .dock-group:not(.is-collapsed) {
+        animation: dock-expand 0.6s var(--curve-silky) forwards;
+      }
+
+      @keyframes dock-expand {
+        0% {
+          gap: 0;
+          padding: 0;
+        }
+        100% {
+          gap: 10%;
+          padding: 2px;
+        }
       }
 
       .search-input {
+        flex: 1;
+        height: 100%;
         border: none;
         background: transparent;
         outline: none;
-        flex: 1;
         font-size: 14px;
-        margin-left: 8px;
-        color: var(--text-main);
         font-weight: 600;
+        color: var(--text-main);
+        padding: 0 0 0 16px;
+        min-width: 0;
+        opacity: 0;
+        transform: translateX(10px);
+        transition:
+          opacity 0.4s ease,
+          transform 0.8s var(--curve-silky);
+      }
+      .search-morph-container.is-active .search-input {
+        opacity: 1;
+        transform: translateX(0);
       }
       .search-input::placeholder {
-        font-weight: 500;
         color: #9ca3af;
-      }
-      .search-icon {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        opacity: 0.5; /* 降低一点透明度，让搜索图标显得低调有质感 */
+        font-weight: 500;
       }
 
-      /* 直接控制 SVG 的颜色和大小 */
-      /* 搜索图标与输入框 */
-      .search-svg-icon {
-        width: 16px !important;
-        height: 16px !important;
-        flex-shrink: 0;
-        color: #9ca3af;
-        transition: all 0.3s;
-      }
-      .search-container:focus-within .search-svg-icon {
-        color: var(--accent-color);
-        transform: scale(1.1);
-      }
-      .clear-icon {
-        color: #9ca3af;
-        cursor: pointer;
-        width: 20px;
-        height: 20px;
-        display: inline-flex;
+      /* ============================================================
+         【搜索图标按钮】search-icon-wrapper
+         ------------------------------------------------------------
+         宽高：          44px × 44px (默认正圆)
+         激活态：        36px × 36px (缩小并添加背景)
+         图标尺寸：      18px × 18px
+         描边宽度：      2.2px
+         ============================================================ */
+      .search-icon-wrapper {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        display: flex;
         align-items: center;
         justify-content: center;
-        border-radius: 50%;
-        transition: 0.2s;
+        cursor: pointer;
         flex-shrink: 0;
+        background: transparent;
+        transition:
+          background 0.4s ease,
+          transform 0.2s ease;
+        color: var(--text-main);
       }
-      .clear-icon:hover {
-        background: #d1d5db;
-        color: #ef4444;
+      .search-morph-container.is-active .search-icon-wrapper {
+        background: var(--btn-bg);
+        margin: 4px;
+        width: 36px;
+        height: 36px;
+      }
+      .search-morph-container.is-active .search-icon-wrapper:active {
+        transform: scale(0.9);
+      }
+      .search-icon-wrapper svg {
+        width: 18px;
+        height: 18px;
+        stroke-width: 2.2px;
+      }
+
+      /* ============================================================
+         【右侧按钮容器】right-actions
+         ------------------------------------------------------------
+         定位：          flex-shrink: 0 - 不被压缩
+         居中：          align-items: center - 垂直居中
+         ============================================================ */
+      .right-actions {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+      }
+
+      /* ============================================================
+         【更新按钮】btn-check
+         ------------------------------------------------------------
+         默认态（可点击）：
+           宽高：        44px × 44px - 正圆形
+           圆角：        50% - 完美正圆
+           底色：        var(--btn-bg) #e5e7eb
+           图标：        自绘刷新 SVG，18px × 18px
+
+         冷却态（倒计时）：
+           宽度：        68px - 小胶囊
+           圆角：        22px - 胶囊形
+           底色：        var(--pill-bg) #f3f4f6
+           文字颜色：    #9ca3af (灰色)
+           字体大小：    13px
+
+         只读态：
+           与冷却态样式一致
+
+         悬浮效果：
+           放大：        scale(1.05)
+           底色：        var(--pill-hover)
+         ============================================================ */
+      .btn-check {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: var(--btn-bg);
+        color: var(--text-main);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: none;
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: all 0.8s var(--curve-silky);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .btn-check:hover {
+        background: var(--pill-hover);
+        transform: scale(1.05);
+      }
+      .btn-check:active {
+        transform: scale(0.95);
+      }
+
+      /* ============================================================
+         3. 冷却按钮 3秒后正圆塌陷
+         ============================================================ */
+      /* 刚进入冷却时：小胶囊 (比如提示 120s) */
+      .btn-check:disabled,
+      .btn-check.read-only-btn {
+        width: 72px !important;
+        border-radius: 22px !important;
+        background: var(--pill-bg) !important;
+        color: #9ca3af !important;
+        font-size: 13px !important;
+        font-weight: 600;
+        border: none !important;
+        cursor: not-allowed;
+        transition: all 0.8s var(--curve-silky) !important;
+      }
+
+      /* 🌟 核心新增：3秒后塌陷为不占空间的正圆，恢复绝对对称 */
+      .btn-check.cooldown-shrink {
+        width: 44px !important;
+        border-radius: 50% !important;
+        font-size: 12px !important;
+        letter-spacing: -0.5px;
+        padding: 0 !important;
+      }
+
+      .main-card-header.is-searching .btn-check:not(:disabled) {
+        /* 🌟 保持正圆，只缩放整体 */
+        transform: scale(0.96);
+        border-radius: 50% !important;
       }
 
       .settings-title {
@@ -2011,10 +2454,13 @@
       /* 加载状态：变圆并在极光中心 */
       .btn-check.loading {
         width: 38px !important;
+        height: 38px !important; /* 🌟 修复：必须同时设置高度才能保持正圆 */
         border-radius: 50% !important;
         background: transparent !important;
         color: transparent !important;
         box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06) !important;
+        /* 🌟 确保不会被其他 transform 影响 */
+        transform: none !important;
       }
       /* 4. 🌈 彩虹极光动画：柔和、旋转 */
       .aurora-light {
@@ -2166,49 +2612,91 @@
 
     <div id="app" style="display: flex; flex-direction: column; height: 100%">
       <div v-show="currentView === 'list'" class="list-view">
-        <div class="header-action">
-          <div class="search-container">
-            <span class="search-icon">
-              <svg
-                class="search-svg-icon"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <circle cx="11" cy="11" r="8"></circle>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              </svg>
-            </span>
-            <input
-              type="text"
-              v-model="searchQuery"
-              @input="handleSearch"
-              class="search-input"
-              placeholder="Search Everything."
-            />
-            <span v-show="searchQuery" class="clear-icon" @click="clearSearch"
-              >✕</span
+        <!-- ============================================================
+             🌟 灵动岛 Header 卡片 - 完美对称布局
+             ============================================================
+             【布局结构】使用 header-side 左右护法容器，强制居中
+             ┌─────────────────────────────────────────────────────────────┐
+             │  header-side.left  header-center  header-side.right        │
+             │  (搜索框-左对齐)   (图标组-绝对居中)  (更新按钮-右对齐)      │
+             └─────────────────────────────────────────────────────────────┘
+             ============================================================ -->
+        <div
+          class="main-card-header"
+          :class="{ 'is-searching': isSearchUIExpanded }"
+        >
+          <div class="header-side left">
+            <div
+              class="search-morph-container"
+              :class="{ 'is-active': isSearchUIExpanded }"
             >
+              <input
+                type="text"
+                class="search-input"
+                placeholder="搜索公文..."
+                ref="searchInputRef"
+                v-model="searchQuery"
+                @input="handleSearch"
+                @keyup.esc="closeSearchUI"
+              />
+              <div class="search-icon-wrapper" @click="handleSearchClick">
+                <div class="svg-icon-mask icon-search"></div>
+              </div>
+            </div>
           </div>
 
-          <div style="display: flex; align-items: center; flex-shrink: 0">
-            <button
-              class="btn-check"
-              :class="{ loading: isLoading, 'read-only-btn': isReadOnlyMode && !isLoading }"
-              @click="handleButtonClick()"
-              :disabled="isUpdateDisabled && !isLoading && !isReadOnlyMode"
+          <div class="header-center">
+            <div
+              class="dock-group"
+              :class="{ 'is-collapsed': isSearchUIExpanded }"
             >
-              <span v-if="!isLoading" class="btn-text">
-                <span v-if="isReadOnlyMode">只读</span>
-                <span v-else-if="isUpdateDisabled">{{ updateCooldown }}s</span>
-                <span v-else>更新</span>
-              </span>
-              <div class="aurora-light"></div>
-              <div class="aurora-inner"></div>
-            </button>
+              <button
+                class="dock-item today-btn"
+                @click="handleTodayClick"
+                title="今日 / 退出搜索"
+              >
+                <div class="svg-icon-mask icon-today"></div>
+              </button>
+              <button
+                class="dock-item hide-on-search"
+                @click="filterBySource('收藏')"
+                title="收藏夹"
+              >
+                <div class="svg-icon-mask icon-star"></div>
+              </button>
+              <button
+                class="dock-item hide-on-search"
+                @click="openSettings"
+                title="设置"
+              >
+                <div class="svg-icon-mask icon-gear"></div>
+              </button>
+            </div>
+          </div>
+
+          <div class="header-side right">
+            <div class="right-actions">
+              <button
+                class="btn-check"
+                :class="{
+                  loading: isLoading,
+                  'read-only-btn': isReadOnlyMode && !isLoading,
+                  'cooldown-shrink': isCooldownShrink
+                }"
+                @click="handleButtonClick()"
+                :disabled="isUpdateDisabled && !isLoading && !isReadOnlyMode"
+                title="更新公文"
+              >
+                <span v-if="isReadOnlyMode" class="btn-text">只读</span>
+                <span v-else-if="isLoading" class="btn-text"></span>
+                <span v-else-if="isUpdateDisabled" class="btn-text"
+                  >{{ updateCooldown }}s</span
+                >
+                <div v-else class="svg-icon-mask sm icon-arrow"></div>
+                <div class="aurora-light"></div>
+                <div class="aurora-inner"></div>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -3436,6 +3924,7 @@
             // 🎯 更新按钮冷却时间相关变量
             const updateCooldown = ref(0); // 剩余冷却秒数
             const isUpdateDisabled = ref(false); // 是否禁用更新按钮
+            const isCooldownShrink = ref(false); // 🌟 新增：控制3秒后缩为正圆
             let cooldownTimer = null; // 冷却计时器
 
             // 🎯 冷却倒计时函数（支持持久化恢复）
@@ -3446,13 +3935,22 @@
                 if (cooldownTimer) clearInterval(cooldownTimer);
                 isUpdateDisabled.value = false;
                 updateCooldown.value = 0;
+                isCooldownShrink.value = false; // 恢复
                 return;
               }
 
               isUpdateDisabled.value = true;
               updateCooldown.value = remainingSeconds;
+              isCooldownShrink.value = false; // 🌟 刚进入冷却时，保持胶囊形状
 
               if (cooldownTimer) clearInterval(cooldownTimer);
+
+              // 🌟 核心逻辑：3秒后自动塌陷为正圆
+              setTimeout(() => {
+                if (isUpdateDisabled.value) {
+                  isCooldownShrink.value = true;
+                }
+              }, 3000);
 
               cooldownTimer = setInterval(() => {
                 updateCooldown.value--;
@@ -3461,7 +3959,7 @@
                   cooldownTimer = null;
                   isUpdateDisabled.value = false;
                   updateCooldown.value = 0;
-                  // 冷却结束，清理 localStorage
+                  isCooldownShrink.value = false; // 结束冷却，恢复原生状态
                   localStorage.removeItem("lastManualUpdateTime");
                 }
               }, 1000);
@@ -3556,6 +4054,7 @@
               source_name: "系统通知",
               category: "v1.0.0",
               tags: ["新手指南", "版本 1.0.0"],
+              url: "https://github.com/AmaziiingChen/microflow",
               summary:
                 "初次见面！为了让 AI 能够为您智能总结公文，请点击本卡片进入设置界面，配置您的 API 密钥。这里未来也会是接收最新版本更新和系统通知的地方。",
               content:
@@ -3588,8 +4087,12 @@
                       systemNotice.value.publish_time,
                     department: res.announcement.department || "系统公告",
                     source_name: res.announcement.source_name || "系统通知",
-                    category: res.announcement.category || res.announcement.version || systemNotice.value.category,
+                    category:
+                      res.announcement.category ||
+                      res.announcement.version ||
+                      systemNotice.value.category,
                     tags: res.announcement.tags || systemNotice.value.tags,
+                    url: res.announcement.url || systemNotice.value.url,
                     summary:
                       res.announcement.summary || systemNotice.value.summary,
                     content:
@@ -3817,6 +4320,47 @@
             const searchQuery = ref("");
             const isSearching = ref(false); // 搜索状态标识
             let searchTimeout = null;
+
+            // 🌟 灵动 Header 状态与方法
+            const isSearchUIExpanded = ref(false); // 独立控制形变动画的状态
+            const searchInputRef = ref(null);
+
+            // 点击搜索放大镜的智能交互
+            const handleSearchClick = () => {
+              if (!isSearchUIExpanded.value) {
+                // 1. 未展开时：触发物理形变，并聚焦
+                isSearchUIExpanded.value = true;
+                nextTick(() => {
+                  setTimeout(() => {
+                    if (searchInputRef.value) searchInputRef.value.focus();
+                  }, 300); // 留出贝塞尔曲线形变的时间
+                });
+              } else {
+                // 2. 已展开时：如果输入框有内容，强制触发一次搜索
+                if (searchQuery.value.trim()) {
+                  handleSearch();
+                } else {
+                  searchInputRef.value.focus();
+                }
+              }
+            };
+
+            // 关闭搜索形变
+            const closeSearchUI = () => {
+              isSearchUIExpanded.value = false;
+              clearSearch(); // 复用原有的 clearSearch 逻辑重置列表
+            };
+
+            // 【今日】按钮的复合功能
+            const handleTodayClick = () => {
+              if (isSearchUIExpanded.value) {
+                // 搜索展开状态下，它充当关闭/退回键
+                closeSearchUI();
+              } else {
+                // 默认状态下，重置筛选到"全部"
+                filterBySource("全部");
+              }
+            };
 
             // 🌟 新增：所有可用来源（固定顺序，与后端 SPIDER_REGISTRY 一致）
             const allAvailableSources = ref([
@@ -4119,6 +4663,7 @@
                   source_name: systemNotice.value.source_name,
                   category: systemNotice.value.category,
                   parsedTags: systemNotice.value.tags,
+                  url: systemNotice.value.url,
                   parsedBody:
                     systemNotice.value.content || systemNotice.value.summary,
                   summary: systemNotice.value.summary,
@@ -4336,6 +4881,10 @@
                 if (elapsedSeconds < COOLDOWN_SECONDS) {
                   // 还在冷却期内，继续未完成的倒计时
                   startCooldown(COOLDOWN_SECONDS - elapsedSeconds);
+                  // 🌟 如果已经超过3秒了，直接变成正圆
+                  if (elapsedSeconds >= 3) {
+                    isCooldownShrink.value = true;
+                  }
                   console.log(
                     `🔄 恢复冷却倒计时: 剩余 ${COOLDOWN_SECONDS - elapsedSeconds} 秒`,
                   );
@@ -5721,6 +6270,7 @@
               // 🌟 冷却倒计时（修复白屏）
               isUpdateDisabled,
               updateCooldown,
+              isCooldownShrink, // 🌟 新增暴露
 
               // 🌟 进度条相关
               spiderProgress,
@@ -5760,6 +6310,13 @@
               isSearching,
               handleSearch,
               clearSearch,
+
+              // 🌟 灵动 Header 状态与方法
+              isSearchUIExpanded,
+              searchInputRef,
+              handleSearchClick,
+              closeSearchUI,
+              handleTodayClick,
 
               // 设置与置顶
               openSettings,

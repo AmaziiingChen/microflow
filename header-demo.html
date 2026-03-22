@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>智能 Header 弹性交互 Demo</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+      :root {
+        --bg-color: #f3f4f6;
+        --accent-color: #579bf0;
+        --pill-bg: #ffffff;
+        --text-main: #111827;
+        --text-sub: #6b7280;
+
+        /* 🌟 核心弹性曲线 (极具物理张力的回弹) */
+        --curve-elastic: cubic-bezier(0.34, 1.56, 0.64, 1);
+        --curve-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg-color);
+        margin: 0;
+        padding: 60px 20px;
+        display: flex;
+        justify-content: center;
+      }
+
+      #app {
+        width: 100%;
+        max-width: 900px;
+      }
+
+      /* ============================================================
+     Header 整体布局
+     ============================================================ */
+      .header-container {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 52px;
+        position: relative;
+      }
+
+      /* 左侧动态功能区 */
+      .header-left-group {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex: 1; /* 占据剩余空间，提供挤占基础 */
+        min-width: 0; /* 防止子元素撑破 Flex 容器 */
+      }
+
+      /* ============================================================
+     通用丸状按钮 (Pill)
+     ============================================================ */
+      .pill-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 38px;
+        padding: 0 16px;
+        background: var(--pill-bg);
+        border: 1px solid rgba(0, 0, 0, 0.04);
+        border-radius: 99px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-sub);
+        cursor: pointer;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+        white-space: nowrap;
+        will-change: transform, background-color, border-color;
+        transition:
+          transform 0.15s var(--curve-smooth),
+          background-color 0.3s ease,
+          border-color 0.3s ease,
+          color 0.3s ease;
+      }
+
+      .pill-btn:hover {
+        background-color: #f9fafb;
+        border-color: rgba(0, 0, 0, 0.08);
+        color: var(--text-main);
+      }
+
+      .pill-btn:active {
+        transform: scale(0.95);
+      }
+
+      .pill-btn svg {
+        margin-right: 6px; /* 给带有文字的图标加点间距 */
+      }
+
+      /* ============================================================
+     🚀 核心 1：弹性拉伸的搜索容器
+     ============================================================ */
+      .search-elastic-wrapper {
+        display: flex;
+        align-items: center;
+        height: 38px;
+        background: var(--pill-bg);
+        border: 1px solid rgba(0, 0, 0, 0.04);
+        border-radius: 99px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+        overflow: hidden; /* 隐藏未展开的输入框 */
+        position: relative;
+
+        /* 动画引擎：利用 max-width 和 flex-grow 实现平滑的物理挤压 */
+        will-change: max-width, flex-grow, box-shadow;
+        transition:
+          max-width 0.7s var(--curve-elastic),
+          flex-grow 0.7s var(--curve-elastic),
+          box-shadow 0.3s ease;
+
+        max-width: 44px; /* 初始宽度：刚好装下一个图标 */
+        flex-grow: 0; /* 初始不生长 */
+      }
+
+      /* 激活态：搜索框像弹簧一样撑开 */
+      .search-elastic-wrapper.is-active {
+        flex-grow: 1; /* 疯狂抢占空间 */
+        max-width: 600px; /* 解除宽度封印 */
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); /* 提升高度感 */
+        border-color: rgba(87, 155, 240, 0.3);
+      }
+
+      /* 触发器（最左侧的放大镜） */
+      .search-trigger {
+        width: 44px;
+        height: 38px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        border: none;
+        color: var(--text-sub);
+        cursor: pointer;
+        transition: color 0.3s ease;
+      }
+
+      .search-elastic-wrapper.is-active .search-trigger {
+        color: var(--accent-color);
+        pointer-events: none; /* 展开后变成纯图标，不再响应点击 */
+      }
+
+      /* 内部真实的输入框 */
+      .search-input {
+        flex: 1;
+        min-width: 0; /* Flexbox 截断神键 */
+        height: 100%;
+        border: none;
+        outline: none;
+        background: transparent;
+        font-size: 14px;
+        color: var(--text-main);
+        padding: 0;
+
+        will-change: opacity, transform;
+        transition:
+          opacity 0.4s 0.1s ease,
+          transform 0.6s var(--curve-elastic);
+
+        opacity: 0;
+        transform: translateX(10px); /* 初始向右偏移一点 */
+      }
+
+      .search-elastic-wrapper.is-active .search-input {
+        opacity: 1;
+        transform: translateX(0); /* 随着展开滑入原位 */
+      }
+
+      /* 内部的“搜索”执行按钮 */
+      .search-execute-btn {
+        margin-right: 4px;
+        height: 30px;
+        padding: 0 16px;
+        background: var(--accent-color);
+        color: white;
+        border: none;
+        border-radius: 99px;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        flex-shrink: 0;
+
+        will-change: opacity, transform;
+        transition:
+          opacity 0.5s ease,
+          transform 0.6s var(--curve-elastic);
+
+        opacity: 0;
+        transform: scale(0.8) translateX(20px); /* 藏在右边 */
+        pointer-events: none;
+      }
+
+      .search-elastic-wrapper.is-active .search-execute-btn {
+        opacity: 1;
+        transform: scale(1) translateX(0); /* 弹射出来 */
+        pointer-events: auto;
+      }
+
+      .search-execute-btn:active {
+        transform: scale(0.92) !important; /* 按压反馈 */
+      }
+
+      /* ============================================================
+     🚀 核心 2：向左坍塌合并的按钮组 (收藏、设置)
+     ============================================================ */
+      .collapsing-group {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        overflow: hidden; /* 防止挤压时内容溢出 */
+
+        /* 动画引擎：宽度收缩 + 透明度渐变 + 向左滑入 */
+        will-change: max-width, opacity, transform, gap;
+        transition:
+          max-width 0.6s var(--curve-elastic),
+          opacity 0.4s ease,
+          transform 0.6s var(--curve-elastic),
+          gap 0.6s var(--curve-elastic);
+
+        max-width: 300px;
+        opacity: 1;
+        transform: translateX(0);
+      }
+
+      /* 激活态：合并消失动画 */
+      .collapsing-group.is-collapsed {
+        max-width: 0; /* 彻底压扁 */
+        opacity: 0; /* 隐身 */
+        gap: 0; /* 消除间距 */
+        transform: translateX(-20px) scale(0.9); /* 向左侧【今日】按钮底部滑入缩小 */
+        pointer-events: none; /* 彻底禁用 */
+      }
+
+      /* ============================================================
+     【今日】按钮特殊状态
+     ============================================================ */
+      .today-btn {
+        z-index: 10; /* 保证它在坍塌层上方 */
+        will-change: background-color, border-color, color;
+      }
+
+      /* 当作为关闭按钮时的状态 */
+      .today-btn.is-close-mode {
+        background-color: #fffbeb;
+        border-color: #fcd34d;
+        color: #b45309;
+      }
+
+      /* ============================================================
+     右侧更新按钮
+     ============================================================ */
+      .header-right-group {
+        margin-left: 20px;
+        flex-shrink: 0; /* 绝对禁止被左边挤压变形 */
+      }
+
+      .update-btn {
+        background-color: var(--accent-color);
+        color: white;
+        border: none;
+      }
+      .update-btn:hover {
+        background-color: #4b89dc;
+        color: white;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div class="header-container">
+        <div class="header-left-group">
+          <div
+            class="search-elastic-wrapper"
+            :class="{ 'is-active': isSearching }"
+          >
+            <button class="search-trigger" @click="openSearch">
+              <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+            </button>
+            <input
+              type="text"
+              class="search-input"
+              placeholder="搜索公文标题..."
+              ref="searchInputRef"
+              v-model="searchQuery"
+              @keyup.enter="doSearch"
+              @keyup.esc="closeSearch"
+            />
+            <button class="search-execute-btn" @click="doSearch">搜索</button>
+          </div>
+
+          <button
+            class="pill-btn today-btn"
+            :class="{ 'is-close-mode': isSearching }"
+            @click="handleTodayClick"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+            今日
+          </button>
+
+          <div
+            class="collapsing-group"
+            :class="{ 'is-collapsed': isSearching }"
+          >
+            <button class="pill-btn">
+              <svg
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <polygon
+                  points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
+                ></polygon>
+              </svg>
+              收藏
+            </button>
+            <button class="pill-btn" style="padding: 0 12px">
+              <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <circle cx="12" cy="12" r="3"></circle>
+                <path
+                  d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+                ></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="header-right-group">
+          <button class="pill-btn update-btn">更新公文</button>
+        </div>
+      </div>
+
+      <p
+        style="
+          text-align: center;
+          color: #9ca3af;
+          font-size: 13px;
+          margin-top: 50px;
+        "
+      >
+        💡 提示：点击左侧的放大镜图标触发动画。<br />展开后，“今日”按钮会变成高亮的关闭状态。
+      </p>
+    </div>
+
+    <script>
+      const { createApp, ref, nextTick } = Vue;
+
+      createApp({
+        setup() {
+          const isSearching = ref(false);
+          const searchQuery = ref("");
+          const searchInputRef = ref(null);
+
+          // 展开搜索
+          const openSearch = () => {
+            isSearching.value = true;
+            // 等待弹性动画的初始阶段过去后，让输入框获取焦点
+            nextTick(() => {
+              setTimeout(() => {
+                if (searchInputRef.value) searchInputRef.value.focus();
+              }, 300);
+            });
+          };
+
+          // 关闭搜索
+          const closeSearch = () => {
+            isSearching.value = false;
+            searchQuery.value = "";
+          };
+
+          // 真实的搜索执行动作
+          const doSearch = () => {
+            if (!searchQuery.value.trim()) return;
+            alert(`正在搜索: ${searchQuery.value}`);
+          };
+
+          // 【今日】按钮的复合交互
+          const handleTodayClick = () => {
+            if (isSearching.value) {
+              // 如果正在搜索，它充当【关闭/恢复】按钮
+              closeSearch();
+            } else {
+              // 如果没有搜索，它充当【过滤今日数据】按钮
+              alert("执行：筛选今日发布的公文");
+            }
+          };
+
+          return {
+            isSearching,
+            searchQuery,
+            searchInputRef,
+            openSearch,
+            closeSearch,
+            doSearch,
+            handleTodayClick,
+          };
+        },
+      }).mount("#app");
+    </script>
+  </body>
+</html>

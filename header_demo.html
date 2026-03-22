@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MicroFlow 智能 Header 重构验证 Demo</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+      :root {
+        --bg-color: #f3f4f6;
+        --card-bg: #ffffff;
+        --text-main: #111827;
+        --text-sub: #6b7280;
+        --accent-color: #579bf0; /* 主蓝色 */
+
+        /* ============================================================
+       🚀 核心：灵动贝塞尔曲线 (阻尼回弹曲线)
+       这个曲线在展开和收缩末端会有一个轻微的过冲(Overshoot)，富有弹性
+       ============================================================ */
+        --curve-lively: cubic-bezier(0.2, 1.2, 0.3, 1); /* 灵动阻尼曲线 */
+        --curve-smooth: cubic-bezier(0.4, 0, 0.2, 1); /* 标准平滑曲线 */
+
+        --header-height: 72px;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        background: var(--bg-color);
+        margin: 0;
+        display: flex;
+        justify-content: center;
+        padding-top: 50px;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      #app {
+        width: 100%;
+        max-width: 900px;
+        padding: 0 20px;
+      }
+
+      /* ============================================================
+     🌟 核心重构：新的 Header 容器
+     ============================================================ */
+      .new-header {
+        height: var(--header-height);
+        background: var(--card-bg);
+        border-radius: 20px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
+        padding: 0 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        position: relative;
+        overflow: hidden; /* 防止展开时溢出 */
+      }
+
+      /* ============================================================
+     通用圆形按钮样式 (响应式点击)
+     ============================================================ */
+      .action-circle-btn {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        border: none;
+        cursor: pointer;
+        background: transparent;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #9ca3af; /* 默认灰色 */
+        position: relative;
+        /* 亚像素抖动修复与硬件加速 */
+        will-change: transform, background-color, color;
+        transition:
+          transform 0.1s ease,
+          background-color 0.3s var(--curve-smooth),
+          color 0.3s var(--curve-smooth);
+      }
+
+      .action-circle-btn:hover {
+        background-color: #f3f4f6;
+        color: var(--text-main);
+      }
+
+      .action-circle-btn:active {
+        transform: scale(0.92); /* 按下时的物理缩放 */
+      }
+
+      /* 选中态/激活态 (应用主色温) */
+      .action-circle-btn.active {
+        color: var(--accent-color);
+        background-color: #eff6ff; /* 浅蓝色底 */
+      }
+
+      /* SVG 图标通用大小控制 */
+      .action-circle-btn svg {
+        width: 20px;
+        height: 20px;
+        flex-shrink: 0;
+      }
+
+      /* ============================================================
+     左侧逻辑：Today 按钮 (固定)
+     ============================================================ */
+      .header-today-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        z-index: 10; /* 保证不被遮挡 */
+      }
+
+      /* Today 按钮上的数字气泡 */
+      .btn-today-badge {
+        position: absolute;
+        top: -4px;
+        right: -4px;
+        background-color: #ef4444; /* 红色 */
+        color: white;
+        font-size: 10px;
+        font-weight: 700;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* ============================================================
+     🚀 核心：向左收缩的中部组 (收藏、设置)
+     ============================================================ */
+      .header-mid-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-left: 12px;
+        flex: 1; /* 平时占满剩余空间 */
+        position: relative;
+        /* 核心动画属性：
+       max-width 负责物理挤压，
+       opacity 和 margin 负责灵动滑入滑出
+    */
+        will-change: max-width, opacity, margin-left, transform;
+        transition:
+          max-width 0.65s var(--curve-lively),
+          opacity 0.4s var(--curve-smooth),
+          margin-left 0.65s var(--curve-lively),
+          transform 0.65s var(--curve-lively);
+
+        max-width: 300px; /* 平时预留足够宽度 */
+      }
+
+      /* 🌟 当搜索框激活时，中部组执行“向左收缩动画” */
+      .header-mid-group.collapsing-left {
+        max-width: 0; /* 物理上被挤压到 0 */
+        opacity: 0; /* 幽灵般消失 */
+        margin-left: 0; /* 紧贴 Today 按钮 */
+        transform: translateX(-15px); /* 额外的灵动平移 */
+        pointer-events: none; /* 禁用点击 */
+      }
+
+      /* ============================================================
+     🚀 核心：向左挤占的搜索容器
+     ============================================================ */
+      .expanding-search-wrapper {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end; /* 搜索按钮平时在最右侧 */
+        position: relative;
+        /* 利用 Flex-grow 实现智能挤占布局 
+    */
+        will-change: flex-grow, background-color;
+        transition:
+          flex-grow 0.65s var(--curve-lively),
+          background-color 0.4s var(--curve-smooth);
+
+        flex-grow: 0; /* 平时是一个小按钮 */
+        z-index: 5;
+      }
+
+      /* 🌟 当搜索框激活时，搜索容器执行“灵动挤占动画” */
+      .expanding-search-wrapper.is-searching {
+        flex-grow: 1; /* 挤占除了 Today 以外的所有空间 */
+        background-color: #f3f4f6; /* 变成胶囊形状 */
+        border-radius: 21px; /* 胶囊圆角 */
+      }
+
+      /* 搜索图标按钮 (激活时变成胶囊内的左侧图标) */
+      .btn-search-trigger {
+        color: var(--accent-color); /* 搜索图标常亮主色 */
+      }
+
+      /* 当激活搜索时，搜索按钮样式微调 */
+      .expanding-search-wrapper.is-searching .btn-search-trigger {
+        background: transparent;
+        pointer-events: none; /* 变为纯图标，不可点击 */
+      }
+
+      /* 🌟 真正的搜索输入框 (平时隐藏) */
+      .expanding-search-input {
+        width: 0; /* 平时宽度为 0 */
+        border: none;
+        background: transparent;
+        height: 100%;
+        outline: none;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-main);
+        padding: 0;
+        will-change: width, opacity, padding;
+        transition:
+          width 0.65s var(--curve-lively),
+          opacity 0.4s 0.1s var(--curve-smooth),
+          /* 延迟一点显示文字 */ padding 0.65s var(--curve-lively);
+        opacity: 0;
+      }
+
+      /* 🌟 激活搜索时，输入框“灵动展开” */
+      .expanding-search-wrapper.is-searching .expanding-search-input {
+        width: calc(100% - 84px); /* 扣除搜索图标和关闭按钮的宽度 */
+        opacity: 1;
+        padding: 0 10px;
+      }
+
+      /* 关闭搜索按钮 (平时隐藏) */
+      .btn-close-search {
+        width: 0;
+        height: 42px;
+        border-radius: 50%;
+        border: none;
+        cursor: pointer;
+        background: transparent;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #9ca3af;
+        will-change: width, opacity;
+        transition: all 0.65s var(--curve-lively);
+        opacity: 0;
+        padding: 0;
+        margin-right: 2px;
+      }
+
+      .btn-close-search:hover {
+        color: #ef4444; /* 关闭悬浮变为红色 */
+      }
+
+      /* 🌟 激活搜索时，关闭按钮“滑入” */
+      .expanding-search-wrapper.is-searching .btn-close-search {
+        width: 40px;
+        opacity: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <header class="new-header">
+        <div class="header-today-wrapper">
+          <button class="action-circle-btn active">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path
+                d="M12 7a5 5 0 110 10 5 5 0 010-10zm0 2a3 3 0 100 6 3 3 0 000-6zm0-7a1 1 0 011 1v2a1 1 0 01-2 0V3a1 1 0 011-1zm0 17a1 1 0 011 1v2a1 1 0 01-2 0v-2a1 1 0 011-1zm8.66-12.061l1.414 1.415a1 1 0 01-1.414 1.414l-1.415-1.414a1 1 0 011.414-1.415zM4.757 17.828l1.415 1.415a1 1 0 01-1.415 1.414l-1.414-1.415a1 1 0 011.414-1.414zm13.903.001a1 1 0 011.414 0l1.415 1.414a1 1 0 11-1.414 1.415l-1.415-1.415a1 1 0 010-1.414zM3.343 6.172l1.415-1.415a1 1 0 011.414 1.414L4.757 7.586a1 1 0 11-1.414-1.414zM22 12a1 1 0 01-1 1h-2a1 1 0 010-2h2a1 1 0 011 1zM5 12a1 1 0 01-1 1H2a1 1 0 010-2h2a1 1 0 011 1z"
+              />
+            </svg>
+            <span class="btn-today-badge">3</span>
+          </button>
+        </div>
+
+        <div
+          class="header-mid-group"
+          :class="{ 'collapsing-left': isSearching }"
+        >
+          <button
+            class="action-circle-btn"
+            @click="handleCollect"
+            :class="{ active: isCollected }"
+          >
+            <svg viewBox="0 0 1024 1024">
+              <path
+                d="M558.26773333 881.64693333c-26.8288-14.7968-70.5024-14.6944-97.1776 0L272.57173333 985.42933333c-53.6064 29.5424-88.7808 2.56-78.5408-59.8016l35.9936-219.8016c5.12-31.3344-8.448-74.752-30.0544-96.768L47.49653333 453.30773333c-43.4176-44.288-29.696-87.6544 30.0032-96.768l210.7392-32c30.0032-4.608 65.28-31.5392 78.6432-59.8528L461.14133333 64.75093333c26.8288-56.8832 70.4512-56.6784 97.1264 0l94.208 199.9872c13.4656 28.4672 48.896 55.296 78.6944 59.8528l210.7392 32.0512c60.0064 9.1136 73.216 52.5824 30.0544 96.7168l-152.5248 155.648c-21.7088 22.1696-35.1232 65.6896-30.0544 96.8192l35.9936 219.8016c10.24 62.5664-25.1392 89.1904-78.5408 59.8016l-188.5696-103.7824z"
+                fill="currentColor"
+              ></path>
+            </svg>
+          </button>
+          <button class="action-circle-btn">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path
+                d="M12 1a1 1 0 011 1v.755c.66.11 1.294.316 1.884.6l.533-.534a1 1 0 011.414 0l1.415 1.415a1 1 0 010 1.414l-.534.533c.284.59.49 1.224.6 1.884H22a1 1 0 011 1v2a1 1 0 01-1 1h-.755c-.11.66-.316 1.294-.6 1.884l.534.533a1 1 0 010 1.414l-1.415 1.415a1 1 0 01-1.414 0l-.533-.534a7.96 7.96 0 01-1.884.6V22a1 1 0 01-1 1h-2a1 1 0 01-1-1v-.755a7.96 7.96 0 01-1.884-.6l-.533.534a1 1 0 01-1.414 0l-1.415-1.415a1 1 0 010-1.414l.534-.533a7.96 7.96 0 01-.6-1.884H2a1 1 0 01-1-1v-2a1 1 0 011-1h.755c.11-.66.316-1.294.6-1.884l-.534-.533a1 1 0 010-1.414l1.415-1.415a1 1 0 011.414 0l.533.534A7.96 7.96 0 0111 2.755V2a1 1 0 011-1zm0 7a4 4 0 100 8 4 4 0 000-8z"
+              />
+            </svg>
+          </button>
+        </div>
+
+        <div
+          class="expanding-search-wrapper"
+          :class="{ 'is-searching': isSearching }"
+        >
+          <button
+            class="action-circle-btn btn-search-trigger"
+            @click="openSearch"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path
+                d="M11 2a9 9 0 100 18 9 9 0 000-18zm0 2a7 7 0 100 14 7 7 0 000-14zm8.66 14.246l3.633 3.633a1 1 0 01-1.414 1.414l-3.633-3.633a1 1 0 011.414-1.414z"
+              />
+            </svg>
+          </button>
+
+          <input
+            type="text"
+            class="expanding-search-input"
+            ref="searchInput"
+            placeholder="搜索公文标题..."
+            v-model="searchQuery"
+            @keyup.esc="closeSearch"
+          />
+
+          <button class="btn-close-search" @click="closeSearch">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path
+                d="M12 10.586l4.95-4.95a1 1 0 111.414 1.414l-4.95 4.95 4.95 4.95a1 1 0 01-1.414 1.414l-4.95-4.95-4.95 4.95a1 1 0 01-1.414-1.414l4.95-4.95-4.95-4.95a1 1 0 011.414-1.414l4.95 4.95z"
+              />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <p
+        style="
+          text-align: center;
+          color: #9ca3af;
+          font-size: 13px;
+          margin-top: 30px;
+        "
+      >
+        提示：点击圆形搜索按钮触发灵动挤占动画。Esc 键可退出搜索。
+      </p>
+    </div>
+
+    <script>
+      const { createApp, ref, nextTick } = Vue;
+
+      createApp({
+        setup() {
+          const isSearching = ref(false); // 搜索激活状态
+          const isCollected = ref(false); // 模拟收藏状态
+          const searchQuery = ref(""); // 搜索输入框内容
+          const searchInput = ref(null); // DOM 引用
+
+          // 打开搜索 (触发动画)
+          const openSearch = () => {
+            isSearching.value = true;
+            // 等待 CSS 动画执行完毕后，自动聚焦输入框
+            nextTick(() => {
+              setTimeout(() => {
+                searchInput.value.focus();
+              }, 400); // 预留一部分贝塞尔曲线展开时间
+            });
+          };
+
+          // 关闭搜索 (反向动画)
+          const closeSearch = () => {
+            isSearching.value = false;
+            searchQuery.value = "";
+          };
+
+          const handleCollect = () => {
+            isCollected.value = !isCollected.value;
+          };
+
+          return {
+            isSearching,
+            isCollected,
+            searchQuery,
+            searchInput,
+            openSearch,
+            closeSearch,
+            handleCollect,
+          };
+        },
+      }).mount("#app");
+    </script>
+  </body>
+</html>

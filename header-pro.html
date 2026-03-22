@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>灵动岛式 Header 交互</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+      :root {
+        --bg-color: #f3f5f7;
+        --card-bg: #ffffff;
+        --icon-color: #000000;
+
+        /* 组背景色和 Hover 颜色，精确还原你的设计图 */
+        --pill-bg: #f1f2f5;
+        --pill-hover: #e2e4e9;
+        --btn-bg: #dcdfe4;
+
+        /* 🌟 核心弹性曲线：赋予物理碰撞和回弹感 */
+        --curve-spring: cubic-bezier(0.25, 1.2, 0.3, 1);
+        --curve-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: var(--bg-color);
+        margin: 0;
+        padding: 60px 20px;
+        display: flex;
+        justify-content: center;
+      }
+
+      #app {
+        width: 100%;
+        max-width: 900px;
+      }
+
+      /* ============================================================
+     卡片式外框 (还原你的白底卡片要求)
+     ============================================================ */
+      .main-card {
+        background: var(--card-bg);
+        border-radius: 24px;
+        box-shadow:
+          0 10px 30px rgba(0, 0, 0, 0.05),
+          0 1px 3px rgba(0, 0, 0, 0.02);
+        padding: 24px;
+        min-height: 400px;
+      }
+
+      /* ============================================================
+     Header 布局：水平分布
+     ============================================================ */
+      .header-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: center; /* 默认居中对齐，或者可改为 flex-start */
+        gap: 16px;
+        height: 56px;
+        position: relative;
+        /* 为搜索框的推挤留出弹性空间 */
+        transition: gap 0.5s var(--curve-spring);
+      }
+
+      .header-toolbar.is-searching {
+        justify-content: flex-start;
+      }
+
+      /* ============================================================
+     通用圆形独立按钮 (如默认态的搜索、右侧的刷新)
+     ============================================================ */
+      .circle-btn {
+        width: 52px;
+        height: 52px;
+        border-radius: 50%;
+        background: var(--btn-bg);
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        flex-shrink: 0;
+        transition:
+          transform 0.2s var(--curve-smooth),
+          background 0.3s ease;
+      }
+      .circle-btn:active {
+        transform: scale(0.9);
+      }
+      .circle-btn svg {
+        width: 24px;
+        height: 24px;
+        color: var(--icon-color);
+        stroke-width: 2.2px;
+      }
+
+      /* ============================================================
+     🚀 组件 A：动态搜索容器 (Morphing Search)
+     ============================================================ */
+      .search-morph-container {
+        display: flex;
+        align-items: center;
+        height: 52px;
+        background: var(--btn-bg);
+        border-radius: 26px;
+        overflow: hidden;
+        position: relative;
+
+        /* 核心形变动画：控制宽度和 Flex 占比 */
+        will-change: max-width, flex-grow, background;
+        transition:
+          max-width 0.6s var(--curve-spring),
+          flex-grow 0.6s var(--curve-spring),
+          background 0.4s ease;
+
+        max-width: 52px; /* 初始仅为一个圆的宽度 */
+        flex-grow: 0;
+      }
+
+      /* 激活态：变为长胶囊 */
+      .search-morph-container.is-active {
+        flex-grow: 1;
+        max-width: 600px; /* 释放宽度 */
+        background: var(--pill-bg); /* 背景变浅 */
+      }
+
+      /* 搜索框内真正的输入区域 */
+      .search-input {
+        flex: 1;
+        height: 100%;
+        border: none;
+        background: transparent;
+        outline: none;
+        font-size: 16px;
+        font-weight: 600;
+        color: #000;
+        padding: 0 0 0 20px;
+        min-width: 0;
+
+        /* 滑入动画 */
+        opacity: 0;
+        transform: translateX(10px);
+        transition:
+          opacity 0.3s ease,
+          transform 0.6s var(--curve-spring);
+      }
+
+      .search-morph-container.is-active .search-input {
+        opacity: 1;
+        transform: translateX(0);
+      }
+
+      .search-input::placeholder {
+        color: #888;
+        font-weight: 500;
+      }
+
+      /* 搜索框内部的放大镜图标 (随状态改变位置和背景) */
+      .search-icon-wrapper {
+        width: 52px;
+        height: 52px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        flex-shrink: 0;
+        background: transparent;
+        transition:
+          background 0.4s ease,
+          transform 0.2s ease;
+      }
+
+      /* 当搜索展开时，右侧的放大镜变成带背景的圆按钮 */
+      .search-morph-container.is-active .search-icon-wrapper {
+        background: var(--btn-bg);
+        margin: 4px;
+        width: 44px;
+        height: 44px;
+      }
+      .search-morph-container.is-active .search-icon-wrapper:active {
+        transform: scale(0.9);
+      }
+
+      /* ============================================================
+     🚀 组件 B：联动缩放的图标组 (The Dynamic Dock)
+     ============================================================ */
+      .dock-group {
+        display: flex;
+        align-items: center;
+        background: var(--pill-bg); /* 整体的浅灰色底 */
+        border-radius: 26px;
+        padding: 4px;
+        gap: 2px;
+        overflow: hidden;
+
+        /* 核心坍塌动画 */
+        will-change: max-width, background;
+        transition:
+          max-width 0.6s var(--curve-spring),
+          background 0.6s var(--curve-spring),
+          padding 0.6s var(--curve-spring);
+
+        max-width: 300px;
+      }
+
+      /* 🌟 Dock 联动缩放逻辑 (核心灵动感) */
+      /* 1. 当鼠标悬浮在整个组上时，所有图标默认变小、变淡 */
+      .dock-group:hover .dock-item {
+        transform: scale(0.85);
+        opacity: 0.6;
+      }
+      /* 2. 鼠标真正悬浮的那个图标：放大、变清晰、加背景 */
+      .dock-group .dock-item:hover {
+        transform: scale(1.15);
+        opacity: 1;
+        background: var(--pill-hover); /* 短长条圆角矩形阴影 */
+      }
+
+      /* 组内的独立图标 */
+      .dock-item {
+        width: 52px;
+        height: 44px; /* 高度略小于组，形成圆角矩形阴影 */
+        border-radius: 14px; /* 短长条圆角矩形 */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        background: transparent;
+        border: none;
+
+        will-change: transform, opacity, width, margin;
+        transition:
+          transform 0.3s var(--curve-spring),
+          opacity 0.3s ease,
+          background 0.3s ease,
+          width 0.5s var(--curve-spring),
+          margin 0.5s var(--curve-spring);
+      }
+
+      /* 激活搜索态：组坍塌，变成单一的【今日】按钮 */
+      .dock-group.is-collapsed {
+        background: transparent; /* 去除整体底色 */
+        padding: 0;
+        gap: 0;
+        pointer-events: none; /* 动画期间防止误触 */
+      }
+
+      /* 搜索态下，隐藏除【今日】外的其他图标 */
+      .dock-group.is-collapsed .dock-item.hide-on-search {
+        width: 0;
+        opacity: 0;
+        margin: 0;
+        transform: scale(0);
+      }
+
+      /* 搜索态下，【今日】变成独立圆按钮形状 */
+      .dock-group.is-collapsed .dock-item.today-btn {
+        width: 52px;
+        height: 52px;
+        border-radius: 50%;
+        background: var(--btn-bg);
+        transform: scale(1);
+        opacity: 1;
+        pointer-events: auto; /* 恢复今日按钮的可点击性 */
+      }
+      .dock-group.is-collapsed .dock-item.today-btn:active {
+        transform: scale(0.9);
+      }
+
+      /* ============================================================
+     右侧固定刷新按钮
+     ============================================================ */
+      .right-actions {
+        margin-left: auto; /* 永远将其推向最右侧 */
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div class="main-card">
+        <div class="header-toolbar" :class="{ 'is-searching': isSearching }">
+          <div
+            class="search-morph-container"
+            :class="{ 'is-active': isSearching }"
+          >
+            <input
+              type="text"
+              class="search-input"
+              placeholder="在这输入文本"
+              ref="searchInputRef"
+              v-model="searchQuery"
+              @keyup.enter="doSearch"
+              @keyup.esc="closeSearch"
+            />
+            <div class="search-icon-wrapper" @click="handleSearchClick">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <circle cx="11" cy="11" r="7"></circle>
+                <line x1="21" y1="21" x2="16" y2="16"></line>
+              </svg>
+            </div>
+          </div>
+
+          <div class="dock-group" :class="{ 'is-collapsed': isSearching }">
+            <button
+              class="dock-item today-btn"
+              @click="handleTodayClick"
+              title="今日"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <rect x="5" y="3" width="14" height="18" rx="2" ry="2"></rect>
+                <line x1="9" y1="7" x2="15" y2="7"></line>
+                <rect
+                  x="9"
+                  y="11"
+                  width="6"
+                  height="6"
+                  rx="1"
+                  fill="currentColor"
+                ></rect>
+              </svg>
+            </button>
+
+            <button class="dock-item hide-on-search" title="收藏">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <polygon
+                  points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
+                ></polygon>
+              </svg>
+            </button>
+
+            <button class="dock-item hide-on-search" title="设置">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <circle cx="12" cy="12" r="3"></circle>
+                <path
+                  d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+                ></path>
+              </svg>
+            </button>
+          </div>
+
+          <div class="right-actions">
+            <button class="circle-btn" title="刷新">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M21 2v6h-6"></path>
+                <path d="M3 12a9 9 0 1 0 2.1-5.9L21 8"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div
+          style="
+            margin-top: 40px;
+            text-align: center;
+            color: #a1a1aa;
+            font-weight: 500;
+          "
+        >
+          <p>
+            ✨ 鼠标划过中间三个图标，体验 <b>动态焦点缩放与圆角矩形背板</b>。
+          </p>
+          <p>🔍 点击左侧搜索放大镜，体验 <b>弹性挤占与组坍塌</b>。</p>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const { createApp, ref, nextTick } = Vue;
+
+      createApp({
+        setup() {
+          const isSearching = ref(false);
+          const searchQuery = ref("");
+          const searchInputRef = ref(null);
+
+          // 处理搜索图标点击
+          const handleSearchClick = () => {
+            if (!isSearching.value) {
+              // 1. 未展开时，点击触发展开
+              isSearching.value = true;
+              nextTick(() => {
+                setTimeout(() => {
+                  if (searchInputRef.value) searchInputRef.value.focus();
+                }, 300); // 配合动画时间聚焦
+              });
+            } else {
+              // 2. 已展开时，点击右侧的放大镜执行真实的搜索
+              doSearch();
+            }
+          };
+
+          // 关闭搜索
+          const closeSearch = () => {
+            isSearching.value = false;
+            searchQuery.value = "";
+          };
+
+          // 执行搜索
+          const doSearch = () => {
+            if (!searchQuery.value.trim()) return;
+            alert(`开始搜索: ${searchQuery.value}`);
+          };
+
+          // 【今日】按钮的复合功能
+          const handleTodayClick = () => {
+            if (isSearching.value) {
+              // 处于搜索状态时，点击今日相当于“取消/恢复默认”
+              closeSearch();
+            } else {
+              // 处于默认状态时，执行原本的今日过滤逻辑
+              alert("触发：过滤今日公文");
+            }
+          };
+
+          return {
+            isSearching,
+            searchQuery,
+            searchInputRef,
+            handleSearchClick,
+            closeSearch,
+            doSearch,
+            handleTodayClick,
+          };
+        },
+      }).mount("#app");
+    </script>
+  </body>
+</html>

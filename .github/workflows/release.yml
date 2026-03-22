@@ -137,6 +137,7 @@ jobs:
                   'source_name': '系统通知',           # 灰色标签-来源
                   'tags': ['初版发布','使用指南','免责声明'],      # 彩色标签数组
                   'category': tag_name,                # 灰色标签-分类（通常与版本号相同）
+                  'url': f'https://github.com/{repo}/releases/tag/{tag_name}',  # 查看原文链接
 
                   # ---------- 公告摘要（列表页展示） ----------
                   'summary': f'MicroFlow {tag_name} 版本现已发布！本次更新包含新功能、优化和问题修复。',
