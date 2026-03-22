@@ -743,9 +743,6 @@
         background: #fff9e6;
         border-color: #ffd700;
       }
-      .badge-favorite:active {
-        transform: scale(0.95);
-      }
       .badge-favorite.is-favorite {
         background: #fff9e6;
         border-color: #ffd700;
@@ -1848,32 +1845,36 @@
       /* 🌟 滑块背景 - 相对定位自适应引擎 */
       .dock-slider {
         position: absolute;
-        /* 🌟 锚定起跑线：紧贴父容器的 2px padding 边缘 */
+        /* 🌟 锚定起跑线：紧贴父容器的 2px padding 边缘，起点设为0即可 */
         left: 2px;
         top: 2px;
         width: 50px;
         height: 38px;
+
+        /* 🌟 核心防御 2：滑块本身也不允许被挤压 */
+        flex-shrink: 0;
+
         border-radius: 19px;
         background: rgba(0, 0, 0, 0.1);
         box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
         pointer-events: none;
         z-index: 0;
-        /* 🌟 贝塞尔曲线：弹性滑动效果 */
+        /* 贝塞尔曲线：弹性滑动效果 */
         transition: transform 0.4s var(--curve-pop);
       }
 
-      /* 滑块位置：today - 最左侧 */
+      /* 1. 滑块位置：today - 最左侧 */
       .dock-group.at-today .dock-slider {
         transform: translateX(0); /* 原地不动，完美覆盖第一个按钮 */
       }
 
-      /* 滑块位置：收藏 - 居中 */
+      /* 2. 滑块位置：收藏 - 居中 */
       .dock-group.at-favorite .dock-slider {
-        /* 🌟 核心修复：移动 100% 的自身宽度 + 4px的固定间距 */
+        /* 🌟 核心修复：移动 100% 的自身宽度 + 4px 的固定间距 */
         transform: translateX(calc(100% + 4px));
       }
 
-      /* 滑块位置：设置 - 最右侧 */
+      /* 3. 滑块位置：设置 - 最右侧 */
       .dock-group.at-settings .dock-slider {
         /* 🌟 核心修复：移动 200% 的自身宽度 + 2个间距 (8px) */
         transform: translateX(calc(200% + 8px));
@@ -2896,6 +2897,128 @@
       .list-pop-enter-active {
         z-index: 1;
       }
+
+      /* ============================================================
+         🌟 详情页右上角功能徽章：V2 高级物理微交互动画
+         ============================================================ */
+      :root {
+        --curve-apple-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+
+      /* 强制所有徽章开启硬件加速，防止动画期间文字和图标抖动 */
+      .badge-attachment,
+      .badge-snapshot,
+      .badge-refresh,
+      .badge-favorite,
+      .badge-home,
+      .badge-pin {
+        will-change: transform;
+      }
+
+      /* 1. 【附件】：向下俯冲 (Dive Down) */
+      @keyframes dive-down-v2 {
+        0% {
+          transform: translateY(0);
+        }
+        15% {
+          transform: scaleY(1.08);
+        }
+        55% {
+          transform: translateY(10px) scaleY(0.7);
+        }
+        100% {
+          transform: translateY(0) scaleY(1);
+        }
+      }
+      .badge-attachment.is-animating {
+        animation: dive-down-v2 0.5s var(--curve-apple-spring) !important;
+      }
+
+      /* 2. 【截图】：快门闪烁与重力按压 (Shutter Press) */
+      @keyframes shutter-press-v2 {
+        0% {
+          transform: scale(1);
+        }
+        15% {
+          transform: scale(0.8);
+        }
+        85% {
+          transform: scale(0.96);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+      .badge-snapshot.is-animating {
+        animation: shutter-press-v2 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+        transform: none;
+      }
+
+      /* 3. 【刷新 / AI生成】：弹性回旋 (Elastic Spin) */
+      @keyframes elastic-spin-v2 {
+        0% {
+          transform: rotate(0deg) scale(1);
+        }
+        50% {
+          transform: rotate(180deg) scale(0.7);
+        }
+        100% {
+          transform: rotate(360deg) scale(1);
+        }
+      }
+      /* 注意刷新动画作用于 svg 图标本身 */
+      .badge-refresh.is-animating .icon-svg {
+        animation: elastic-spin-v2 0.6s cubic-bezier(0.68, -0.55, 0.26, 1.55) !important;
+      }
+      .badge-refresh.is-animating {
+        transform: none; /* 防止外层容器缩小，只让内部图标旋转 */
+      }
+
+      /* 4. 【收藏】：心跳爆破 (Pop & Burst) */
+      @keyframes star-pop-v2 {
+        0% {
+          transform: scale(1);
+        }
+        20% {
+          transform: scale(0.65);
+        }
+        55% {
+          transform: scale(1.45) rotate(15deg);
+        }
+        80% {
+          transform: scale(0.9) rotate(-3deg);
+        }
+        100% {
+          transform: scale(1) rotate(0deg);
+        }
+      }
+      .badge-favorite.is-animating {
+        animation: star-pop-v2 0.6s var(--curve-apple-spring) !important;
+        transform: none;
+      }
+
+      /* 5. 【Home / 返回】：向左抽离 (Swoop Back) */
+      @keyframes swoop-back-v2 {
+        0% {
+          transform: translateX(0) scale(1) rotate(0);
+        }
+        15% {
+          transform: scale(1.03);
+        }
+        50% {
+          transform: translateX(-10px) scale(0.85) rotate(-6deg);
+        }
+        80% {
+          transform: translateX(2px) scale(1.02) rotate(1deg);
+        }
+        100% {
+          transform: translateX(0) scale(1) rotate(0deg);
+        }
+      }
+      .badge-home.is-animating {
+        animation: swoop-back-v2 0.5s var(--curve-apple-spring) !important;
+        transform: none;
+      }
     </style>
   </head>
   <body>
@@ -3807,6 +3930,7 @@
                 <span
                   v-if="activeArticle.parsedAttachments && activeArticle.parsedAttachments.length > 0"
                   class="badge-attachment"
+                  @mousedown="playAnim($event, 500)"
                   @click="scrollToAttachments"
                   data-tooltip="点击查看所有附件"
                 >
@@ -3830,6 +3954,7 @@
                 <span
                   class="badge-snapshot"
                   id="btn-snapshot-top"
+                  @mousedown="playAnim($event, 600)"
                   @click="takeSnapshot(activeArticle)"
                   data-tooltip="保存快照"
                 >
@@ -3881,6 +4006,7 @@
                 <span
                   class="badge-refresh"
                   :class="{ 'is-loading': isRegenerating }"
+                  @mousedown="playAnim($event, 600)"
                   @click="regenerateSummary(activeArticle)"
                   :data-tooltip="isRegenerating ? '正在生成中...' : '重新生成'"
                 >
@@ -3905,7 +4031,7 @@
                 <span
                   class="badge-favorite"
                   :class="{ 'is-favorite': activeArticle && activeArticle.is_favorite }"
-                  @click="toggleFavorite(activeArticle)"
+                  @click="toggleFavoriteWithAnim(activeArticle, $event)"
                   :data-tooltip="activeArticle && activeArticle.is_favorite ? '取消收藏' : '收藏卡片'"
                 >
                   <svg
@@ -3940,6 +4066,7 @@
 
                 <span
                   class="badge-home"
+                  @mousedown="playAnim($event, 500)"
                   @click="backToList"
                   data-tooltip="返回列表"
                 >
@@ -4222,7 +4349,7 @@
                 class="action-btn btn-copy"
                 @click="copyText(activeArticle)"
               >
-                复制全文
+                复制内容
               </button>
               <button
                 class="action-btn btn-view"
@@ -4329,6 +4456,23 @@
             const statusMsg = ref("");
             const isReadOnlyMode = ref(false); // 🌟 新增：只读模式标记
             const readOnlyReason = ref(""); // 🌟 新增：只读模式原因
+
+            // 🌟 新增：高级物理动画强制完整播放器
+            const playAnim = (event, duration) => {
+              const element = event.currentTarget;
+              if (!element) return;
+              // 移除可能存在的旧类，强制引发重绘 (Reflow)
+              element.classList.remove("is-animating");
+              void element.offsetWidth;
+
+              // 添加类名触发动画
+              element.classList.add("is-animating");
+
+              // 动画结束后自动移除
+              setTimeout(() => {
+                element.classList.remove("is-animating");
+              }, duration);
+            };
 
             // 🎯 更新按钮冷却时间相关变量
             const updateCooldown = ref(0); // 剩余冷却秒数
@@ -6361,6 +6505,17 @@
               }
             };
 
+            // 🌟 带动画延迟的收藏切换（先播放动画，再切换状态）
+            const toggleFavoriteWithAnim = (item, event) => {
+              if (!item) return;
+              // 播放动画
+              playAnim(event, 600);
+              // 延迟 300ms 后执行状态切换（动画中途切换，体验更好）
+              setTimeout(() => {
+                toggleFavorite(item);
+              }, 600);
+            };
+
             // 2. 在 setup() 的末尾增加下载方法，暴露给模板
             const downloadFile = async (att) => {
               // 解构附件对象，兼容旧数据（无 download_type 字段时默认 direct）
@@ -6861,6 +7016,7 @@
               openBrowser,
               copyText,
               toggleFavorite,
+              toggleFavoriteWithAnim,
               forceMarkRead,
               downloadFile,
               scrollToAttachments,
@@ -6889,6 +7045,7 @@
               // 设置与置顶
               openSettings,
               closeSettingsWithAutoSave,
+              playAnim,
               backToPrevious,
               config,
               showApiKey,
