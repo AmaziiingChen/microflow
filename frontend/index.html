@@ -21,6 +21,17 @@
         --btn-yield: #7caff4;
       }
 
+      /* 🌟 专属内联设置卡片样式 */
+      .inline-settings-card {
+        cursor: default !important; /* 内部是表单，不显示手型 */
+        padding: 24px 20px !important;
+      }
+      .inline-settings-card:hover,
+      .inline-settings-card:active {
+        transform: none !important; /* 🌟 屏蔽物理悬浮与下压，方便内部输入框交互 */
+        background-color: var(--card-bg) !important;
+      }
+
       .list-date {
         margin-left: auto; /* 在 flex 中把它推向最右边 */
         font-weight: 600;
@@ -157,6 +168,11 @@
         cursor: not-allowed;
       }
 
+      /* 🌟 冷却状态：红色背景警示 */
+      .btn-check.is-cooldown {
+        color: red !important;
+      }
+
       /* 🌟 只读模式按钮样式：灰色调，保留交互动画 */
       .btn-check.read-only-btn {
         background: linear-gradient(
@@ -243,7 +259,7 @@
          🌟 新增：iOS 备忘录风格时间标头
          ============================================================ */
       .date-group-header {
-        font-size: 20px;
+        font-size: 18px;
         font-weight: 800;
         color: #111827;
         margin: 24px 0 12px 6px;
@@ -1440,6 +1456,71 @@
       }
 
       /* ============================================================
+         🌟 新增：设置面板 (Apple Sheet 风格弹窗)
+         ============================================================ */
+      .settings-overlay {
+        position: fixed;
+        inset: 0;
+        /* 黑色半透明背景 + 轻微毛玻璃 */
+        background: rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        z-index: 999; /* 保证在所有元素之上 */
+        display: flex;
+        justify-content: center;
+        align-items: flex-end; /* 🌟 让弹窗靠底部对齐 */
+        padding: 16px;
+      }
+
+      .settings-modal {
+        width: 100%;
+        max-width: 600px;
+        height: 85vh; /* 占据屏幕 85% 高度 */
+        background: #f3f4f6;
+        border-radius: 24px;
+        box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.15);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        position: relative;
+        padding-top: 10px; /* 给拉手留出空间 */
+      }
+
+      /* 模态框顶部的小拉手 (暗示可滑动/抽屉感) */
+      .modal-drag-handle {
+        width: 40px;
+        height: 5px;
+        background: rgba(0, 0, 0, 0.15);
+        border-radius: 4px;
+        margin: 0 auto 12px auto;
+        flex-shrink: 0;
+      }
+
+      /* 🌟 动画：遮罩层的渐隐渐现 */
+      .modal-fade-enter-active,
+      .modal-fade-leave-active {
+        transition: opacity 0.4s var(--curve-silky);
+      }
+      .modal-fade-enter-from,
+      .modal-fade-leave-to {
+        opacity: 0;
+      }
+
+      /* 🌟 动画：弹窗主体的物理弹簧滑入 */
+      .modal-spring-enter-active,
+      .modal-spring-leave-active {
+        transition:
+          transform 0.5s var(--curve-silky),
+          opacity 0.3s ease;
+      }
+      .modal-spring-enter-from,
+      .modal-spring-leave-to {
+        /* 从底部往下 100% 的位置，并略微缩小，弹上来时会有变大的视觉效果 */
+        transform: translateY(100%) scale(0.96);
+        opacity: 0;
+      }
+
+      /* ============================================================
          🌟 灵动岛 Header 卡片 - 详细配置说明
          ============================================================
 
@@ -1467,32 +1548,41 @@
          1. 统一背景色与悬浮色
          ============================================================ */
       :root {
-        --pill-bg: #f3f4f6; /* 胶囊/按钮组背景 - 极浅灰，几乎白色 */
-        --pill-hover: #e5e7eb; /* 悬浮态背景 - 稍深的灰色，提供交互反馈 */
-        /* 💡 修复：将独立按钮(搜索、更新)的底色与中间胶囊底色完全统一 */
-        --btn-bg: #f3f4f6; /* 独立按钮背景 - 与胶囊背景统一 */
-        --curve-silky: cubic-bezier(
-          0.22,
-          0.85,
-          0.15,
-          1
-        ); /* Apple 级丝滑弹性曲线 */
+        /* 🌟 核心修复：抛弃死板的浅灰，改用半透明黑。
+           这会在玻璃上“压”出一个清晰的坑，边界瞬间明显，而且极具质感！ */
+        --pill-bg: rgba(0, 0, 0, 0.06);
+        --pill-hover: rgba(0, 0, 0, 0.1);
+        --btn-bg: rgba(0, 0, 0, 0.06);
+
+        --curve-silky: cubic-bezier(0.22, 0.85, 0.15, 1);
       }
 
       /* ============================================================
          1. 完美对称外框 (消灭 justify-content 突变导致的抽动)
          ============================================================ */
+      /* ============================================================
+         1. 优化：Apple 级高透玻璃材质 (Bottom Toolbar)
+         ============================================================ */
       .main-card-header {
-        background: rgba(255, 255, 255, 0.85);
+        /* 🌟 核心修复 1：大幅降低白底浓度！从 0.65 降到 0.25，让背后的内容真正透过来 */
+        background: rgba(255, 255, 255, 0.15);
+
+        /* 🌟 核心修复 2：全靠底层的“模糊”和“色彩提纯”来形成遮挡感，而不是靠白漆 */
         backdrop-filter: blur(20px) saturate(180%);
         -webkit-backdrop-filter: blur(20px) saturate(180%);
+
         border-radius: 30px;
         padding: 6px 8px;
+
+        /* 🌟 核心修复 3：降低内侧高光白边的亮度（从0.7降到0.4），防止边缘过曝发白 */
         box-shadow:
-          0 8px 32px rgba(0, 0, 0, 0.12),
-          0 4px 16px rgba(0, 0, 0, 0.08),
-          0 2px 8px rgba(0, 0, 0, 0.04);
-        border: 1px solid rgba(0, 0, 0, 0.06);
+          0 16px 40px rgba(0, 0, 0, 0.08),
+          0 4px 12px rgba(0, 0, 0, 0.04),
+          inset 0 1px 1px rgba(255, 255, 255, 0.4);
+
+        /* 边框也相应减弱一点点 */
+        border: 1px solid rgba(255, 255, 255, 0.3);
+
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -1503,7 +1593,6 @@
         z-index: 100;
         max-width: 600px;
         margin: 0 auto;
-        /* 🌟 防止溢出 */
         overflow: hidden;
         min-width: 0;
         box-sizing: border-box;
@@ -1782,11 +1871,14 @@
          .icon-today { transform: translate(0, 1px); }
          使用 translate(X, Y) 微调，X正右Y正下 */
 
-      /* 🌟 统一定义图标库 (使用相对路径突破本地跨域限制) */
-      .icon-search {
-        -webkit-mask-image: url("icons/search.svg");
-        mask-image: url("icons/search.svg");
+      /* ✅ 新增：内联搜索图标样式 */
+      .inline-search-icon {
+        width: 18px;
+        height: 18px;
+        flex-shrink: 0;
+        /* color: inherit 会自动让 currentColor 生效 */
       }
+
       .icon-today {
         -webkit-mask-image: url("icons/today.svg");
         mask-image: url("icons/today.svg");
@@ -1804,10 +1896,6 @@
         mask-image: url("icons/arrow.svg");
       }
 
-      /* 🌟 图标位置微调示例（取消注释并调整数值即可）：*/
-      .icon-search {
-        transform: translate(-15px, 0px);
-      }
       /*.icon-today { transform: translate(0, 1px); }
       .icon-star { transform: translate(0, 0); }
       .icon-gear { transform: translate(0, 0); }
@@ -1952,7 +2040,8 @@
         font-size: 14px;
         font-weight: 600;
         color: var(--text-main);
-        padding: 0 0 0 16px;
+        /* 🌟 核心修复 1：增加右侧 44px 的 padding，防止文字在展开后被绝对定位的图标遮住 */
+        padding: 0 44px 0 16px;
         min-width: 0;
         opacity: 0;
         transform: translateX(10px);
@@ -1978,6 +2067,9 @@
          描边宽度：      2.2px
          ============================================================ */
       .search-icon-wrapper {
+        /* 🌟 核心修复 2：设置为绝对定位并靠右。彻底摆脱隐形输入框的挤压！ */
+        position: absolute;
+        right: 0;
         width: 44px;
         height: 44px;
         border-radius: 50%;
@@ -2838,7 +2930,11 @@
     </div>
 
     <div id="app" style="display: flex; flex-direction: column; height: 100%">
-      <div v-show="currentView === 'list'" class="list-view">
+      <div
+        v-show="currentView === 'list'"
+        class="list-view"
+        @click="handleListClick"
+      >
         <!-- 🎯 爬虫进度条 -->
         <div
           v-if="isLoading && updatePhase === 'spider'"
@@ -2932,7 +3028,6 @@
 
         <div v-if="statusMsg" class="status-center">{{ statusMsg }}</div>
 
-        <!-- 新增：来源筛选栏 -->
         <div class="filter-scroll-container">
           <div
             v-for="src in sources"
@@ -2943,7 +3038,430 @@
             {{ src }}
           </div>
         </div>
+
         <transition-group name="list-pop" tag="div" style="position: relative">
+          <div
+            v-if="isSettingsOpen"
+            key="system_settings_card"
+            class="list-card inline-settings-card"
+          >
+            <div
+              class="title-row"
+              style="
+                align-items: center;
+                border-bottom: 1px dashed #e5e7eb;
+                padding-bottom: 16px;
+                margin-bottom: 20px;
+              "
+            >
+              <h3
+                class="list-card-title"
+                style="
+                  color: var(--accent-color);
+                  display: flex;
+                  align-items: center;
+                  gap: 6px;
+                  font-size: 18px;
+                "
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  style="width: 20px; height: 20px"
+                >
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <path
+                    d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+                  ></path>
+                </svg>
+                系统设置
+              </h3>
+              <span class="badge-home" @click="closeSettings" style="margin: 0"
+                >收起面板</span
+              >
+            </div>
+
+            <div class="settings-section-title" style="margin: 0 0 12px 4px">
+              AI 引擎与提示词
+            </div>
+            <div class="form-group">
+              <label class="form-label">API Base URL</label>
+              <input
+                type="text"
+                v-model="config.baseUrl"
+                class="form-input"
+                placeholder="https://api.deepseek.com/v1"
+              />
+            </div>
+            <div class="form-group">
+              <label class="form-label">API Key</label>
+              <div style="position: relative">
+                <input
+                  :type="showApiKey ? 'text' : 'password'"
+                  v-model="config.apiKey"
+                  class="form-input"
+                  style="padding-right: 60px"
+                />
+                <button
+                  @click="showApiKey = !showApiKey"
+                  style="
+                    position: absolute;
+                    right: 10px;
+                    top: 50%;
+                    transform: translateY(-50%);
+                    background: none;
+                    border: none;
+                    cursor: pointer;
+                    color: var(--accent-color);
+                    font-size: 12px;
+                    font-weight: 700;
+                  "
+                >
+                  {{ showApiKey ? '隐藏' : '显示' }}
+                </button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Model Name</label>
+              <input
+                type="text"
+                v-model="config.modelName"
+                class="form-input"
+              />
+            </div>
+            <div class="form-group">
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                  margin-bottom: 8px;
+                "
+              >
+                <label class="form-label" style="margin: 0"
+                  >System Prompt</label
+                >
+                <button class="badge-refresh" @click="resetPrompt">重置</button>
+              </div>
+              <textarea
+                v-model="config.prompt"
+                class="form-input"
+                style="min-height: 120px"
+              ></textarea>
+            </div>
+
+            <div class="settings-section-title" style="margin: 24px 0 12px 4px">
+              阅读与行为偏好
+            </div>
+            <div class="form-group">
+              <label class="form-label">阅读字体</label>
+              <div class="list-row-group">
+                <div
+                  class="list-row-item"
+                  :class="{ active: config.fontFamily === 'sans-serif' }"
+                  @click="config.fontFamily = 'sans-serif'"
+                >
+                  <span style="font-weight: 700; font-size: 15px; color: #111"
+                    >现代黑体</span
+                  >
+                  <span class="row-check">✓</span>
+                </div>
+                <div
+                  class="list-row-item"
+                  :class="{ active: config.fontFamily === 'serif' }"
+                  @click="config.fontFamily = 'serif'"
+                >
+                  <span
+                    style="
+                      font-weight: 700;
+                      font-size: 15px;
+                      color: #111;
+                      font-family:
+                        &quot;Songti SC&quot;, &quot;Noto Serif CJK SC&quot;,
+                        &quot;SimSun&quot;, serif;
+                    "
+                    >经典宋体</span
+                  >
+                  <span class="row-check">✓</span>
+                </div>
+                <div
+                  class="list-row-item"
+                  :class="{ active: config.fontFamily === 'custom' }"
+                  @click="config.fontFamily = 'custom'"
+                >
+                  <div
+                    style="
+                      display: flex;
+                      align-items: center;
+                      gap: 12px;
+                      width: 100%;
+                    "
+                  >
+                    <span
+                      style="
+                        font-weight: 700;
+                        font-size: 15px;
+                        color: #111;
+                        font-family: &quot;UserCustomFont&quot;, sans-serif;
+                      "
+                      >外部导入</span
+                    >
+                    <span
+                      style="
+                        font-size: 12px;
+                        color: #9ca3af;
+                        flex: 1;
+                        white-space: nowrap;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                      "
+                    >
+                      {{ config.customFontName ? config.customFontName :
+                      '未导入字体' }}
+                    </span>
+                    <button
+                      class="badge-attachment import-font-btn"
+                      style="margin: 0"
+                      @click.stop="importCustomFont"
+                    >
+                      {{ config.customFontName ? '更换' : '导入' }}
+                    </button>
+                    <span class="row-check" style="margin-left: 4px">✓</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">追踪模式</label>
+              <div class="segmented-control">
+                <div
+                  class="segment-item"
+                  :class="{ active: config.trackMode === 'today' }"
+                  @click="config.trackMode = 'today'"
+                >
+                  当日追踪
+                </div>
+                <div
+                  class="segment-item"
+                  :class="{ active: config.trackMode === 'continuous' }"
+                  @click="config.trackMode = 'continuous'"
+                >
+                  持续追踪
+                </div>
+              </div>
+              <div
+                style="
+                  font-size: 11px;
+                  color: #9ca3af;
+                  text-align: center;
+                  margin-top: 8px;
+                "
+              >
+                {{ config.trackMode === 'today' ? '仅追踪今日新发布条目' :
+                '自动追踪历史遗漏条目' }}
+              </div>
+            </div>
+
+            <div
+              class="form-group"
+              style="padding-top: 16px; border-top: 1px dashed #e5e7eb"
+            >
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                  margin-bottom: 8px;
+                "
+              >
+                <div>
+                  <div style="font-weight: 700; font-size: 14px; color: #111">
+                    后台巡检频率
+                  </div>
+                  <div style="font-size: 11px; color: #6b7280">
+                    自动检查新公文的基准间隔
+                  </div>
+                </div>
+                <div
+                  style="
+                    font-size: 14px;
+                    font-weight: 800;
+                    color: var(--accent-color);
+                  "
+                >
+                  {{ config.pollingInterval || 30 }} 分钟
+                </div>
+              </div>
+              <input
+                type="range"
+                min="15"
+                max="240"
+                step="15"
+                v-model.number="config.pollingInterval"
+                style="
+                  width: 100%;
+                  accent-color: var(--accent-color);
+                  cursor: pointer;
+                "
+              />
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  font-size: 11px;
+                  color: #9ca3af;
+                  margin-top: 6px;
+                  font-weight: 500;
+                "
+              >
+                <span>15分钟</span>
+                <span>240分钟</span>
+              </div>
+            </div>
+
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding-top: 16px;
+                border-top: 1px dashed #e5e7eb;
+              "
+            >
+              <div style="font-weight: 700; font-size: 14px; color: #111">
+                开机自启动
+              </div>
+              <input
+                type="checkbox"
+                class="ios-toggle"
+                v-model="config.autoStart"
+              />
+            </div>
+
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding-top: 16px;
+                margin-top: 16px;
+                border-top: 1px dashed #e5e7eb;
+              "
+            >
+              <div style="font-weight: 700; font-size: 14px; color: #111">
+                免打扰模式
+              </div>
+              <input
+                type="checkbox"
+                class="ios-toggle"
+                v-model="config.muteMode"
+              />
+            </div>
+
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-top: 24px;
+                margin-bottom: 12px;
+                padding-top: 24px;
+                border-top: 1px solid rgba(0, 0, 0, 0.05);
+              "
+            >
+              <div class="settings-section-title" style="margin: 0 0 0 4px">
+                数据订阅管理
+              </div>
+              <div style="display: flex; gap: 8px">
+                <span class="badge-attachment" @click="selectAllSources"
+                  >全选</span
+                >
+                <span class="badge-clear" @click="deselectAllSources"
+                  >清空</span
+                >
+              </div>
+            </div>
+
+            <div
+              style="
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                margin-bottom: 24px;
+              "
+            >
+              <label
+                v-for="(source, index) in allAvailableSources"
+                :key="source"
+                class="subs-chip"
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                  padding: 12px 16px;
+                "
+                :class="(config.subscribedSources || []).includes(source) ? 'active-morandi-' + (index % 8) : ''"
+              >
+                <span style="font-size: 14px">{{ source }}</span>
+                <input
+                  type="checkbox"
+                  :value="source"
+                  v-model="config.subscribedSources"
+                />
+                <span
+                  v-show="(config.subscribedSources || []).includes(source)"
+                  style="font-weight: 900; opacity: 0.8; font-size: 15px"
+                  >✓</span
+                >
+              </label>
+            </div>
+
+            <div
+              style="
+                display: flex;
+                gap: 16px;
+                padding-top: 20px;
+                border-top: 1px solid rgba(0, 0, 0, 0.05);
+              "
+            >
+              <button
+                class="action-btn"
+                style="
+                  flex: 1;
+                  padding: 12px;
+                  font-size: 14px;
+                  background: #f3f4f6;
+                  color: var(--text-main);
+                  border: 1px solid #e5e7eb;
+                "
+                @click="testConnection"
+              >
+                {{ isTesting ? '测试中...' : '测试 API 连接' }}
+              </button>
+              <button
+                class="action-btn btn-primary"
+                style="
+                  flex: 1;
+                  padding: 12px;
+                  font-size: 14px;
+                  box-shadow: 0 4px 12px rgba(52, 120, 246, 0.3);
+                "
+                @click="saveSettings"
+              >
+                保存并应用配置
+              </button>
+            </div>
+
+            <div v-if="settingsMsg" class="floating-toast">
+              {{ settingsMsg }}
+            </div>
+          </div>
+
           <template v-for="(item, index) in processedArticles">
             <div
               v-if="item.isHeader"
@@ -2959,7 +3477,6 @@
               :class="['list-card', { 'announcement-card': item.is_announcement, 'read': item.is_read && item.is_announcement }]"
               @click="item.is_announcement ? handleNoticeClick(item) : openDetail(item)"
             >
-              <!-- 标题行：标题 + 附件图标 -->
               <div class="title-row">
                 <h3
                   class="list-card-title"
@@ -3102,7 +3619,16 @@
                 @keyup.esc="closeSearchUI"
               />
               <div class="search-icon-wrapper" @click="handleSearchClick">
-                <div class="svg-icon-mask icon-search"></div>
+                <svg
+                  class="inline-search-icon"
+                  viewBox="0 0 1024 1024"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M1009.0112 935.936l-274.944-275.456a409.6 409.6 0 1 0-72.192 72.704l274.944 274.944a51.2 51.2 0 0 0 72.192-72.192z m-816.128-307.2A307.2 307.2 0 1 1 409.9712 716.8a307.2 307.2 0 0 1-217.088-89.088z"
+                    fill="currentColor"
+                  ></path>
+                </svg>
               </div>
             </div>
           </div>
@@ -3142,7 +3668,8 @@
                 class="btn-check"
                 :class="{
                   loading: isLoading,
-                  'read-only-btn': isReadOnlyMode && !isLoading
+                  'read-only-btn': isReadOnlyMode && !isLoading,
+                  'is-cooldown': isUpdateDisabled && !isLoading && !isReadOnlyMode
                 }"
                 @click="handleButtonClick()"
                 :disabled="isUpdateDisabled && !isLoading && !isReadOnlyMode"
@@ -3153,7 +3680,7 @@
                 <span v-else-if="isUpdateDisabled" class="btn-text"
                   >{{ updateCooldown }}s</span
                 >
-                <div v-else class="svg-icon-mask sm icon-arrow"></div>
+                <div v-else class="svg-icon-mask icon-arrow"></div>
                 <div class="aurora-light"></div>
                 <div class="aurora-inner"></div>
               </button>
@@ -3172,8 +3699,8 @@
           <div class="detail-header">
             <div class="provider-row">
               <span
-                class="provider-info settings-trigger"
-                @click="openSettings"
+                class="provider-info"
+                style="display: inline-flex; align-items: center"
               >
                 <span
                   v-if="localAiIconSvg && !iconLoadError"
@@ -3181,29 +3708,10 @@
                   v-html="localAiIconSvg"
                 >
                 </span>
-
                 <span v-else-if="!iconLoadError" style="margin-right: 4px"
                   >✨</span
                 >
-
                 {{ aiIntelligenceTitle }}
-
-                <span class="gear-icon">
-                  <svg
-                    class="icon-svg-gear"
-                    viewBox="0 0 1086 1024"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      d="M268.318092 282.524846a161.703821 161.703821 0 0 0-35.705264-117.452942 20.584721 20.584721 0 0 1 2.346909-28.825775A511.214108 511.214108 0 0 1 386.971361 48.371407a20.620552 20.620552 0 0 1 26.281798 12.701973 160.772224 160.772224 0 0 0 150.488821 103.908948 160.646816 160.646816 0 0 0 150.488821-104.034355 20.620552 20.620552 0 0 1 26.281798-12.684058 495.412782 495.412782 0 0 1 150.005107 85.993612c8.706853 7.166134-12.433243 22.501662-19.509801 31.208515-41.205272 50.377924-25.188962 122.164675 9.244313 181.786912s103.908948 71.930073 168.117512 61.413772c11.053762-1.791534 19.294817 22.143355 21.283419 33.37627a522.482854 522.482854 0 0 1 7.614017 88.089707 498.422558 498.422558 0 0 1-7.614017 87.785145c-1.988602 11.053762-17.915336 11.859952-29.004929 10.032588-64.172733-10.498387-130.781952 23.684074-165.268973 83.306312s-21.229673 133.594659 20.101007 183.972584a20.584721 20.584721 0 0 1-2.364825 28.825775 511.214108 511.214108 0 0 1-152.06537 87.910553c-10.749201 3.977205-26.96258 1.218243-30.939785-9.459298-23.021207-60.732988-76.910537-107.097878-145.777088-107.097877s-151.474164 37.389306-174.495371 98.104379a20.602636 20.602636 0 0 1-26.281797 12.684058c-56.00334-20.477229-83.23465-44.627102-128.184228-82.141815a20.566806 20.566806 0 0 1-2.472317-28.915352 160.879716 160.879716 0 0 0 14.869729-182.342288c-34.451191-59.622238-98.40894-102.493636-162.563757-91.977334-11.071678 1.791534-24.669417 8.241054-26.478867-2.812708a520.315099 520.315099 0 0 1-7.614017-88.089706 498.368812 498.368812 0 0 1 7.614017-87.785146 20.656382 20.656382 0 0 1 23.73782-16.500024 161.793398 161.793398 0 0 0 137.016489-42.226447"
-                      fill="#80C6FF"
-                    ></path>
-                    <path
-                      d="M542.834783 727.541788a215.575236 215.575236 0 1 0 0-431.132557c-118.868253 0-215.557321 96.617406-215.557321 215.396083S424.038191 727.541788 542.834783 727.541788z m0-409.437085a193.790188 193.790188 0 1 1-193.628949 193.879764c0-106.900809 86.907294-193.879764 193.628949-193.879764z"
-                      fill="#46505D"
-                    ></path>
-                  </svg>
-                </span>
               </span>
 
               <div class="top-actions">
@@ -3234,7 +3742,7 @@
                   class="badge-snapshot"
                   id="btn-snapshot-top"
                   @click="takeSnapshot(activeArticle)"
-                  data-tooltip="保存长图快照"
+                  data-tooltip="保存快照"
                 >
                   <svg
                     class="icon-svg"
@@ -3285,7 +3793,7 @@
                   class="badge-refresh"
                   :class="{ 'is-loading': isRegenerating }"
                   @click="regenerateSummary(activeArticle)"
-                  :data-tooltip="isRegenerating ? '正在生成中...' : '重新生成 AI 总结'"
+                  :data-tooltip="isRegenerating ? '正在生成中...' : '重新生成'"
                 >
                   <svg
                     class="icon-svg"
@@ -3309,7 +3817,7 @@
                   class="badge-favorite"
                   :class="{ 'is-favorite': activeArticle && activeArticle.is_favorite }"
                   @click="toggleFavorite(activeArticle)"
-                  :data-tooltip="activeArticle && activeArticle.is_favorite ? '取消收藏' : '收藏'"
+                  :data-tooltip="activeArticle && activeArticle.is_favorite ? '取消收藏' : '收藏卡片'"
                 >
                   <svg
                     class="icon-svg"
@@ -3327,7 +3835,7 @@
                   class="badge-pin"
                   :class="{ 'is-pinned': config.isPinned, 'pin-anim': pinAnimating }"
                   @click="togglePin"
-                  :data-tooltip="config.isPinned ? '取消置顶' : '窗口置顶'"
+                  :data-tooltip="config.isPinned ? '取消置顶' : '置顶窗口'"
                 >
                   <svg
                     class="icon-svg"
@@ -3640,407 +4148,6 @@
           </div>
         </div>
       </transition>
-
-      <div v-if="currentView === 'settings'" class="settings-view">
-        <div
-          class="settings-header"
-          style="
-            background: transparent;
-            border-bottom: none;
-            padding-bottom: 0;
-          "
-        >
-          <h2 class="settings-title">
-            <svg
-              class="icon-svg-setting"
-              viewBox="0 0 1086 1024"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="M268.318092 282.524846a161.703821 161.703821 0 0 0-35.705264-117.452942 20.584721 20.584721 0 0 1 2.346909-28.825775A511.214108 511.214108 0 0 1 386.971361 48.371407a20.620552 20.620552 0 0 1 26.281798 12.701973 160.772224 160.772224 0 0 0 150.488821 103.908948 160.646816 160.646816 0 0 0 150.488821-104.034355 20.620552 20.620552 0 0 1 26.281798-12.684058 495.412782 495.412782 0 0 1 150.005107 85.993612c8.706853 7.166134-12.433243 22.501662-19.509801 31.208515-41.205272 50.377924-25.188962 122.164675 9.244313 181.786912s103.908948 71.930073 168.117512 61.413772c11.053762-1.791534 19.294817 22.143355 21.283419 33.37627a522.482854 522.482854 0 0 1 7.614017 88.089707 498.422558 498.422558 0 0 1-7.614017 87.785145c-1.988602 11.053762-17.915336 11.859952-29.004929 10.032588-64.172733-10.498387-130.781952 23.684074-165.268973 83.306312s-21.229673 133.594659 20.101007 183.972584a20.584721 20.584721 0 0 1-2.364825 28.825775 511.214108 511.214108 0 0 1-152.06537 87.910553c-10.749201 3.977205-26.96258 1.218243-30.939785-9.459298-23.021207-60.732988-76.910537-107.097878-145.777088-107.097877s-151.474164 37.389306-174.495371 98.104379a20.602636 20.602636 0 0 1-26.281797 12.684058c-56.00334-20.477229-83.23465-44.627102-128.184228-82.141815a20.566806 20.566806 0 0 1-2.472317-28.915352 160.879716 160.879716 0 0 0 14.869729-182.342288c-34.451191-59.622238-98.40894-102.493636-162.563757-91.977334-11.071678 1.791534-24.669417 8.241054-26.478867-2.812708a520.315099 520.315099 0 0 1-7.614017-88.089706 498.368812 498.368812 0 0 1 7.614017-87.785146 20.656382 20.656382 0 0 1 23.73782-16.500024 161.793398 161.793398 0 0 0 137.016489-42.226447"
-                fill="#80C6FF"
-              />
-              <path
-                d="M542.834783 727.541788a215.575236 215.575236 0 1 0 0-431.132557c-118.868253 0-215.557321 96.617406-215.557321 215.396083S424.038191 727.541788 542.834783 727.541788z m0-409.437085a193.790188 193.790188 0 1 1-193.628949 193.879764c0-106.900809 86.907294-193.879764 193.628949-193.879764z"
-                fill="#46505D"
-              /></svg
-            >设置
-          </h2>
-          <button class="action-btn btn-back" @click="backToPrevious">
-            完成
-          </button>
-        </div>
-
-        <div class="settings-section-title">AI 引擎与提示词</div>
-        <div class="settings-card">
-          <div class="form-group">
-            <label class="form-label">API Base URL</label>
-            <input
-              type="text"
-              v-model="config.baseUrl"
-              class="form-input"
-              placeholder="https://api.deepseek.com/v1"
-            />
-          </div>
-          <div class="form-group">
-            <label class="form-label">API Key</label>
-            <div style="position: relative">
-              <input
-                :type="showApiKey ? 'text' : 'password'"
-                v-model="config.apiKey"
-                class="form-input"
-                style="padding-right: 60px"
-              />
-              <button
-                @click="showApiKey = !showApiKey"
-                style="
-                  position: absolute;
-                  right: 10px;
-                  top: 50%;
-                  transform: translateY(-50%);
-                  background: none;
-                  border: none;
-                  cursor: pointer;
-                  color: var(--accent-color);
-                  font-size: 12px;
-                  font-weight: 700;
-                "
-              >
-                {{ showApiKey ? '隐藏' : '显示' }}
-              </button>
-            </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Model Name</label>
-            <input type="text" v-model="config.modelName" class="form-input" />
-          </div>
-          <div class="form-group" style="margin-bottom: 0">
-            <div
-              style="
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 8px;
-              "
-            >
-              <label class="form-label" style="margin: 0">System Prompt</label>
-              <button class="badge-refresh" @click="resetPrompt">重置</button>
-            </div>
-            <textarea
-              v-model="config.prompt"
-              class="form-input"
-              style="min-height: 120px"
-            ></textarea>
-          </div>
-        </div>
-
-        <div class="settings-section-title">阅读与行为偏好</div>
-        <div class="settings-card">
-          <div class="form-group">
-            <label class="form-label">阅读字体</label>
-            <div class="list-row-group">
-              <div
-                class="list-row-item"
-                :class="{ active: config.fontFamily === 'sans-serif' }"
-                @click="config.fontFamily = 'sans-serif'"
-              >
-                <span style="font-weight: 700; font-size: 15px; color: #111">
-                  现代黑体
-                </span>
-                <span class="row-check">✓</span>
-              </div>
-
-              <div
-                class="list-row-item"
-                :class="{ active: config.fontFamily === 'serif' }"
-                @click="config.fontFamily = 'serif'"
-              >
-                <span
-                  style="
-                    font-weight: 700;
-                    font-size: 15px;
-                    color: #111;
-                    /* 使用跨平台的高级系统宋体调用栈 */
-                    font-family:
-                      &quot;Songti SC&quot;, &quot;Noto Serif CJK SC&quot;,
-                      &quot;SimSun&quot;, serif;
-                  "
-                >
-                  经典宋体
-                </span>
-                <span class="row-check">✓</span>
-              </div>
-
-              <div
-                class="list-row-item"
-                :class="{ active: config.fontFamily === 'custom' }"
-                @click="config.fontFamily = 'custom'"
-              >
-                <div
-                  style="
-                    display: flex;
-                    align-items: center;
-                    gap: 12px;
-                    width: 100%;
-                  "
-                >
-                  <span
-                    style="
-                      font-weight: 700;
-                      font-size: 15px;
-                      color: #111;
-                      font-family: &quot;UserCustomFont&quot;, sans-serif;
-                    "
-                  >
-                    外部导入
-                  </span>
-                  <span
-                    style="
-                      font-size: 12px;
-                      color: #9ca3af;
-                      flex: 1;
-                      white-space: nowrap;
-                      overflow: hidden;
-                      text-overflow: ellipsis;
-                    "
-                  >
-                    {{ config.customFontName ? config.customFontName :
-                    '未导入字体' }}
-                  </span>
-                  <button
-                    class="badge-attachment import-font-btn"
-                    style="margin: 0"
-                    @click.stop="importCustomFont"
-                  >
-                    {{ config.customFontName ? '更换' : '导入' }}
-                  </button>
-                  <span class="row-check" style="margin-left: 4px">✓</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">追踪模式</label>
-            <div class="segmented-control">
-              <div
-                class="segment-item"
-                :class="{ active: config.trackMode === 'today' }"
-                @click="config.trackMode = 'today'"
-              >
-                当日追踪
-              </div>
-              <div
-                class="segment-item"
-                :class="{ active: config.trackMode === 'continuous' }"
-                @click="config.trackMode = 'continuous'"
-              >
-                持续追踪
-              </div>
-            </div>
-            <div
-              style="
-                font-size: 11px;
-                color: #9ca3af;
-                text-align: center;
-                margin-top: 8px;
-              "
-            >
-              {{ config.trackMode === 'today' ? '仅追踪今日新发布条目' :
-              '自动追踪历史遗漏条目' }}
-            </div>
-          </div>
-
-          <div
-            class="form-group"
-            style="padding-top: 16px; border-top: 1px solid #f3f4f6"
-          >
-            <div
-              style="
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 8px;
-              "
-            >
-              <div>
-                <div style="font-weight: 700; font-size: 14px; color: #111">
-                  后台巡检频率
-                </div>
-                <div style="font-size: 11px; color: #6b7280">
-                  设置自动检查新公文的基准时间间隔
-                </div>
-              </div>
-              <div
-                style="
-                  font-size: 14px;
-                  font-weight: 800;
-                  color: var(--accent-color);
-                "
-              >
-                {{ config.pollingInterval || 30 }} 分钟
-              </div>
-            </div>
-            <input
-              type="range"
-              min="15"
-              max="240"
-              step="15"
-              v-model.number="config.pollingInterval"
-              style="
-                width: 100%;
-                accent-color: var(--accent-color);
-                cursor: pointer;
-              "
-            />
-            <div
-              style="
-                display: flex;
-                justify-content: space-between;
-                font-size: 11px;
-                color: #9ca3af;
-                margin-top: 6px;
-                font-weight: 500;
-              "
-            >
-              <span>15分钟</span>
-              <span>240分钟</span>
-            </div>
-          </div>
-
-          <div
-            style="
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              padding-top: 16px;
-              border-top: 1px solid #f3f4f6;
-            "
-          >
-            <div>
-              <div style="font-weight: 700; font-size: 14px; color: #111">
-                开机自启动
-              </div>
-            </div>
-            <input
-              type="checkbox"
-              class="ios-toggle"
-              v-model="config.autoStart"
-            />
-          </div>
-
-          <div
-            style="
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              padding-top: 16px;
-              margin-top: 16px;
-              border-top: 1px solid #f3f4f6;
-            "
-          >
-            <div>
-              <div style="font-weight: 700; font-size: 14px; color: #111">
-                免打扰模式
-              </div>
-            </div>
-            <input
-              type="checkbox"
-              class="ios-toggle"
-              v-model="config.muteMode"
-            />
-          </div>
-        </div>
-
-        <div
-          style="
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 8px;
-            padding-right: 4px;
-          "
-        >
-          <div class="settings-section-title" style="margin: 0 0 0 4px">
-            数据订阅管理
-          </div>
-          <div style="display: flex; gap: 8px">
-            <span class="badge-attachment" @click="selectAllSources">全选</span>
-            <span class="badge-clear" @click="deselectAllSources">清空</span>
-          </div>
-        </div>
-
-        <div class="settings-card" style="margin-bottom: 40px">
-          <div style="display: flex; flex-direction: column; gap: 10px">
-            <label
-              v-for="(source, index) in allAvailableSources"
-              :key="source"
-              class="subs-chip"
-              style="
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                padding: 12px 16px;
-              "
-              :class="(config.subscribedSources || []).includes(source) ? 'active-morandi-' + (index % 8) : ''"
-            >
-              <span style="font-size: 14px">{{ source }}</span>
-
-              <input
-                type="checkbox"
-                :value="source"
-                v-model="config.subscribedSources"
-              />
-
-              <span
-                v-show="(config.subscribedSources || []).includes(source)"
-                style="font-weight: 900; opacity: 0.8; font-size: 15px"
-                >✓</span
-              >
-            </label>
-          </div>
-        </div>
-
-        <div
-          style="
-            display: flex;
-            gap: 16px;
-            position: sticky;
-            bottom: 0;
-            background: linear-gradient(to top, #f3f4f6 60%, transparent);
-            padding: 20px 0;
-          "
-        >
-          <button
-            class="action-btn"
-            style="
-              flex: 1;
-              padding: 12px;
-              font-size: 14px;
-              background: white;
-              color: var(--accent-color);
-              border: 1.5px solid var(--accent-color);
-            "
-            @click="testConnection"
-          >
-            {{ isTesting ? '测试中...' : '测试 API 连接' }}
-          </button>
-          <button
-            class="action-btn btn-primary"
-            style="
-              flex: 1;
-              padding: 12px;
-              font-size: 14px;
-              box-shadow: 0 4px 12px rgba(52, 120, 246, 0.3);
-            "
-            @click="saveSettings"
-          >
-            保存并应用配置
-          </button>
-        </div>
-
-        <div v-if="settingsMsg" class="floating-toast">{{ settingsMsg }}</div>
-      </div>
     </div>
 
     <script>
@@ -4122,6 +4229,7 @@
             // 新增：详情页快照生成状态
             const isCapturing = ref(false);
             const currentView = ref("list");
+            const isSettingsOpen = ref(false); // 🌟 新增：控制设置面板的独立状态
             const pendingReadUrls = ref([]); // 待更新普通公文队列
             const pendingNoticeVersion = ref(null); // 待更新公告队列
             const activeArticle = ref(null);
@@ -4280,6 +4388,29 @@
 
                 // 🌟 解析云端配置，更新 systemNotice
                 if (res.announcement) {
+                  const newPublishTime = res.announcement.publish_time || "";
+                  const localReadTime = config.value.readNoticeTime || "";
+
+                  // 🌟 检查云端公告发布时间是否比本地已读时间更新
+                  // 如果云端发布时间 > 本地已读时间，说明有新公告，清除已读状态
+                  if (
+                    newPublishTime &&
+                    localReadTime &&
+                    newPublishTime > localReadTime
+                  ) {
+                    console.log(
+                      "🔔 检测到新公告（发布时间更新），清除已读状态",
+                    );
+                    config.value.readNoticeTime = "";
+                    try {
+                      await pywebview.api.save_config(
+                        JSON.parse(JSON.stringify(config.value)),
+                      );
+                    } catch (e) {
+                      console.warn("清除公告已读状态失败:", e);
+                    }
+                  }
+
                   systemNotice.value = {
                     id: res.announcement.id || "sys_notice_1",
                     title: res.announcement.title || systemNotice.value.title,
@@ -4429,6 +4560,7 @@
               subscribedSources: [], // 🌟 新增：订阅的来源列表
               pollingInterval: 60, // 🌟 新增：后台巡检频率（分钟），默认 1 小时
               isPinned: false, // 🌟 新增：默认不置顶
+              readNoticeTime: "", // 🌟 新增：已读公告的发布时间（用于判断是否有新公告）
             });
 
             // 获取 AI 品牌名称（用于状态提示）
@@ -4550,6 +4682,29 @@
             const closeSearchUI = () => {
               isSearchUIExpanded.value = false;
               clearSearch(); // 复用原有的 clearSearch 逻辑重置列表
+            };
+
+            // 🌟 点击列表区域时，如果搜索框展开且点击不在搜索框内，则关闭
+            const handleListClick = (e) => {
+              if (!isSearchUIExpanded.value) return;
+
+              // 检查点击是否在搜索相关元素内
+              const searchContainer = document.querySelector(
+                ".search-morph-container",
+              );
+              const searchInput = document.querySelector(".search-input");
+              const clickedInSearch =
+                searchContainer?.contains(e.target) ||
+                searchInput?.contains(e.target);
+
+              // 检查点击是否在底部功能栏的按钮内（这些按钮有自己的功能）
+              const headerButtons = document.querySelector(".main-card-header");
+              const clickedInHeader = headerButtons?.contains(e.target);
+
+              // 如果点击不在搜索框内且不在底部功能栏内，关闭搜索
+              if (!clickedInSearch && !clickedInHeader) {
+                closeSearchUI();
+              }
             };
 
             // 【今日】按钮的复合功能
@@ -4716,16 +4871,33 @@
 {raw_text}
 `;
 
-            // 打开设置页
+            // 🌟 开启设置面板 (卡片化模式)
             const openSettings = async () => {
-              previousView.value = currentView.value;
-              currentView.value = "settings";
+              // 自动开关逻辑：如果已经打开，再点一次底部齿轮就是关闭
+              if (isSettingsOpen.value) {
+                closeSettings();
+                return;
+              }
+
+              isSettingsOpen.value = true;
               settingsMsg.value = "";
+
+              // 🌟 神奇魔法：自动滚动到顶部，让用户亲眼看到这张卡片顺滑地“挤”出来
+              setTimeout(() => {
+                const listView = document.querySelector(".list-view");
+                if (listView) listView.scrollTo({ top: 0, behavior: "smooth" });
+              }, 50);
+
               // 呼叫后端加载配置
               const res = await pywebview.api.load_config();
               if (res.status === "success") {
                 config.value = { ...config.value, ...res.data };
               }
+            };
+
+            // 🌟 新增：关闭设置面板
+            const closeSettings = () => {
+              isSettingsOpen.value = false;
             };
 
             // 返回上一页
@@ -4852,11 +5024,21 @@
               // 构造公告对象，格式与公文一致
               // 👇 变化 4：整合系统公告 (🌟 增加严格的显示门槛)
               // 只有在【没有进行搜索】且【分类筛选为"全部"】时，才允许显示公告
+              // 🌟 新增：如果公告已读，则置底；未读则置顶
               if (
                 !isSearching.value &&
                 !searchQuery.value.trim() &&
                 activeSource.value === "全部"
               ) {
+                // 🌟 检查公告是否已读（通过配置文件中的 readNoticeTime 与公告发布时间比较）
+                // 如果本地已读时间 >= 公告发布时间，说明该公告已读
+                const localReadTime = config.value.readNoticeTime || "";
+                const noticePublishTime = systemNotice.value.publish_time || "";
+                const isNoticeRead =
+                  localReadTime &&
+                  noticePublishTime &&
+                  localReadTime >= noticePublishTime;
+
                 const noticeItem = {
                   id: systemNotice.value.id,
                   title: systemNotice.value.title,
@@ -4873,13 +5055,15 @@
                   version: systemNotice.value.version,
                   formattedTime: systemNotice.value.publish_time,
                   date: systemNotice.value.publish_time,
-                  is_read:
-                    readNoticeVersion.value >= systemNotice.value.version
-                      ? 1
-                      : 0,
+                  is_read: isNoticeRead ? 1 : 0,
                 };
 
-                mapped.unshift(noticeItem);
+                // 🌟 已读公告置底，未读公告置顶
+                if (isNoticeRead) {
+                  mapped.push(noticeItem); // 置底
+                } else {
+                  mapped.unshift(noticeItem); // 置顶
+                }
               }
 
               // 🌟 欠费卡片：无论当前页面和搜索状态，始终显示在最顶部
@@ -4937,7 +5121,7 @@
 
                 // 系统公告和欠费提醒，归类为置顶组
                 if (item.id === "balance_warning" || item.is_announcement) {
-                  groupName = "置顶与通知";
+                  groupName = "系统通知";
                 } else {
                   groupName = getDateGroupName(item.exact_time || item.date);
                 }
@@ -4983,18 +5167,34 @@
             };
 
             // 🌟 修复后的公告点击
-            const handleNoticeClick = (item) => {
+            const handleNoticeClick = async (item) => {
               if (item.is_announcement) {
                 activeArticle.value = item;
                 lastArticle.value = item;
                 currentView.value = "detail";
 
-                const isNoticeRead = readNoticeVersion.value >= item.version;
+                // 🌟 检查是否已读（通过发布时间比较）
+                const localReadTime = config.value.readNoticeTime || "";
+                const noticePublishTime = item.publish_time || "";
+                const isNoticeRead =
+                  localReadTime &&
+                  noticePublishTime &&
+                  localReadTime >= noticePublishTime;
+
                 if (!isNoticeRead) {
-                  // A. 立即写入 LocalStorage，保证数据落盘
-                  localStorage.setItem("microflow_read_notice", item.version);
-                  // B. 将版本号推入队列，暂不更新 Vue 变量
-                  pendingNoticeVersion.value = item.version;
+                  // 🌟 将已读公告的发布时间写入配置文件
+                  config.value.readNoticeTime = noticePublishTime;
+                  try {
+                    await pywebview.api.save_config(
+                      JSON.parse(JSON.stringify(config.value)),
+                    );
+                    console.log(
+                      "📝 公告已读状态已保存到配置文件，发布时间:",
+                      noticePublishTime,
+                    );
+                  } catch (e) {
+                    console.warn("保存公告已读状态失败:", e);
+                  }
                 }
               }
             };
@@ -6508,6 +6708,9 @@
             };
 
             return {
+              isSettingsOpen, // 🌟 新增暴露
+              closeSettings, // 🌟 新增暴露
+
               // 视图与状态
               currentView,
               activeArticle,
@@ -6570,6 +6773,7 @@
               searchInputRef,
               handleSearchClick,
               closeSearchUI,
+              handleListClick,
               handleTodayClick,
 
               // 设置与置顶

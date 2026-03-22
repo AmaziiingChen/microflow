@@ -250,4 +250,4 @@ if __name__ == "__main__":
                 window.show()
 
     # 启动应用，并将回调函数注入进去，强制开启 HTTP 服务
-    webview.start(func=on_app_start, debug=False, http_server=True)
+    webview.start(func=on_app_start, debug=True, http_server=True)
