@@ -238,6 +238,23 @@
         box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
       }
 
+      /* ============================================================
+         🌟 新增：iOS 备忘录风格时间标头
+         ============================================================ */
+      .date-group-header {
+        font-size: 20px;
+        font-weight: 800;
+        color: #111827;
+        margin: 24px 0 12px 6px;
+        letter-spacing: 0.5px;
+        user-select: none;
+      }
+
+      /* 第一个标头不需要那么大的顶部间距 */
+      .date-group-header:first-of-type {
+        margin-top: 4px;
+      }
+
       .list-card {
         background: var(--card-bg);
         border-radius: 16px; /* 变圆润 */
@@ -1511,58 +1528,56 @@
         transition: flex 1s var(--curve-silky) 0.1s;
       }
 
-      /* 🌟 物理模拟：today 按钮先被挤压（搜索框先碰到它） */
+      /* 🌟 物理模拟 1：搜索框撞击 Today 按钮 */
       .main-card-header.is-searching .header-center {
         margin: 0 4px;
-        animation: center-squish 0.5s var(--curve-silky) forwards;
-        animation-delay: 0.4s; /* 搜索框展开约 0.4s 后触碰到 */
-        animation-fill-mode: backwards;
+        /* 🌟 时长设为 1s，与搜索框展开的总时长保持绝对同频，不使用任何 delay */
+        animation: center-squish 1s var(--curve-silky) forwards;
       }
 
+      /* 🌟 百分比时间差引擎：前 35% 时间，搜索框还在延伸的路上 */
       @keyframes center-squish {
-        0% {
-          transform: scale(1);
-        }
+        0%,
         35% {
-          transform: scale(0.9); /* 被压缩 */
-        }
-        65% {
-          transform: scale(1.04); /* 回弹过冲 */
-        }
+          transform: scale(1) translateX(0);
+        } /* 等待撞击...保持不动 */
+        50% {
+          transform: scaleX(0.85) scaleY(1.05) translateX(4px);
+        } /* 撞到了！被向右挤扁 */
+        75% {
+          transform: scaleX(1.02) scaleY(0.98) translateX(-2px);
+        } /* 弹性反弹 */
         100% {
-          transform: scale(1); /* 恢复 */
-        }
+          transform: scale(1) translateX(0);
+        } /* 最终恢复平稳 */
       }
 
-      /* 🌟 物理模拟：更新按钮后被挤压（力量从 today 传递过来） */
+      /* 🌟 物理模拟 2：力量传递给最右侧更新按钮 */
       .main-card-header.is-searching .header-side.right {
         flex: 0 0 auto;
-        animation: right-side-squish 0.5s var(--curve-silky) forwards;
-        animation-delay: 0.55s; /* 比 today 晚 0.15s，模拟力量传递 */
-        animation-fill-mode: backwards;
+        animation: right-side-squish 1s var(--curve-silky) forwards;
       }
 
-      /* 🌟 右侧挤压动画关键帧：被触碰后才压缩 */
+      /* 🌟 力量传递需要时间，更新按钮受力比 Today 按钮更晚 */
       @keyframes right-side-squish {
-        0% {
-          transform: scale(1);
-        }
-        40% {
-          transform: scale(0.92); /* 被压缩 */
-        }
-        70% {
-          transform: scale(1.03); /* 回弹过冲 */
-        }
+        0%,
+        45% {
+          transform: scale(1) translateX(0);
+        } /* 前 45% 不动，等待力量传递 */
+        60% {
+          transform: scaleX(0.88) scaleY(1.05) translateX(4px);
+        } /* 被挤扁 */
+        80% {
+          transform: scaleX(1.02) scaleY(0.98) translateX(-2px);
+        } /* 反弹 */
         100% {
-          transform: scale(1); /* 恢复 */
+          transform: scale(1) translateX(0);
         }
       }
 
-      /* 🌟 搜索收起时：链式恢复 */
+      /* 🌟 搜索收起时的链式恢复动画（可以保持极简，因为平移掩盖了突兀感） */
       .main-card-header:not(.is-searching) .header-center {
-        animation: center-bounce 0.5s var(--curve-silky) forwards;
-        animation-delay: 0.2s;
-        animation-fill-mode: backwards;
+        animation: center-bounce 0.6s var(--curve-silky) forwards;
       }
 
       @keyframes center-bounce {
@@ -1570,26 +1585,24 @@
           transform: scale(1);
         }
         50% {
-          transform: scale(0.95);
-        }
+          transform: scale(0.96);
+        } /* 释放后轻微收缩回弹 */
         100% {
           transform: scale(1);
         }
       }
 
       .main-card-header:not(.is-searching) .header-side.right {
-        animation: right-side-bounce 0.5s var(--curve-silky) forwards;
-        animation-delay: 0.35s; /* 比 center 晚 */
-        animation-fill-mode: backwards;
+        animation: right-side-bounce 0.6s var(--curve-silky) forwards;
       }
 
       @keyframes right-side-bounce {
         0% {
           transform: scale(1);
         }
-        50% {
-          transform: scale(0.94);
-        }
+        60% {
+          transform: scale(0.96);
+        } /* 稍晚一点回弹 */
         100% {
           transform: scale(1);
         }
@@ -1867,13 +1880,17 @@
         opacity: 0;
         margin: 0;
         padding: 0;
-        transform: scale(0);
-        /* 🌟 延迟消失，让动画更流畅 */
+        /* 🌟 核心修复 1：绝对不要用 scale(0)！
+           改为向左平移 -20px。这样恢复时，它们会优雅地从 Today 按钮背后滑出来，绝不会乱飞 */
+        transform: translateX(-20px);
+        pointer-events: none;
+
+        /* 🌟 核心修复 2：清理掉 Claude 写的一大堆错乱的延迟，保持丝滑 */
         transition:
-          width 0.4s var(--curve-silky) 0.1s,
-          opacity 0.3s ease 0.05s,
-          margin 0.4s ease 0.1s,
-          transform 0.4s var(--curve-silky) 0.05s,
+          width 0.4s var(--curve-silky),
+          opacity 0.3s ease,
+          margin 0.4s ease,
+          transform 0.4s var(--curve-silky),
           padding 0.4s ease;
       }
       .dock-group.is-collapsed .dock-item.today-btn {
@@ -2976,12 +2993,22 @@
           </div>
         </div>
         <transition-group name="list-pop" tag="div" style="position: relative">
-          <div
-            v-for="(item, index) in processedArticles"
-            :key="item.id || item.url"
-            :class="['list-card', { 'announcement-card': item.is_announcement, 'read': item.is_read && item.is_announcement }]"
-            @click="item.is_announcement ? handleNoticeClick(item) : openDetail(item)"
-          >
+          <template v-for="(item, index) in processedArticles">
+
+            <div
+              v-if="item.isHeader"
+              :key="'header_' + item.title"
+              class="date-group-header"
+            >
+              {{ item.title }}
+            </div>
+
+            <div
+              v-else
+              :key="item.id || item.url"
+              :class="['list-card', { 'announcement-card': item.is_announcement, 'read': item.is_read && item.is_announcement }]"
+              @click="item.is_announcement ? handleNoticeClick(item) : openDetail(item)"
+            >
             <!-- 标题行：标题 + 附件图标 -->
             <div class="title-row">
               <h3
@@ -3082,6 +3109,7 @@
               </button>
             </div>
           </div>
+          </template>
         </transition-group>
         <div
           class="list-view"
@@ -4855,8 +4883,65 @@
                 mapped.unshift(balanceCard);
               }
 
-              // 👇 变化 5：最后把整合好的数组 return 出去
-              return mapped;
+              // ============================================================
+              // 🚀 终极变化：注入 iOS 备忘录风格的"时间流逝分组"
+              // ============================================================
+              const finalGroupedArray = [];
+              let currentGroup = null;
+
+              // 辅助函数：计算真实时间落差
+              const getDateGroupName = (dateStr) => {
+                if (!dateStr) return "未知时间";
+
+                // 兼容处理中文字符和横杠，转化为标准日期格式
+                let cleanStr = dateStr.replace(/年|月/g, '-').replace(/日/g, '');
+                let itemDate = new Date(cleanStr);
+
+                if (isNaN(itemDate.getTime())) return "更早";
+
+                const today = new Date();
+                today.setHours(0, 0, 0, 0); // 锚定今天凌晨 0 点
+                const targetDate = new Date(itemDate);
+                targetDate.setHours(0, 0, 0, 0); // 锚定目标日凌晨 0 点
+
+                const diffTime = today.getTime() - targetDate.getTime();
+                const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+                if (diffDays === 0) return "今天";
+                if (diffDays === 1) return "昨天";
+                if (diffDays > 1 && diffDays <= 7) return "过去 7 天";
+                if (diffDays > 7 && diffDays <= 30) return "过去 30 天";
+
+                // 超过 30 天，显示具体年月，如 "2026年3月"
+                return `${targetDate.getFullYear()}年${targetDate.getMonth() + 1}月`;
+              };
+
+              // 遍历数据，插入时间标头
+              mapped.forEach(item => {
+                let groupName = "";
+
+                // 系统公告和欠费提醒，归类为置顶组
+                if (item.id === 'balance_warning' || item.is_announcement) {
+                  groupName = "置顶与通知";
+                } else {
+                  groupName = getDateGroupName(item.exact_time || item.date);
+                }
+
+                // 如果当前组名和上一个不同，说明跨天/跨阶段了，插入一个虚拟的 Header 对象
+                if (groupName !== currentGroup) {
+                  finalGroupedArray.push({
+                    isHeader: true,
+                    title: groupName,
+                    id: 'header_' + groupName
+                  });
+                  currentGroup = groupName;
+                }
+
+                // 插入真实的公文卡片
+                finalGroupedArray.push(item);
+              });
+
+              return finalGroupedArray;
             });
 
             // ================= 🚀 升级后的本地化 AI 图标逻辑 (后端直供版) =================
