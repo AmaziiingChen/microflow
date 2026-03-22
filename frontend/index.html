@@ -75,6 +75,7 @@
         flex: 1;
         overflow-y: auto; /* 允许纵向滚动 */
         padding: 20px;
+        padding-bottom: 80px; /* 为底部悬浮功能栏留出空间 */
         /* 优化：平滑滚动 */
         scroll-behavior: smooth;
       }
@@ -1482,20 +1483,29 @@
          1. 完美对称外框 (消灭 justify-content 突变导致的抽动)
          ============================================================ */
       .main-card-header {
-        background: var(--card-bg);
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(20px) saturate(180%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
         border-radius: 30px;
-        padding: 6px 8px; /* 稍微增加一点内边距，让呼吸感更足 */
+        padding: 6px 8px;
         box-shadow:
-          0 4px 12px rgba(0, 0, 0, 0.02),
-          0 1px 3px rgba(0, 0, 0, 0.02);
-        border: 1px solid rgba(0, 0, 0, 0.03);
+          0 8px 32px rgba(0, 0, 0, 0.12),
+          0 4px 16px rgba(0, 0, 0, 0.08),
+          0 2px 8px rgba(0, 0, 0, 0.04);
+        border: 1px solid rgba(0, 0, 0, 0.06);
         display: flex;
         align-items: center;
-        margin-bottom: 12px;
+        justify-content: space-between;
+        position: fixed;
+        bottom: 16px;
+        left: 16px;
+        right: 16px;
+        z-index: 100;
+        max-width: 600px;
+        margin: 0 auto;
         /* 🌟 防止溢出 */
         overflow: hidden;
         min-width: 0;
-        max-width: 100%;
         box-sizing: border-box;
       }
 
@@ -2237,6 +2247,7 @@
         overflow-x: auto;
         padding: 0 0 0px 0;
         gap: 10px;
+        margin-top: 0;
         margin-bottom: 14px;
         scrollbar-width: none;
         scroll-behavior: smooth;
@@ -2247,14 +2258,17 @@
       .filter-chip {
         padding: 6px 16px;
         border-radius: 20px;
-        background: #f3f4f6;
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
         color: var(--text-sub);
         font-size: 13px;
         font-weight: 600;
         cursor: pointer;
         white-space: nowrap;
-        border: 1px solid transparent;
+        border: 1px solid rgba(0, 0, 0, 0.08);
         user-select: none;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
         transition:
           all 0.4s var(--curve-pop),
           background-color 0.2s ease,
@@ -2825,93 +2839,6 @@
 
     <div id="app" style="display: flex; flex-direction: column; height: 100%">
       <div v-show="currentView === 'list'" class="list-view">
-        <!-- ============================================================
-             🌟 灵动岛 Header 卡片 - 完美对称布局
-             ============================================================
-             【布局结构】使用 header-side 左右护法容器，强制居中
-             ┌─────────────────────────────────────────────────────────────┐
-             │  header-side.left  header-center  header-side.right        │
-             │  (搜索框-左对齐)   (图标组-绝对居中)  (更新按钮-右对齐)      │
-             └─────────────────────────────────────────────────────────────┘
-             ============================================================ -->
-        <div
-          class="main-card-header"
-          :class="{ 'is-searching': isSearchUIExpanded }"
-        >
-          <div class="header-side left">
-            <div
-              class="search-morph-container"
-              :class="{ 'is-active': isSearchUIExpanded }"
-            >
-              <input
-                type="text"
-                class="search-input"
-                placeholder="搜索公文..."
-                ref="searchInputRef"
-                v-model="searchQuery"
-                @input="handleSearch"
-                @keyup.esc="closeSearchUI"
-              />
-              <div class="search-icon-wrapper" @click="handleSearchClick">
-                <div class="svg-icon-mask icon-search"></div>
-              </div>
-            </div>
-          </div>
-
-          <div class="header-center">
-            <div
-              class="dock-group"
-              :class="{ 'is-collapsed': isSearchUIExpanded }"
-            >
-              <button
-                class="dock-item today-btn"
-                @click="handleTodayClick"
-                data-tooltip="今日 / 退出搜索"
-              >
-                <div class="svg-icon-mask icon-today"></div>
-              </button>
-              <button
-                class="dock-item hide-on-search"
-                @click="filterBySource('收藏')"
-                data-tooltip="收藏夹"
-              >
-                <div class="svg-icon-mask icon-star"></div>
-              </button>
-              <button
-                class="dock-item hide-on-search"
-                @click="openSettings"
-                data-tooltip="设置"
-              >
-                <div class="svg-icon-mask icon-gear"></div>
-              </button>
-            </div>
-          </div>
-
-          <div class="header-side right">
-            <div class="right-actions">
-              <button
-                class="btn-check"
-                :class="{
-                  loading: isLoading,
-                  'read-only-btn': isReadOnlyMode && !isLoading
-                }"
-                @click="handleButtonClick()"
-                :disabled="isUpdateDisabled && !isLoading && !isReadOnlyMode"
-                data-tooltip="更新公文"
-              >
-                <span v-if="isReadOnlyMode" class="btn-text">只读</span>
-                <span v-else-if="isLoading" class="btn-text"></span>
-                <span v-else-if="isUpdateDisabled" class="btn-text"
-                  >{{ updateCooldown }}s</span
-                >
-                <div v-else class="svg-icon-mask sm icon-arrow"></div>
-                <div class="aurora-light"></div>
-                <div class="aurora-inner"></div>
-              </button>
-            </div>
-          </div>
-        </div>
-
         <!-- 🎯 爬虫进度条 -->
         <div
           v-if="isLoading && updatePhase === 'spider'"
@@ -3152,6 +3079,85 @@
               >共 {{ processedArticles.filter(a => !a.is_announcement).length }}
               篇条目</span
             >
+          </div>
+        </div>
+
+        <!-- 🌟 底部功能栏：亚克力磨砂质感 -->
+        <div
+          class="main-card-header"
+          :class="{ 'is-searching': isSearchUIExpanded }"
+        >
+          <div class="header-side left">
+            <div
+              class="search-morph-container"
+              :class="{ 'is-active': isSearchUIExpanded }"
+            >
+              <input
+                type="text"
+                class="search-input"
+                placeholder="搜索公文..."
+                ref="searchInputRef"
+                v-model="searchQuery"
+                @input="handleSearch"
+                @keyup.esc="closeSearchUI"
+              />
+              <div class="search-icon-wrapper" @click="handleSearchClick">
+                <div class="svg-icon-mask icon-search"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="header-center">
+            <div
+              class="dock-group"
+              :class="{ 'is-collapsed': isSearchUIExpanded }"
+            >
+              <button
+                class="dock-item today-btn"
+                @click="handleTodayClick"
+                data-tooltip="今日 / 退出搜索"
+              >
+                <div class="svg-icon-mask icon-today"></div>
+              </button>
+              <button
+                class="dock-item hide-on-search"
+                @click="filterBySource('收藏')"
+                data-tooltip="收藏夹"
+              >
+                <div class="svg-icon-mask icon-star"></div>
+              </button>
+              <button
+                class="dock-item hide-on-search"
+                @click="openSettings"
+                data-tooltip="设置"
+              >
+                <div class="svg-icon-mask icon-gear"></div>
+              </button>
+            </div>
+          </div>
+
+          <div class="header-side right">
+            <div class="right-actions">
+              <button
+                class="btn-check"
+                :class="{
+                  loading: isLoading,
+                  'read-only-btn': isReadOnlyMode && !isLoading
+                }"
+                @click="handleButtonClick()"
+                :disabled="isUpdateDisabled && !isLoading && !isReadOnlyMode"
+                data-tooltip="更新公文"
+              >
+                <span v-if="isReadOnlyMode" class="btn-text">只读</span>
+                <span v-else-if="isLoading" class="btn-text"></span>
+                <span v-else-if="isUpdateDisabled" class="btn-text"
+                  >{{ updateCooldown }}s</span
+                >
+                <div v-else class="svg-icon-mask sm icon-arrow"></div>
+                <div class="aurora-light"></div>
+                <div class="aurora-inner"></div>
+              </button>
+            </div>
           </div>
         </div>
       </div>
