@@ -22,13 +22,16 @@
       }
 
       .list-date {
-        margin-left: auto; /* 核心：在 flex 容器中把元素推向最右边 */
-        font-weight: 700; /* 加粗 */
-        color: #959aa4; /* 中灰色 */
-        font-size: 12px;
+        margin-left: auto; /* 在 flex 中把它推向最右边 */
+        font-weight: 600;
+        color: #9ca3af;
         display: flex;
+        letter-spacing: 0.5px;
+        font-size: 12px;
+        /* 🚀 核心防御：时间是绝对的视觉锚点，严禁被压缩 */
+        flex-shrink: 0;
         align-items: center; /* 保证和前面的标签完美水平居中对齐 */
-        flex-shrink: 0; /* 防止在小屏幕下时间被挤压换行 */
+        white-space: nowrap;
       }
 
       /* 衬线体模式：全局覆盖字体 (调用系统原生经典宋体) */
@@ -278,28 +281,49 @@
         transition: transform 0.1s;
       }
 
-      /* 🌟 系统公告卡片特殊材质 (彻底抛弃生硬的左边框) */
       .announcement-card {
-        background: linear-gradient(
-          135deg,
-          #fffcf5 0%,
-          #fff7ed 100%
-        ) !important;
-        border: 1px solid rgba(245, 158, 11, 0.15) !important;
-        border-left: none !important; /* 必须抹除旧代码的左侧粗边框 */
+        background: var(--card-bg);
+        border-radius: 16px; /* 变圆润 */
+        padding: 16px 20px; /* 大幅增加内呼吸空间 */
+        margin-bottom: 12px;
+        cursor: pointer;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        border: 1px solid rgba(0, 0, 0, 0.03); /* 极浅的物理边界 */
+        /* 复合阴影：上层接触阴影，下层环境漫反射 */
         box-shadow:
-          0 2px 8px rgba(245, 158, 11, 0.04),
-          0 1px 2px rgba(0, 0, 0, 0.02) !important;
+          0 1px 3px rgba(0, 0, 0, 0.02),
+          0 4px 12px rgba(0, 0, 0, 0.02);
+        /* 强制硬件加速，防止文字在缩放时产生亚像素抖动模糊 */
+        will-change: transform, box-shadow;
+        transition:
+          transform 0.4s var(--curve-pop),
+          box-shadow 0.4s ease,
+          border-color 0.4s ease,
+          background-color 0.3s ease;
+      }
+      /* 悬浮态：Z轴微抬升 (已降低高度) */
+      .announcement-card:hover {
+        transform: translateY(-2px); /* 悬浮高度收敛，更具分量感 */
+        border-color: rgba(0, 0, 0, 0.06);
+        background-color: #ffffff; /* 悬浮时保持纯白，靠阴影体现高度 */
+        /* 阴影收敛，配合较低的悬浮高度 */
+        box-shadow:
+          0 4px 8px rgba(0, 0, 0, 0.03),
+          0 8px 16px rgba(0, 0, 0, 0.05);
       }
 
-      .announcement-card:hover {
-        transform: translateY(-2px);
-        border-color: rgba(245, 158, 11, 0.3) !important;
-        /* 散发微弱的琥珀色光晕 */
+      /* 按下态：Z轴下压 */
+      .announcement-card:active {
+        transform: translateY(0) scale(0.98);
+        background-color: #fafafa; /* 按下瞬间给予背景反馈 */
         box-shadow:
-          0 8px 16px rgba(245, 158, 11, 0.1),
-          0 4px 8px rgba(0, 0, 0, 0.03) !important;
+          0 1px 2px rgba(0, 0, 0, 0.03),
+          0 2px 4px rgba(0, 0, 0, 0.02);
+        transition: transform 0.1s;
       }
+
       .announcement-card.read {
         opacity: 0.7;
         filter: grayscale(0.2);
@@ -350,6 +374,22 @@
         opacity: 1;
       }
 
+      /* 🌟 收藏图标样式（只读显示） */
+      .favorite-icon {
+        flex-shrink: 0;
+        width: 18px;
+        height: 18px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-top: 3px;
+        margin-left: 4px;
+      }
+      .favorite-icon svg {
+        width: 16px;
+        height: 16px;
+      }
+
       .list-card-title {
         font-size: 16px; /* 字体加大，提升阅读直觉 */
         font-weight: 700;
@@ -398,16 +438,21 @@
       .meta-tag-gray {
         background-color: #f3f4f6;
         color: #959aa4;
-        padding: 4px 8px; /* 内部也多一点呼吸空间 */
+        padding: 4px 8px;
         border-radius: 6px;
         font-size: 12px;
         font-weight: 600;
         border: 0px solid #e5e7eb;
-        white-space: nowrap;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
         line-height: 1;
+
+        /* 🚀 核心修复：文字截断控制 */
+        display: inline-block; /* 替代原本的 inline-flex，对 ellipsis 渲染更稳定 */
+        vertical-align: middle;
+        max-width: 200px; /* 设定最大安全宽度（大约可容纳 10 个中文字符） */
+        overflow: hidden;
+        text-overflow: ellipsis; /* 超出显示省略号... */
+        white-space: nowrap; /* 绝对不许换行 */
+        flex-shrink: 1; /* 允许在极窄屏幕下继续被压缩 */
       }
 
       /* 已读卡片元数据行：整体变淡 */
@@ -635,6 +680,35 @@
       .badge-refresh.is-loading {
         opacity: 0.7;
         pointer-events: none;
+      }
+
+      /* 🌟 收藏按钮样式 */
+      .badge-favorite {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        color: #999;
+        background: #f5f5f5;
+        padding: 4px 6px;
+        border-radius: 7px;
+        border: 1px solid #e0e0e0;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition:
+          background 0.2s,
+          border-color 0.2s;
+      }
+      .badge-favorite:hover {
+        background: #fff9e6;
+        border-color: #ffd700;
+      }
+      .badge-favorite:active {
+        transform: scale(0.95);
+      }
+      .badge-favorite.is-favorite {
+        background: #fff9e6;
+        border-color: #ffd700;
       }
 
       /* 旋转动画 */
@@ -1091,6 +1165,22 @@
       .btn-back:hover {
         background: #c45554; /* 悬浮时变为更深的 Apple 警告红 */
         /* box-shadow: 0 4px 12px rgba(255, 59, 48, 0.25);  */
+      }
+
+      /* 🌟 收藏按钮 (金色) */
+      .btn-favorite {
+        background: #b8860b;
+        color: white;
+      }
+      .btn-favorite:hover {
+        background: #996d09;
+      }
+      .btn-favorite-active {
+        background: #ffd700;
+        color: #333;
+      }
+      .btn-favorite-active:hover {
+        background: #e6c200;
       }
 
       .status-center {
@@ -2262,6 +2352,19 @@
                   />
                 </svg>
               </span>
+              <!-- 🌟 收藏图标：只读显示，仅在已收藏时出现 -->
+              <span
+                v-if="!item.is_announcement && item.is_favorite"
+                class="favorite-icon is-favorite"
+                title="已收藏"
+              >
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path
+                    fill="#FFD700"
+                    d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+                  />
+                </svg>
+              </span>
             </div>
             <!-- 元数据行：AI 标签 + 来源 + 分类 + 时间 -->
             <div class="article-meta">
@@ -2498,6 +2601,25 @@
                       d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"
                     ></path>
                     <path d="M21 3v5h-5"></path>
+                  </svg>
+                </span>
+
+                <!-- 🌟 收藏按钮 -->
+                <span
+                  class="badge-favorite"
+                  :class="{ 'is-favorite': activeArticle && activeArticle.is_favorite }"
+                  @click="toggleFavorite(activeArticle)"
+                  :title="activeArticle && activeArticle.is_favorite ? '取消收藏' : '收藏'"
+                >
+                  <svg
+                    class="icon-svg"
+                    viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      :fill="activeArticle && activeArticle.is_favorite ? '#FFD700' : '#999'"
+                      d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+                    />
                   </svg>
                 </span>
 
@@ -2758,7 +2880,10 @@
             </div>
 
             <!-- 🚀 隐形阅读探测器：追踪用户是否滚动到底部 -->
-            <div id="read-detector" style="height: 1px; width: 100%; opacity: 0; pointer-events: none;"></div>
+            <div
+              id="read-detector"
+              style="height: 1px; width: 100%; opacity: 0; pointer-events: none"
+            ></div>
           </div>
           <div class="detail-footer">
             <div class="disclaimer">
@@ -3424,8 +3549,12 @@
                 year: "numeric",
                 month: "long",
                 day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
               }),
               department: "系统公告",
+              source_name: "系统通知",
+              category: "v1.0.0",
               tags: ["新手指南", "版本 1.0.0"],
               summary:
                 "初次见面！为了让 AI 能够为您智能总结公文，请点击本卡片进入设置界面，配置您的 API 密钥。这里未来也会是接收最新版本更新和系统通知的地方。",
@@ -3458,6 +3587,8 @@
                       res.announcement.publish_time ||
                       systemNotice.value.publish_time,
                     department: res.announcement.department || "系统公告",
+                    source_name: res.announcement.source_name || "系统通知",
+                    category: res.announcement.category || res.announcement.version || systemNotice.value.category,
                     tags: res.announcement.tags || systemNotice.value.tags,
                     summary:
                       res.announcement.summary || systemNotice.value.summary,
@@ -3710,13 +3841,13 @@
               const subscribed = config.value.subscribedSources || [];
               if (subscribed.length === 0) {
                 // 未设置订阅时显示全部
-                return ["全部", ...allAvailableSources.value];
+                return ["全部", "收藏", ...allAvailableSources.value];
               }
               // 按固定顺序过滤出订阅的来源
               const ordered = allAvailableSources.value.filter((s) =>
                 subscribed.includes(s),
               );
-              return ["全部", ...ordered];
+              return ["全部", "收藏", ...ordered];
             });
 
             const activeSource = ref("全部");
@@ -3985,8 +4116,8 @@
                   title: systemNotice.value.title,
                   publish_time: systemNotice.value.publish_time,
                   department: systemNotice.value.department,
-                  source_name: "系统通知",
-                  category: `${systemNotice.value.version}`,
+                  source_name: systemNotice.value.source_name,
+                  category: systemNotice.value.category,
                   parsedTags: systemNotice.value.tags,
                   parsedBody:
                     systemNotice.value.content || systemNotice.value.summary,
@@ -4071,10 +4202,18 @@
               isLoadingMore.value = true;
               page.value += 1;
 
-              // 🌟 修复：当 activeSource 为"全部"且有订阅时，传递订阅来源列表
+              // 🌟 修复：当 activeSource 为"全部"或"收藏"且有订阅时，传递订阅来源列表
               let sourceParam = null;
               let sourceNamesParam = null;
+              let favoritesOnly = false;
+
               if (activeSource.value === "全部") {
+                const subscribed = config.value.subscribedSources || [];
+                if (subscribed.length > 0) {
+                  sourceNamesParam = subscribed;
+                }
+              } else if (activeSource.value === "收藏") {
+                favoritesOnly = true;
                 const subscribed = config.value.subscribedSources || [];
                 if (subscribed.length > 0) {
                   sourceNamesParam = subscribed;
@@ -4088,6 +4227,7 @@
                 20,
                 sourceParam,
                 sourceNamesParam,
+                favoritesOnly,
               );
               if (res.status === "success") {
                 if (res.data.length === 0) {
@@ -4141,8 +4281,16 @@
               // 🌟 修复：当点击"全部"且有订阅时，传递订阅来源列表，避免返回未订阅的文章
               let sourceParam = null;
               let sourceNamesParam = null;
+              let favoritesOnly = false;
 
               if (source === "全部") {
+                const subscribed = config.value.subscribedSources || [];
+                if (subscribed.length > 0) {
+                  sourceNamesParam = subscribed;
+                }
+              } else if (source === "收藏") {
+                // 🌟 收藏筛选：设置 favoritesOnly 标志
+                favoritesOnly = true;
                 const subscribed = config.value.subscribedSources || [];
                 if (subscribed.length > 0) {
                   sourceNamesParam = subscribed;
@@ -4157,6 +4305,7 @@
                 const res = await pywebview.api.search_articles(
                   keyword,
                   sourceParam,
+                  favoritesOnly,
                 );
                 if (res.status === "success") {
                   articles.value = res.data;
@@ -4168,6 +4317,7 @@
                   20,
                   sourceParam,
                   sourceNamesParam,
+                  favoritesOnly,
                 );
                 if (res.status === "success") {
                   articles.value = res.data;
@@ -4839,12 +4989,21 @@
 
             // 检查双重条件是否均已满足
             const checkAndMarkRead = () => {
-              if (hasDweltEnough.value && isBottomVisible.value && activeArticle.value && activeArticle.value.is_read === 0) {
+              if (
+                hasDweltEnough.value &&
+                isBottomVisible.value &&
+                activeArticle.value &&
+                activeArticle.value.is_read === 0
+              ) {
                 const url = activeArticle.value.url;
                 if (!pendingReadUrls.value.includes(url)) {
                   pendingReadUrls.value.push(url);
-                  pywebview.api.mark_as_read(url).catch(e => console.error(e));
-                  console.log("✅ 满足双重阅读条件：卡片已在后台静默标记为已读");
+                  pywebview.api
+                    .mark_as_read(url)
+                    .catch((e) => console.error(e));
+                  console.log(
+                    "✅ 满足双重阅读条件：卡片已在后台静默标记为已读",
+                  );
                 }
               }
             };
@@ -4864,11 +5023,17 @@
             // 初始化追踪器
             const setupReadingTracker = (item) => {
               // 1. 清理上一篇文章的旧状态
-              if (readingObserver) { readingObserver.disconnect(); readingObserver = null; }
-              if (dwellTimer) { clearTimeout(dwellTimer); dwellTimer = null; }
-              window.removeEventListener('mousemove', handleUserActivity);
-              window.removeEventListener('keydown', handleUserActivity);
-              window.removeEventListener('wheel', handleUserActivity);
+              if (readingObserver) {
+                readingObserver.disconnect();
+                readingObserver = null;
+              }
+              if (dwellTimer) {
+                clearTimeout(dwellTimer);
+                dwellTimer = null;
+              }
+              window.removeEventListener("mousemove", handleUserActivity);
+              window.removeEventListener("keydown", handleUserActivity);
+              window.removeEventListener("wheel", handleUserActivity);
 
               // 如果文章已经是已读，直接跳过，节省性能
               if (item.is_read !== 0) return;
@@ -4878,22 +5043,31 @@
               isBottomVisible.value = false;
 
               // 2. 布置人体活动传感器 (一次性触发)
-              window.addEventListener('mousemove', handleUserActivity, { once: true });
-              window.addEventListener('keydown', handleUserActivity, { once: true });
-              window.addEventListener('wheel', handleUserActivity, { once: true });
+              window.addEventListener("mousemove", handleUserActivity, {
+                once: true,
+              });
+              window.addEventListener("keydown", handleUserActivity, {
+                once: true,
+              });
+              window.addEventListener("wheel", handleUserActivity, {
+                once: true,
+              });
 
               // 3. 激活底部视觉探测器
               setTimeout(() => {
-                const detector = document.getElementById('read-detector');
+                const detector = document.getElementById("read-detector");
                 if (detector) {
-                  readingObserver = new IntersectionObserver((entries) => {
-                    if (entries[0].isIntersecting) {
+                  readingObserver = new IntersectionObserver(
+                    (entries) => {
+                      if (entries[0].isIntersecting) {
                         isBottomVisible.value = true;
                         checkAndMarkRead(); // 滚动到底部时，检查有效停留时间是否达标
-                    } else {
+                      } else {
                         isBottomVisible.value = false; // 往回滚了，重置状态
-                    }
-                  }, { threshold: 0.1 });
+                      }
+                    },
+                    { threshold: 0.1 },
+                  );
                   readingObserver.observe(detector);
                 }
               }, 400); // 预留一点时间让 Vue 把 Markdown 渲染完
@@ -4905,7 +5079,9 @@
                 const url = activeArticle.value.url;
                 if (!pendingReadUrls.value.includes(url)) {
                   pendingReadUrls.value.push(url);
-                  pywebview.api.mark_as_read(url).catch(e => console.error(e));
+                  pywebview.api
+                    .mark_as_read(url)
+                    .catch((e) => console.error(e));
                 }
               }
             };
@@ -5003,6 +5179,70 @@
                   console.error("复制失败", err);
                   statusMsg.value = "复制失败，请检查浏览器权限";
                 });
+            };
+
+            // 🌟 收藏切换方法（乐观 UI 更新）
+            const toggleFavorite = async (item) => {
+              if (!item) return;
+
+              // 记录当前状态
+              const oldStatus = item.is_favorite;
+              const newStatus = oldStatus ? 0 : 1;
+
+              // 🌟 乐观 UI 更新：同时更新 activeArticle 和 articles 数组中的对应项
+              item.is_favorite = newStatus;
+
+              // 同步更新 articles 数组中的对应项（确保列表视图也更新）
+              const articleIndex = articles.value.findIndex(
+                (a) => a.url === item.url,
+              );
+              if (articleIndex !== -1) {
+                articles.value[articleIndex] = {
+                  ...articles.value[articleIndex],
+                  is_favorite: newStatus,
+                };
+              }
+
+              try {
+                const res = await pywebview.api.toggle_favorite(item.url);
+                if (res.status === "success") {
+                  // 使用服务端返回的真实状态同步
+                  const finalStatus = res.is_favorite ? 1 : 0;
+                  item.is_favorite = finalStatus;
+
+                  // 同步更新 articles 数组
+                  if (articleIndex !== -1) {
+                    articles.value[articleIndex] = {
+                      ...articles.value[articleIndex],
+                      is_favorite: finalStatus,
+                    };
+                  }
+
+                  <!-- statusMsg.value = res.is_favorite ? "已收藏" : "已取消收藏"; -->
+                  setTimeout(() => (statusMsg.value = ""), 2000);
+                } else {
+                  // 回滚
+                  item.is_favorite = oldStatus;
+                  if (articleIndex !== -1) {
+                    articles.value[articleIndex] = {
+                      ...articles.value[articleIndex],
+                      is_favorite: oldStatus,
+                    };
+                  }
+                  statusMsg.value = "操作失败";
+                }
+              } catch (e) {
+                // 回滚
+                item.is_favorite = oldStatus;
+                if (articleIndex !== -1) {
+                  articles.value[articleIndex] = {
+                    ...articles.value[articleIndex],
+                    is_favorite: oldStatus,
+                  };
+                }
+                console.error("收藏操作失败:", e);
+                statusMsg.value = "操作失败";
+              }
             };
 
             // 2. 在 setup() 的末尾增加下载方法，暴露给模板
@@ -5503,6 +5743,7 @@
               renderMarkdown,
               openBrowser,
               copyText,
+              toggleFavorite,
               forceMarkRead,
               downloadFile,
               scrollToAttachments,

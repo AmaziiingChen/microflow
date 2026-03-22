@@ -341,18 +341,19 @@ class Api:
             logger.error(f"读取历史记录失败: {e}")
             return {"status": "error", "message": "读取本地数据库失败"}
 
-    def get_history_paged(self, page: int = 1, page_size: int = 20, source_name: str = None, source_names: list = None) -> Dict[str, Any]:# type: ignore
-        """分页获取历史记录，支持按来源筛选
+    def get_history_paged(self, page: int = 1, page_size: int = 20, source_name: str = None, source_names: list = None, favorites_only: bool = False) -> Dict[str, Any]:# type: ignore
+        """分页获取历史记录，支持按来源筛选、按收藏筛选
 
         Args:
             page: 页码
             page_size: 每页数量
             source_name: 单个来源筛选
             source_names: 多个来源筛选列表（优先级高于 source_name）
+            favorites_only: 是否只返回收藏的文章
         """
         try:
             offset = (page - 1) * page_size
-            articles = db.get_articles_paged(limit=page_size, offset=offset, source_name=source_name, source_names=source_names)
+            articles = db.get_articles_paged(limit=page_size, offset=offset, source_name=source_name, source_names=source_names, favorites_only=favorites_only)
             return {"status": "success", "data": articles}
         except Exception as e:
             logger.error(f"分页读取失败: {e}")
@@ -363,6 +364,22 @@ class Api:
         try:
             db.mark_as_read(url)
             return {"status": "success"}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    def toggle_favorite(self, url: str) -> Dict[str, Any]:
+        """
+        切换文章收藏状态
+
+        Args:
+            url: 文章 URL（唯一标识）
+
+        Returns:
+            {"status": "success", "is_favorite": True/False} 或 {"status": "error", ...}
+        """
+        try:
+            new_status = db.toggle_favorite(url)
+            return {"status": "success", "is_favorite": new_status}
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
@@ -579,16 +596,16 @@ class Api:
         if self.window:
             self.window.hide()
 
-    def search_articles(self, keyword: str, source_name: str = None) -> dict: #type: ignore
-        """全局搜索（支持按来源筛选）"""
+    def search_articles(self, keyword: str, source_name: str = None, favorites_only: bool = False) -> dict: #type: ignore
+        """全局搜索（支持按来源筛选、按收藏筛选）"""
         try:
             if not keyword or not keyword.strip():
                 # 如果搜索词为空，相当于直接获取分页列表
-                articles = db.get_articles_paged(limit=20, offset=0, source_name=source_name)
+                articles = db.get_articles_paged(limit=20, offset=0, source_name=source_name, favorites_only=favorites_only)
                 return {"status": "success", "data": articles}
 
-            # 将 source_name 传递给底层的数据库方法
-            data = db.search_articles(keyword.strip(), limit=50, source_name=source_name)
+            # 将 source_name 和 favorites_only 传递给底层的数据库方法
+            data = db.search_articles(keyword.strip(), limit=50, source_name=source_name, favorites_only=favorites_only)
             return {"status": "success", "data": data}
         except Exception as e:
             logger.error(f"搜索失败: {e}")

@@ -408,6 +408,13 @@ class DatabaseManager:
                 cursor.execute("ALTER TABLE articles ADD COLUMN source_name TEXT DEFAULT '公文通'")
                 cursor.execute("UPDATE articles SET source_name = '公文通' WHERE source_name IS NULL")
                 logger.info("source_name 字段迁移完成")
+
+            # 🌟 新增：is_favorite 字段迁移
+            if 'is_favorite' not in columns:
+                logger.info("正在执行 is_favorite 字段迁移...")
+                cursor.execute("ALTER TABLE articles ADD COLUMN is_favorite INTEGER DEFAULT 0")
+                logger.info("is_favorite 字段迁移完成")
+
             return True
 
         try:
@@ -445,7 +452,7 @@ class DatabaseManager:
 
             return False, "unchanged"
 
-    def get_articles_paged(self, limit: int = 20, offset: int = 0, source_name: Optional[str] = None, source_names: Optional[List[str]] = None) -> List[Dict]:
+    def get_articles_paged(self, limit: int = 20, offset: int = 0, source_name: Optional[str] = None, source_names: Optional[List[str]] = None, favorites_only: bool = False) -> List[Dict]:
         """分页获取文章
 
         Args:
@@ -453,25 +460,37 @@ class DatabaseManager:
             offset: 偏移量
             source_name: 单个来源筛选
             source_names: 多个来源筛选列表（当 source_name 为 None 时生效）
+            favorites_only: 仅返回收藏的文章
         """
         with self._get_read_connection() as conn:
             cursor = conn.cursor()
+
+            # 构建基础查询
+            base_query = "SELECT * FROM articles"
+            conditions = []
+            params = []
+
+            # 收藏筛选
+            if favorites_only:
+                conditions.append("is_favorite = 1")
+
+            # 来源筛选
             if source_name:
-                cursor.execute(
-                    "SELECT * FROM articles WHERE source_name = ? ORDER BY date DESC, exact_time DESC LIMIT ? OFFSET ?",
-                    (source_name, limit, offset)
-                )
+                conditions.append("source_name = ?")
+                params.append(source_name)
             elif source_names and len(source_names) > 0:
                 placeholders = ','.join('?' * len(source_names))
-                cursor.execute(
-                    f"SELECT * FROM articles WHERE source_name IN ({placeholders}) ORDER BY date DESC, exact_time DESC LIMIT ? OFFSET ?",
-                    (*source_names, limit, offset)
-                )
-            else:
-                cursor.execute(
-                    "SELECT * FROM articles ORDER BY date DESC, exact_time DESC LIMIT ? OFFSET ?",
-                    (limit, offset)
-                )
+                conditions.append(f"source_name IN ({placeholders})")
+                params.extend(source_names)
+
+            # 组装 WHERE 子句
+            if conditions:
+                base_query += " WHERE " + " AND ".join(conditions)
+
+            base_query += " ORDER BY date DESC, exact_time DESC LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+
+            cursor.execute(base_query, tuple(params))
             return [dict(row) for row in cursor.fetchall()]
 
     def get_all_sources(self) -> List[str]:
@@ -489,7 +508,7 @@ class DatabaseManager:
             row = cursor.fetchone()
             return dict(row) if row else None
 
-    def search_articles(self, keyword: str, limit: int = 50, source_name: Optional[str] = None) -> List[Dict]:
+    def search_articles(self, keyword: str, limit: int = 50, source_name: Optional[str] = None, favorites_only: bool = False) -> List[Dict]:
         """搜索文章"""
         with self._get_read_connection() as conn:
             cursor = conn.cursor()
@@ -516,7 +535,7 @@ class DatabaseManager:
                                  "OR department LIKE ? OR category LIKE ? OR source_name LIKE ? "
                                  "OR attachments LIKE ?)")
                     and_conditions.append(term_cond)
-                    
+
                     # 🌟 注意：这里必须改成 * 8，因为括号内现在有 8 个问号
                     params.extend([like_term] * 8)
 
@@ -527,21 +546,24 @@ class DatabaseManager:
             else:
                 base_condition = "(" + " OR ".join(sql_or_conditions) + ")"
 
+            # 🌟 构建额外条件
+            extra_conditions = []
             if source_name:
-                query = f"""
-                SELECT * FROM articles
-                WHERE {base_condition} AND source_name = ?
-                ORDER BY exact_time DESC, date DESC
-                LIMIT ?
-                """
+                extra_conditions.append("source_name = ?")
                 params.append(source_name)
-            else:
-                query = f"""
-                SELECT * FROM articles
-                WHERE {base_condition}
-                ORDER BY exact_time DESC, date DESC
-                LIMIT ?
-                """
+            if favorites_only:
+                extra_conditions.append("is_favorite = 1")
+
+            where_clause = base_condition
+            if extra_conditions:
+                where_clause += " AND " + " AND ".join(extra_conditions)
+
+            query = f"""
+            SELECT * FROM articles
+            WHERE {where_clause}
+            ORDER BY exact_time DESC, date DESC
+            LIMIT ?
+            """
 
             params.append(limit)
             cursor.execute(query, tuple(params))
@@ -647,6 +669,38 @@ class DatabaseManager:
             self._write_worker.submit(do_mark, wait=False)
         except Exception as e:
             logger.error(f"标记已读失败: {e}")
+
+    def toggle_favorite(self, url: str) -> bool:
+        """
+        切换文章收藏状态
+
+        Args:
+            url: 文章 URL（唯一标识）
+
+        Returns:
+            切换后的收藏状态（True=已收藏，False=未收藏）
+        """
+        def do_toggle(cursor: sqlite3.Cursor):
+            # 先查询当前状态
+            cursor.execute("SELECT is_favorite FROM articles WHERE url = ?", (url,))
+            row = cursor.fetchone()
+            if row is None:
+                return False
+
+            current_status = row['is_favorite'] if row['is_favorite'] else 0
+            new_status = 0 if current_status else 1
+
+            cursor.execute(
+                "UPDATE articles SET is_favorite = ? WHERE url = ?",
+                (new_status, url)
+            )
+            return bool(new_status)
+
+        try:
+            return self._write_worker.submit(do_toggle, wait=True, timeout=5.0)
+        except Exception as e:
+            logger.error(f"切换收藏状态失败: {e}")
+            return False
 
     def update_summary(self, article_id: int, new_summary: str) -> bool:
         """更新文章摘要（同步）"""
