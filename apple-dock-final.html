@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Apple Dock - Final Refinement</title>
+    <style>
+      :root {
+        --bg-color: #f6f6f8;
+        --glass-bg: rgba(255, 255, 255, 0.45);
+        --btn-bg: rgba(0, 0, 0, 0.06);
+        --btn-hover: rgba(0, 0, 0, 0.1);
+        --curve-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+        --text-main: #111;
+      }
+
+      body {
+        margin: 0;
+        height: 100vh;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        background: var(--bg-color);
+        font-family: -apple-system, sans-serif;
+        padding-bottom: 60px;
+      }
+
+      /* 1. 外层容器：固定总宽度 500px，左右内边距各 8px */
+      .dynamic-dock {
+        background: var(--glass-bg);
+        backdrop-filter: blur(20px) saturate(180%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
+        border-radius: 30px;
+        padding: 6px 8px;
+        display: flex;
+        align-items: center;
+        width: 500px;
+        box-shadow:
+          0 16px 40px rgba(0, 0, 0, 0.08),
+          inset 0 1px 1px rgba(255, 255, 255, 0.4);
+      }
+
+      /* 左侧动力源 */
+      .search-zone {
+        height: 44px;
+        width: 44px; /* 初始为正圆 */
+        border-radius: 22px;
+        background: var(--btn-bg);
+        display: flex;
+        align-items: center;
+        overflow: hidden;
+        position: relative;
+        cursor: pointer;
+        transition:
+          width 0.7s var(--curve-spring),
+          background 0.3s ease;
+        flex-shrink: 0;
+      }
+
+      /* 中间幽灵缓冲带：自然居中内容 */
+      .ghost-collider-zone {
+        flex: 1;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      /* 右侧锚点墙 */
+      .right-zone {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+      }
+
+      /* =========================================
+       ✨ 内部可见 UI
+       ========================================= */
+
+      .search-input {
+        width: 100%;
+        border: none;
+        background: transparent;
+        outline: none;
+        padding: 0 44px 0 16px;
+        font-size: 14px;
+        font-weight: 600;
+        opacity: 0;
+        transform: translateX(10px);
+        transition:
+          opacity 0.3s ease,
+          transform 0.6s var(--curve-spring);
+      }
+
+      .icon-wrapper {
+        position: absolute;
+        right: 0;
+        width: 44px;
+        height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-main);
+      }
+
+      .center-visible-group {
+        display: flex;
+        gap: 6px;
+        background: var(--btn-bg);
+        border-radius: 22px;
+        padding: 4px;
+        transition:
+          gap 0.7s var(--curve-spring),
+          padding 0.7s var(--curve-spring),
+          background 0.3s ease;
+        transform-origin: center;
+      }
+
+      .btn-circle {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        color: var(--text-main);
+        overflow: hidden;
+        transition:
+          width 0.7s var(--curve-spring),
+          opacity 0.3s ease,
+          margin 0.7s var(--curve-spring),
+          transform 0.2s ease;
+      }
+
+      .btn-circle:hover {
+        background: var(--btn-hover);
+        transform: scale(1.05);
+      }
+      .btn-circle:active {
+        transform: scale(0.95);
+        transition: 0.1s;
+      }
+
+      /* 右侧按钮：加入了全局状态过渡 */
+      .btn-update {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: var(--btn-bg);
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-main);
+        transform-origin: center;
+        /* 重点：为 opacity 增加过渡，迎接搜索状态的变暗 */
+        transition:
+          transform 0.4s var(--curve-spring),
+          background 0.2s ease,
+          opacity 0.6s var(--curve-spring);
+      }
+      .btn-update:hover {
+        background: var(--btn-hover);
+        transform: scale(1.05);
+      }
+
+      /* =========================================
+       🚀 交互状态：精确调优
+       ========================================= */
+
+      /* 🌟 1. 空间的数学游戏：控制 10px 完美留白 */
+      .dynamic-dock.is-searching .search-zone {
+        /* 计算公式：
+         Dock 可用总宽 = 100%
+         减去：右侧按钮(44px) + Today按钮(44px) + 左侧留白(10px) + 右侧留白(10px) = 108px
+         剩下的所有宽度全给搜索框，Ghost Zone 就会被自然压缩到完美的间距！
+      */
+        width: calc(100% - 108px);
+        background: rgba(0, 0, 0, 0.03);
+        cursor: text; /* 优化光标：暗示可以输入 */
+      }
+      .dynamic-dock.is-searching .search-input {
+        opacity: 1;
+        transform: translateX(0);
+      }
+
+      .dynamic-dock.is-searching .center-visible-group {
+        gap: 0;
+        padding: 0;
+        background: transparent;
+      }
+      .dynamic-dock.is-searching .btn-circle.hide-on-search {
+        width: 0;
+        opacity: 0;
+        margin: 0;
+      }
+      .dynamic-dock.is-searching .btn-circle.today-btn {
+        width: 44px;
+        height: 44px;
+        background: var(--btn-bg);
+      }
+
+      /* 🌟 2. 视觉退让 (Visual Yielding) */
+      .dynamic-dock.is-searching .btn-update {
+        /* 取消突兀的物理挤压，改为：
+         微缩一点点体积 + 降低透明度。
+         这在设计语境中叫做“视觉退让”，引导用户将注意力完全集中在搜索框上。
+      */
+        opacity: 0.4;
+        transform: scale(0.9);
+        pointer-events: none; /* 搜索时可选：防止误触右侧功能 */
+      }
+
+      /* 依然保留中间按钮受撞击的 Q弹感 */
+      .dynamic-dock.is-searching .center-visible-group {
+        animation: material-squish 0.7s var(--curve-spring) forwards;
+      }
+      .dynamic-dock:not(.is-searching) .center-visible-group {
+        animation: material-vacuum 0.7s var(--curve-spring) forwards;
+      }
+
+      @keyframes material-squish {
+        0% {
+          transform: scale(1);
+        }
+        20% {
+          transform: scaleX(0.82) scaleY(1.15);
+        }
+        45% {
+          transform: scaleX(1.06) scaleY(0.94);
+        }
+        75% {
+          transform: scaleX(0.98) scaleY(1.02);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+
+      @keyframes material-vacuum {
+        0% {
+          transform: scale(1);
+        }
+        20% {
+          transform: scaleX(1.1) scaleY(0.9);
+        }
+        45% {
+          transform: scaleX(0.95) scaleY(1.05);
+        }
+        75% {
+          transform: scaleX(1.02) scaleY(0.98);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="dynamic-dock" id="dock">
+      <div class="search-zone" id="searchBtn">
+        <input
+          type="text"
+          class="search-input"
+          placeholder="搜索公文..."
+          id="searchInput"
+        />
+        <div class="icon-wrapper">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+          >
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+        </div>
+      </div>
+
+      <div class="ghost-collider-zone">
+        <div class="center-visible-group">
+          <button class="btn-circle hide-on-search">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+            >
+              <path d="M12 2l3 6 7 1-5 5 1 7-7-4-7 4 1-7-5-5 7-1z"></path>
+            </svg>
+          </button>
+          <button class="btn-circle today-btn" id="todayBtn">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+            >
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+          </button>
+          <button class="btn-circle hide-on-search">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+            >
+              <circle cx="12" cy="12" r="3"></circle>
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+              ></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="right-zone">
+        <button class="btn-update">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+          >
+            <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+            <path d="M21 3v5h-5"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <script>
+      const dock = document.getElementById("dock");
+      const searchBtn = document.getElementById("searchBtn");
+      const searchInput = document.getElementById("searchInput");
+      const todayBtn = document.getElementById("todayBtn");
+
+      searchBtn.addEventListener("click", () => {
+        if (!dock.classList.contains("is-searching")) {
+          dock.classList.add("is-searching");
+          setTimeout(() => searchInput.focus(), 100);
+        }
+      });
+
+      todayBtn.addEventListener("click", (e) => {
+        if (dock.classList.contains("is-searching")) {
+          e.stopPropagation();
+          dock.classList.remove("is-searching");
+          searchInput.value = "";
+        }
+      });
+
+      document.addEventListener("click", (e) => {
+        if (!dock.contains(e.target)) {
+          dock.classList.remove("is-searching");
+          searchInput.value = "";
+        }
+      });
+    </script>
+  </body>
+</html>

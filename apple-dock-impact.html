@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Apple Dock - Physical Boundary Impact</title>
+    <style>
+      :root {
+        --bg-color: #f6f6f8;
+        --glass-bg: rgba(255, 255, 255, 0.45);
+        --btn-bg: rgba(0, 0, 0, 0.06);
+        --btn-hover: rgba(0, 0, 0, 0.1);
+        /* 核心物理曲线：稍微降低过冲幅度，增加阻尼感 */
+        --curve-spring: cubic-bezier(0.25, 1.4, 0.5, 1);
+        --text-main: #111;
+      }
+
+      body {
+        margin: 0;
+        height: 100vh;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        background: var(--bg-color);
+        font-family: -apple-system, sans-serif;
+        padding-bottom: 60px;
+      }
+
+      /* 1. 外层容器：开启 overflow: hidden 防止穿模 */
+      .dynamic-dock {
+        background: var(--glass-bg);
+        backdrop-filter: blur(20px) saturate(180%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
+        border-radius: 30px;
+        padding: 6px 8px;
+        display: flex;
+        align-items: center;
+        width: 500px;
+        box-shadow:
+          0 16px 40px rgba(0, 0, 0, 0.08),
+          inset 0 1px 1px rgba(255, 255, 255, 0.4);
+        overflow: hidden; /* 保证物体在框架内碰撞 */
+        position: relative;
+      }
+
+      /* =========================================
+       🚀 布局引擎：使用 Flex 模拟物理堆叠
+       ========================================= */
+
+      /* 搜索区：它是“冲撞者” */
+      .search-zone {
+        height: 44px;
+        width: 44px;
+        border-radius: 22px;
+        background: var(--btn-bg);
+        display: flex;
+        align-items: center;
+        position: relative;
+        cursor: pointer;
+        /* 这里的 width 变化带过冲，模拟撞击力量 */
+        transition:
+          width 0.6s var(--curve-spring),
+          background 0.3s ease;
+        flex-shrink: 0;
+        z-index: 2;
+      }
+
+      /* 幽灵缓冲：它负责把剩下的东西撑到右边 */
+      .physics-spacer {
+        flex: 1;
+        transition: flex 0.6s var(--curve-spring);
+      }
+
+      /* 右侧物理组合：包含 [中间按钮 + 右侧按钮] */
+      .right-physics-stack {
+        display: flex;
+        align-items: center;
+        gap: 10px; /* 你要求的 10px 紧凑留白 */
+        flex-shrink: 0;
+        will-change: transform;
+      }
+
+      /* =========================================
+       ✨ 内部组件
+       ========================================= */
+
+      .search-input {
+        width: 100%;
+        border: none;
+        background: transparent;
+        outline: none;
+        padding: 0 44px 0 16px;
+        font-size: 14px;
+        font-weight: 600;
+        opacity: 0;
+        transform: translateX(10px);
+        transition:
+          opacity 0.3s ease,
+          transform 0.6s var(--curve-spring);
+      }
+
+      .icon-wrapper {
+        position: absolute;
+        right: 0;
+        width: 44px;
+        height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-main);
+      }
+
+      /* 中间按钮视觉实体 */
+      .center-visual {
+        display: flex;
+        align-items: center;
+        background: var(--btn-bg);
+        border-radius: 22px;
+        padding: 4px;
+        transition: all 0.6s var(--curve-spring);
+      }
+
+      .btn-circle {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        border: none;
+        background: transparent;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        overflow: hidden;
+        transition:
+          width 0.6s var(--curve-spring),
+          opacity 0.3s ease,
+          margin 0.6s var(--curve-spring);
+      }
+
+      /* 右侧更新按钮 */
+      .btn-update {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: var(--btn-bg);
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        transition: opacity 0.6s ease;
+      }
+
+      /* =========================================
+       💥 核心：碰撞挤压动画
+       ========================================= */
+
+      /* 当搜索激活时 */
+      .dynamic-dock.is-searching .search-zone {
+        /* 计算：500(总宽) - 16(左右padding) - 44(更新) - 44(Today) - 20(两次10px留白) = 376 */
+        width: 376px;
+      }
+
+      .dynamic-dock.is-searching .search-input {
+        opacity: 1;
+        transform: translateX(0);
+      }
+
+      /* 按钮坍塌 */
+      .dynamic-dock.is-searching .center-visual {
+        padding: 0;
+        background: transparent;
+      }
+      .dynamic-dock.is-searching .btn-circle.hide-on-search {
+        width: 0;
+        opacity: 0;
+        margin: 0;
+      }
+      .dynamic-dock.is-searching .btn-circle.today-btn {
+        width: 44px;
+        height: 44px;
+        background: var(--btn-bg);
+      }
+
+      /* 🌟 碰撞魔法：中间和右侧元素在撞击那一刻的同步挤压 */
+      .dynamic-dock.is-searching .right-physics-stack {
+        /* 这里的动画时机要稍晚于搜索框展开启动，模拟“撞上”的那一刻 */
+        animation: soft-collision 0.6s var(--curve-spring) forwards;
+      }
+
+      /* 🌟 搜索框回弹：通过过冲曲线自然实现，
+       但由于我们加了 padding 和精确计算，它在过冲时会“撞击”右侧 stack，
+       导致 stack 产生 scaleX 形变。 */
+
+      @keyframes soft-collision {
+        0% {
+          transform: scale(1);
+        }
+        30% {
+          /* 撞击瞬间：向右极小位移 + X轴压扁 */
+          transform: translateX(4px) scaleX(0.85) scaleY(1.05);
+        }
+        60% {
+          /* 回弹：稍微拉伸 */
+          transform: translateX(-1px) scaleX(1.05) scaleY(0.98);
+        }
+        100% {
+          transform: translateX(0) scale(1);
+        }
+      }
+
+      /* 收起时的真空回吸 */
+      .dynamic-dock:not(.is-searching) .right-physics-stack {
+        animation: vacuum-impact 0.6s var(--curve-spring) forwards;
+      }
+
+      @keyframes vacuum-impact {
+        0% {
+          transform: scale(1);
+        }
+        30% {
+          transform: translateX(-4px) scaleX(1.1) scaleY(0.95);
+        }
+        100% {
+          transform: translateX(0) scale(1);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="dynamic-dock" id="dock">
+      <div class="search-zone" id="searchBtn">
+        <input
+          type="text"
+          class="search-input"
+          placeholder="搜索公文..."
+          id="searchInput"
+        />
+        <div class="icon-wrapper">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+          >
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+        </div>
+      </div>
+
+      <div class="physics-spacer"></div>
+
+      <div class="right-physics-stack">
+        <div class="center-visual">
+          <button class="btn-circle hide-on-search">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+            >
+              <path d="M12 2l3 6 7 1-5 5 1 7-7-4-7 4 1-7-5-5 7-1z"></path>
+            </svg>
+          </button>
+          <button class="btn-circle today-btn" id="todayBtn">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+            >
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+          </button>
+          <button class="btn-circle hide-on-search">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+            >
+              <circle cx="12" cy="12" r="3"></circle>
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+              ></path>
+            </svg>
+          </button>
+        </div>
+        <button class="btn-update">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+          >
+            <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+            <path d="M21 3v5h-5"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <script>
+      const dock = document.getElementById("dock");
+      const searchBtn = document.getElementById("searchBtn");
+      const searchInput = document.getElementById("searchInput");
+      const todayBtn = document.getElementById("todayBtn");
+
+      searchBtn.addEventListener("click", () => {
+        if (!dock.classList.contains("is-searching")) {
+          dock.classList.add("is-searching");
+          setTimeout(() => searchInput.focus(), 150);
+        }
+      });
+
+      todayBtn.addEventListener("click", (e) => {
+        if (dock.classList.contains("is-searching")) {
+          e.stopPropagation();
+          dock.classList.remove("is-searching");
+          searchInput.value = "";
+        }
+      });
+
+      document.addEventListener("click", (e) => {
+        if (!dock.contains(e.target)) {
+          dock.classList.remove("is-searching");
+          searchInput.value = "";
+        }
+      });
+    </script>
+  </body>
+</html>

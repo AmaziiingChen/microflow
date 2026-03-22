@@ -2610,7 +2610,7 @@
       /* ================= 新增：独立悬浮的 Toast 提示语 ================= */
       .floating-toast {
         position: fixed;
-        bottom: 100px;
+        bottom: 70%;
         left: 50%;
         transform: translateX(-50%);
         text-align: center; /* 1. 基础文本居中 */
@@ -3173,45 +3173,14 @@
             class="list-card inline-settings-card"
           >
             <div
-              class="title-row"
               style="
-                align-items: center;
                 border-bottom: 1px dashed #e5e7eb;
-                padding-bottom: 16px;
-                margin-bottom: 20px;
+                padding-bottom: 10px;
+                margin-bottom: 10px;
               "
             >
-              <h3
-                class="list-card-title"
-                style="
-                  color: var(--accent-color);
-                  display: flex;
-                  align-items: center;
-                  gap: 6px;
-                  font-size: 18px;
-                "
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.5"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  style="width: 20px; height: 20px"
-                >
-                  <circle cx="12" cy="12" r="3"></circle>
-                  <path
-                    d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
-                  ></path>
-                </svg>
-                系统设置
-              </h3>
-              <span
-                class="badge-home"
-                @click="closeSettingsWithAutoSave"
-                style="margin: 0"
-                >收起面板</span
+              <span style="font-size: 22px; font-weight: 700; color: #111"
+                >设置</span
               >
             </div>
 
@@ -3282,6 +3251,22 @@
                 class="form-input"
                 style="min-height: 120px"
               ></textarea>
+              <button
+                class="action-btn"
+                style="
+                  display: block;
+                  margin: 10px auto 0;
+                  padding: 6px 14px;
+                  font-size: 12px;
+                  background: #f3f4f6;
+                  color: var(--text-secondary);
+                  border: 1px solid #e5e7eb;
+                  border-radius: 6px;
+                "
+                @click="testConnection"
+              >
+                {{ isTesting ? '测试中...' : '测试 API 连接' }}
+              </button>
             </div>
 
             <div class="settings-section-title" style="margin: 24px 0 12px 4px">
@@ -3551,42 +3536,6 @@
               </label>
             </div>
 
-            <div
-              style="
-                display: flex;
-                gap: 16px;
-                padding-top: 20px;
-                border-top: 1px solid rgba(0, 0, 0, 0.05);
-              "
-            >
-              <button
-                class="action-btn"
-                style="
-                  flex: 1;
-                  padding: 12px;
-                  font-size: 14px;
-                  background: #f3f4f6;
-                  color: var(--text-main);
-                  border: 1px solid #e5e7eb;
-                "
-                @click="testConnection"
-              >
-                {{ isTesting ? '测试中...' : '测试 API 连接' }}
-              </button>
-              <button
-                class="action-btn btn-primary"
-                style="
-                  flex: 1;
-                  padding: 12px;
-                  font-size: 14px;
-                  box-shadow: 0 4px 12px rgba(52, 120, 246, 0.3);
-                "
-                @click="saveSettings"
-              >
-                保存并应用配置
-              </button>
-            </div>
-
             <div v-if="settingsMsg" class="floating-toast">
               {{ settingsMsg }}
             </div>
@@ -3734,12 +3683,12 @@
           <div id="load-more-anchor">
             <span v-if="isLoadingMore">加载更多中...</span>
             <span v-else-if="isSearching"
-              >找到 {{ processedArticles.filter(a => !a.is_announcement).length
-              }} 篇相关条目</span
+              >找到 {{ processedArticles.filter(a => !a.is_announcement &&
+              !a.isHeader).length }} 篇相关条目</span
             >
             <span v-else-if="noMoreData"
-              >共 {{ processedArticles.filter(a => !a.is_announcement).length }}
-              篇条目</span
+              >共 {{ processedArticles.filter(a => !a.is_announcement &&
+              !a.isHeader).length }} 篇条目</span
             >
           </div>
         </div>
@@ -3757,7 +3706,7 @@
               <input
                 type="text"
                 class="search-input"
-                placeholder="搜索公文..."
+                placeholder="Search Everything..."
                 ref="searchInputRef"
                 v-model="searchQuery"
                 @input="handleSearch"
@@ -5262,12 +5211,13 @@
               // 👇 变化 4：整合系统公告
               // 构造公告对象，格式与公文一致
               // 👇 变化 4：整合系统公告 (🌟 增加严格的显示门槛)
-              // 只有在【没有进行搜索】且【分类筛选为"全部"】时，才允许显示公告
+              // 只有在【没有进行搜索】且【分类筛选为"全部"】且【articles 非空】时，才允许显示公告
               // 🌟 新增：如果公告已读，则置底；未读则置顶
               if (
                 !isSearching.value &&
                 !searchQuery.value.trim() &&
-                activeSource.value === "全部"
+                activeSource.value === "全部" &&
+                mapped.length > 0 // 🌟 核心：只有当有真实文章时才显示公告，避免数据加载时空数组导致公告浮动
               ) {
                 // 🌟 检查公告是否已读（通过配置文件中的 readNoticeTime 与公告发布时间比较）
                 // 如果本地已读时间 >= 公告发布时间，说明该公告已读
