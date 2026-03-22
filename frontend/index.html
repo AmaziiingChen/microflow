@@ -1724,12 +1724,6 @@
           width: 40px;
           height: 34px;
         }
-        /* 👇 新增这一段：保证小屏幕下，背景滑块也跟着变成 40px */
-        .dock-slider {
-          width: 40px;
-          height: 34px;
-          border-radius: 17px;
-        }
         .btn-check {
           width: 38px !important;
           height: 38px !important;
@@ -1842,49 +1836,18 @@
         transition: transform 0.1s ease;
       }
 
-      /* 🌟 滑块背景 - 相对定位自适应引擎 */
-      .dock-slider {
-        position: absolute;
-        /* 🌟 锚定起跑线：紧贴父容器的 2px padding 边缘，起点设为0即可 */
-        left: 2px;
-        top: 2px;
-        width: 50px;
-        height: 38px;
-
-        /* 🌟 核心防御 2：滑块本身也不允许被挤压 */
-        flex-shrink: 0;
-
-        border-radius: 19px;
+      /* 🌟 滑块背景效果 - 选中状态显示背景 */
+      .dock-item.is-active {
         background: rgba(0, 0, 0, 0.1);
-        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-        pointer-events: none;
-        z-index: 0;
-        /* 贝塞尔曲线：弹性滑动效果 */
-        transition: transform 0.4s var(--curve-pop);
+        box-shadow:
+          inset 0 1px 2px rgba(255, 255, 255, 0.5),
+          0 1px 4px rgba(0, 0, 0, 0.08);
       }
 
-      /* 1. 滑块位置：today - 最左侧 */
-      .dock-group.at-today .dock-slider {
-        transform: translateX(0); /* 原地不动，完美覆盖第一个按钮 */
-      }
-
-      /* 2. 滑块位置：收藏 - 居中 */
-      .dock-group.at-favorite .dock-slider {
-        /* 🌟 核心修复：移动 100% 的自身宽度 + 4px 的固定间距 */
-        transform: translateX(calc(100% + 4px));
-      }
-
-      /* 3. 滑块位置：设置 - 最右侧 */
-      .dock-group.at-settings .dock-slider {
-        /* 🌟 核心修复：移动 200% 的自身宽度 + 2个间距 (8px) */
-        transform: translateX(calc(200% + 8px));
-      }
-
-      /* 🌟 搜索展开时隐藏滑块 */
-      .dock-group.is-collapsed .dock-slider {
-        opacity: 0;
-        transform: translateX(0) scale(0.8);
-        transition: all 0.3s ease;
+      /* 🌟 搜索展开时隐藏所有滑块 */
+      .dock-group.is-collapsed .dock-item.is-active {
+        background: transparent;
+        box-shadow: none;
       }
 
       /* ============================================================
@@ -1960,6 +1923,7 @@
           transform 0.5s var(--curve-silky),
           opacity 0.4s ease,
           background 0.3s ease,
+          box-shadow 0.4s var(--curve-pop),
           width 0.8s var(--curve-silky),
           margin 0.8s var(--curve-silky);
       }
@@ -2350,6 +2314,16 @@
         height: 1px;
         background: #e5e7eb;
         margin: 0 15px;
+      }
+
+      /* ================= 新增：收藏模式标题样式 ================= */
+      .favorite-title {
+        font-size: 22px;
+        font-weight: 700;
+        color: var(--text-main);
+        padding: 0 4px;
+        margin-bottom: 14px;
+        letter-spacing: 0.5px;
       }
 
       /* ================= 新增：来源筛选栏样式 ================= */
@@ -3169,7 +3143,19 @@
 
         <div v-if="statusMsg" class="status-center">{{ statusMsg }}</div>
 
-        <div class="filter-scroll-container">
+        <!-- 🌟 收藏模式标题 -->
+        <div
+          v-if="activeSource === '收藏' && !isSettingsOpen"
+          class="favorite-title"
+        >
+          收藏
+        </div>
+
+        <!-- 🌟 筛选栏：收藏模式和设置模式下隐藏 -->
+        <div
+          v-if="activeSource !== '收藏' && !isSettingsOpen"
+          class="filter-scroll-container"
+        >
           <div
             v-for="src in sources"
             :key="src"
@@ -3795,18 +3781,11 @@
           <div class="header-center">
             <div
               class="dock-group"
-              :class="[
-                isSearchUIExpanded ? 'is-collapsed' : '',
-                activeSource === '全部' && !isSettingsOpen ? 'at-today' : '',
-                activeSource === '收藏' && !isSettingsOpen ? 'at-favorite' : '',
-                isSettingsOpen ? 'at-settings' : ''
-              ]"
+              :class="{ 'is-collapsed': isSearchUIExpanded }"
             >
-              <!-- 🌟 滑块背景 -->
-              <div class="dock-slider"></div>
-
               <button
                 class="dock-item today-btn"
+                :class="{ 'is-active': activeSource === '全部' && !isSettingsOpen }"
                 @click="handleTodayClick"
                 data-tooltip="今日 / 退出搜索"
               >
@@ -3827,6 +3806,7 @@
 
               <button
                 class="dock-item hide-on-search"
+                :class="{ 'is-active': activeSource === '收藏' && !isSettingsOpen }"
                 @click="filterBySource('收藏')"
                 data-tooltip="收藏夹"
               >
@@ -3843,6 +3823,7 @@
 
               <button
                 class="dock-item hide-on-search"
+                :class="{ 'is-active': isSettingsOpen }"
                 @click="openSettings"
                 data-tooltip="设置"
               >
@@ -4941,11 +4922,15 @@
             };
 
             // 【今日】按钮的复合功能
-            const handleTodayClick = () => {
+            const handleTodayClick = async () => {
               if (isSearchUIExpanded.value) {
                 // 搜索展开状态下，它充当关闭/退回键
                 closeSearchUI();
               } else {
+                // 🌟 如果设置面板打开，先自动保存并关闭
+                if (isSettingsOpen.value) {
+                  await closeSettingsWithAutoSave();
+                }
                 // 默认状态下，重置筛选到"全部"
                 filterBySource("全部");
               }
@@ -5502,6 +5487,11 @@
 
             // 🌟 新增：按来源筛选方法
             const filterBySource = async (source) => {
+              // 🌟 如果设置面板打开，先自动保存并关闭
+              if (isSettingsOpen.value) {
+                await closeSettingsWithAutoSave();
+              }
+
               if (activeSource.value === source) return; // 点击已选中的不重复请求
 
               // 🌟 滚动居中逻辑：将被点击的筛选标签滚动到容器中间
