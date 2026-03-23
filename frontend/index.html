@@ -1983,6 +1983,7 @@
       .main-card-header.is-searching .header-center {
         opacity: 0.7;
         transform: scale(0.95);
+        margin-left: 10px; /* 🌟 搜索展开时增加左边距，与搜索框保持间距 */
         margin-right: 0px; /* 🌟 搜索展开时减小右边距，让今日按钮更靠右 */
         transition:
           opacity 0.3s ease,
@@ -3361,7 +3362,7 @@
         }
       }
       .badge-snapshot.is-animating {
-        animation: shutter-press-v2 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+        animation: shutter-press-v2 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
         transform: none;
       }
 
@@ -3379,7 +3380,7 @@
       }
       /* 注意刷新动画作用于 svg 图标本身 */
       .badge-refresh.is-animating .icon-svg {
-        animation: elastic-spin-v2 0.6s cubic-bezier(0.68, -0.55, 0.26, 1.55) !important;
+        animation: elastic-spin-v2 1.2s cubic-bezier(0.68, -0.55, 0.26, 1.55) !important;
       }
       .badge-refresh.is-animating {
         transform: none; /* 防止外层容器缩小，只让内部图标旋转 */
@@ -3478,6 +3479,55 @@
       }
       .list-card:nth-child(10) {
         animation-delay: 0.36s;
+      }
+
+      /* ============================================================
+         📸 【彩色虹膜快照】：机械下压与绞合动效 (Colorful Iris Morph)
+         ============================================================ */
+
+      /* 🌟 物理模拟 1：内部图标的“Q弹虹膜绞合” */
+      /* 动画核心：旋转 + 收缩 = 物理闭合感 */
+      @keyframes colorful-iris-morph {
+        0% {
+          transform: rotate(0deg) scale(1);
+        }
+        15% {
+          transform: rotate(120deg) scale(0.6);
+        } /* 极速旋转蓄力，并收缩成点，产生极致的闭合物理压强 */
+        30% {
+          transform: rotate(115deg) scale(0.62);
+        } /* 微小的过冲和稳定，模拟机械到达终点 */
+        100% {
+          transform: rotate(0deg) scale(1);
+        } /* 伴随着强烈的弹簧惯性，Q弹地弹回初始状态 */
+      }
+
+      /* 当 JS 添加 is-animating 类时，触发内部 svg 图标动画 */
+      .badge-snapshot.is-animating .icon-svg {
+        transform-origin: center center; /* 确保围绕正中心旋转 */
+        /* 使用你项目里自带的 Apple Store 级物理回弹曲线 */
+        animation: colorful-iris-morph 0.6s var(--curve-pop);
+      }
+
+      /* 🌟 物理模拟 2：按钮本体的“重力下压” */
+      @keyframes hard-press-v3 {
+        0% {
+          transform: scale(1);
+        }
+        15% {
+          transform: scale(0.92);
+        } /* 快速按到底，产生清脆的物理反馈 */
+        100% {
+          transform: scale(1);
+        } /* 弹簧般恢复 */
+      }
+
+      /* 应用按钮整体的下压动画 */
+      .badge-snapshot.is-animating {
+        /* 使用强力的阻尼曲线模拟手指重按 */
+        animation: hard-press-v3 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+        transform: none; /* 强制覆盖悬浮态的放大效果，确保按压清脆 */
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); /* 按下时降低阴影，模拟贴近背景 */
       }
     </style>
   </head>
@@ -3752,7 +3802,7 @@
               <button
                 class="action-btn"
                 style="
-                  display: block;
+                  display: flex; /* 改用 flex 方便文字绝对居中 */
                   margin: 10px auto 0;
                   padding: 6px 14px;
                   font-size: 12px;
@@ -3760,6 +3810,9 @@
                   color: var(--text-secondary);
                   border: 1px solid #e5e7eb;
                   border-radius: 6px;
+                  /* 👇 保证最小宽度，防止变成“测试中...”时按钮突然变窄发生抽动 */
+                  min-width: 110px;
+                  height: 34px;
                 "
                 @click="testConnection"
               >
@@ -3876,7 +3929,7 @@
                 "
               >
                 {{ config.trackMode === 'today' ? '仅追踪今日新发布条目' :
-                '自动追踪历史遗漏条目' }}
+                '自动追踪历史遗漏条目（推荐）' }}
               </div>
             </div>
 
@@ -4281,7 +4334,22 @@
                 @click="handleTodayClick"
                 data-tooltip="今日 / 退出搜索"
               >
+                <!-- 搜索展开时显示关闭图标 -->
                 <svg
+                  v-if="isSearchUIExpanded"
+                  viewBox="0 0 16.8712 16.5346"
+                  xmlns="http://www.w3.org/2000/svg"
+                  style="opacity: 0.65"
+                >
+                  <g fill="currentColor" fill-opacity="0.85">
+                    <path
+                      d="M13.4642 0.515675L0.484912 13.5024C-0.16047 14.1403-0.170235 15.3409 0.507294 16.0235C1.19228 16.6988 2.40777 16.6764 3.03823 16.0459L16.0175 3.06669C16.6852 2.39893 16.6801 1.23566 15.9876 0.545518C15.2952-0.146932 14.1417-0.156698 13.4642 0.515675ZM16.0175 13.4875L3.03823 0.508214C2.40031-0.12455 1.19744-0.156698 0.507294 0.538057C-0.175391 1.23051-0.153009 2.42131 0.484912 3.05923L13.4642 16.0385C14.1319 16.7062 15.2975 16.7011 15.9876 16.0161C16.6778 15.3236 16.6852 14.1627 16.0175 13.4875Z"
+                    />
+                  </g>
+                </svg>
+                <!-- 默认显示今日图标 -->
+                <svg
+                  v-else
                   viewBox="0 0 16.7871 20.9473"
                   xmlns="http://www.w3.org/2000/svg"
                 >
@@ -4427,7 +4495,7 @@
                 <span
                   class="badge-snapshot"
                   id="btn-snapshot-top"
-                  @mousedown="playAnim($event, 600)"
+                  @mousedown="playAnim($event, 1200)"
                   @click="takeSnapshot(activeArticle)"
                   data-tooltip="保存快照"
                 >
