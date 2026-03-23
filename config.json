@@ -12,7 +12,6 @@
     "subscribedSources": [],
     "pollingInterval": 900,
     "isLocked": false,
-    "articlesPerSectionLimit": 10,
     "apiBalanceOk": true,
     "configSign": "51b3c867ac69b40dad480a8c2fe53ce91aea2eeda56bd22e585d6cdc3b5dd713",
     "lastCloudSyncTime": 0.0,

@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>3D 静态长图 - 旋转控制</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        background-color: #f4f5f7;
+      }
+      #canvas-container {
+        width: 100vw;
+        height: 100vh;
+      }
+      /* 控制面板的 UI 样式优化 */
+      #controls {
+        position: absolute;
+        bottom: 40px;
+        width: 100%;
+        text-align: center;
+        font-family: sans-serif;
+        z-index: 10;
+      }
+      .slider-label {
+        background: rgba(255, 255, 255, 0.9);
+        padding: 8px 20px;
+        border-radius: 20px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        font-weight: bold;
+        color: #333;
+        font-size: 14px;
+      }
+      input[type="range"] {
+        width: 300px;
+        cursor: pointer;
+        margin-top: 20px;
+      }
+      /* 隐藏掉 Three.js 默认选中时的轮廓线 */
+      canvas {
+        outline: none;
+      }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  </head>
+  <body>
+    <div id="controls">
+      <label class="slider-label" for="rotationSlider">
+        旋转角度: <span id="angleValue">0</span>°
+      </label>
+      <br />
+      <input type="range" id="rotationSlider" min="0" max="360" value="0" />
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <script>
+      // 1. 初始化场景、相机和渲染器
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(
+        60,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        1000,
+      );
+      camera.position.set(0, 0, 25);
+
+      const renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true,
+      });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      document
+        .getElementById("canvas-container")
+        .appendChild(renderer.domElement);
+
+      // 2. 添加光照 (主光源与环境光搭配出体积感)
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+      scene.add(ambientLight);
+
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+      directionalLight.position.set(10, 20, 15);
+      scene.add(directionalLight);
+
+      // 3. 创建几何体并进行静态扭曲
+      const geometry = new THREE.PlaneGeometry(12, 36, 64, 128);
+      const positionAttribute = geometry.attributes.position;
+
+      for (let i = 0; i < positionAttribute.count; i++) {
+        const vertex = new THREE.Vector3().fromBufferAttribute(
+          positionAttribute,
+          i,
+        );
+        const y = vertex.y;
+
+        // 静态 DNA 螺旋形变算法
+        const twistAngle = y * 0.02;
+        const newX = vertex.x * Math.cos(twistAngle);
+        const newZ = vertex.x * Math.sin(twistAngle);
+
+        positionAttribute.setXYZ(i, newX, y, newZ);
+      }
+      positionAttribute.needsUpdate = true;
+      geometry.computeVertexNormals(); // 重新计算法线，确保光影正确
+
+      // 4. 加载纹理并应用材质
+      const textureLoader = new THREE.TextureLoader();
+      let ribbonMesh; // 在外部声明模型变量
+
+      textureLoader.load(
+        "1234.png",
+        function (texture) {
+          texture.minFilter = THREE.LinearFilter;
+          texture.magFilter = THREE.LinearFilter;
+
+          const material = new THREE.MeshPhongMaterial({
+            map: texture,
+            side: THREE.DoubleSide,
+            shininess: 30,
+          });
+
+          ribbonMesh = new THREE.Mesh(geometry, material);
+          scene.add(ribbonMesh);
+
+          // 图片加载完成后，按需渲染第一帧
+          renderer.render(scene, camera);
+        },
+        undefined,
+        function (err) {
+          console.error(
+            "图片加载失败，请确保使用本地服务器运行，且 1234.png 路径正确。",
+            err,
+          );
+        },
+      );
+
+      // 5. 滑块交互逻辑 (核心：按需渲染)
+      const slider = document.getElementById("rotationSlider");
+      const angleValueDisplay = document.getElementById("angleValue");
+
+      slider.addEventListener("input", (event) => {
+        const degrees = event.target.value;
+        angleValueDisplay.innerText = degrees;
+
+        // 如果模型已经加载完毕，再执行旋转和渲染
+        if (ribbonMesh) {
+          // 将 0~360 的角度转换为 WebGL 使用的弧度制
+          ribbonMesh.rotation.y = THREE.MathUtils.degToRad(degrees);
+          // 只在数值改变时触发一次渲染
+          renderer.render(scene, camera);
+        }
+      });
+
+      // 6. 窗口响应式与鼠标滚轮平移
+      window.addEventListener("resize", () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        if (ribbonMesh) renderer.render(scene, camera);
+      });
+
+      // 允许用滚轮上下移动相机，查看长图的各个部分
+      window.addEventListener("wheel", (event) => {
+        camera.position.y -= event.deltaY * 0.02;
+        camera.position.y = Math.max(-15, Math.min(15, camera.position.y)); // 限制移动范围
+        if (ribbonMesh) renderer.render(scene, camera);
+      });
+    </script>
+  </body>
+</html>
