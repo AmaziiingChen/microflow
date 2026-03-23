@@ -1950,7 +1950,7 @@
         display: flex;
         justify-content: center;
         /* 🌟 减小间距，让布局更紧凑 */
-        margin: 0 8px;
+        margin: 0 4px;
         min-width: 0; /* 🌟 防止溢出 */
         z-index: 1; /* 🌟 低于右侧更新按钮，让展开动画从下方滑过 */
         transition: margin 0.54s var(--search-spring);
@@ -1962,24 +1962,40 @@
       }
 
       .main-card-header.is-searching .header-side.left {
-        flex: 100; /* 以绝对优势挤压其余空间 */
+        flex: 145; /* 以绝对优势挤压其余空间 */
         border-radius: 22px; /* 🌟 添加圆角，与搜索框圆角匹配 */
         overflow: visible; /* 🌟 允许搜索框圆角正常显示 */
       }
 
-      /* 搜索展开时，中右侧受力挤压 */
-      .main-card-header.is-searching .header-center,
+      /* 搜索展开时，右侧更新按钮挤压 */
       .main-card-header.is-searching .header-side.right {
-        /* 设定形变原点为右侧，让它们看起来是贴着右边框往里瘪 */
         transform-origin: right center;
         animation: apple-squish 0.6s var(--curve-apple-squish) forwards;
       }
 
-      /* 搜索收起时，真空回吸 */
-      .main-card-header:not(.is-searching) .header-center,
+      /* 搜索收起时，右侧回弹 */
       .main-card-header:not(.is-searching) .header-side.right {
         transform-origin: right center;
         animation: apple-vacuum 0.6s var(--curve-apple-squish) forwards;
+      }
+
+      /* 🌟 中间按钮组：不参与挤压动画，由 dock-group 自身过渡处理，避免白色矩形 */
+      .main-card-header.is-searching .header-center {
+        opacity: 0.7;
+        transform: scale(0.95);
+        margin-right: 0px; /* 🌟 搜索展开时减小右边距，让今日按钮更靠右 */
+        transition:
+          opacity 0.3s ease,
+          transform 0.3s ease,
+          margin 0.54s var(--search-spring);
+      }
+
+      .main-card-header:not(.is-searching) .header-center {
+        opacity: 1;
+        transform: scale(1);
+        transition:
+          opacity 0.3s ease,
+          transform 0.3s ease;
       }
 
       /* 撞墙形变关键帧：X轴压扁，Y轴拉长 */
@@ -2036,8 +2052,8 @@
           height: 42px !important;
         }
         .btn-check svg {
-          width: 22px !important;
-          height: 22px !important;
+          width: 26px !important;
+          height: 26px !important;
         }
         .search-morph-container {
           /* 基础状态保持不变 */
@@ -2246,11 +2262,17 @@
          - 今日按钮变为圆形关闭按钮
          ============================================================ */
       .dock-group.is-collapsed {
-        /* 🌟 保持半透明背景，避免透出父容器的白色背景形成矩形 */
+        /* 🌟 收缩时变成正圆，避免胶囊形变到正圆过程中出现矩形 */
         background: var(--pill-bg);
+        border-radius: 100%;
         padding: 0;
         gap: 0;
         pointer-events: none;
+        transition:
+          gap 0.54s var(--search-spring),
+          padding 0.54s var(--search-spring),
+          background-color 0.38s var(--search-settle),
+          border-radius 0.4s ease;
       }
 
       .dock-group.is-collapsed .dock-item.hide-on-search {
@@ -2425,7 +2447,8 @@
         z-index: 3; /* 🌟 高于中间按钮组，确保展开动画从下方滑过 */
         overflow: hidden;
         transition:
-          transform 0.24s ease,
+          transform 0.3s ease 0.5s,
+          opacity 0.3s ease 0.5s,
           background-color 0.24s ease,
           width 0.32s var(--search-settle),
           height 0.32s var(--search-settle);
@@ -2462,10 +2485,14 @@
         letter-spacing: -0.5px;
       }
 
-      .main-card-header.is-searching .btn-check:not(:disabled) {
-        /* 🌟 保持正圆形，只缩放整体 */
-        transform: scale(0.96);
-        border-radius: 50% !important;
+      /* 🌟 搜索展开时隐藏更新按钮 */
+      .main-card-header.is-searching .btn-check {
+        opacity: 0;
+        transform: scale(0.6);
+        pointer-events: none;
+        transition:
+          transform 0.3s ease 0s,
+          opacity 0.3s ease 0s;
       }
 
       /* ============================================================
