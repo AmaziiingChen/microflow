@@ -29,7 +29,6 @@ class AppConfig:
     subscribed_sources: list = field(default_factory=list)  # 🌟 新增：订阅的来源列表
     polling_interval: int = 900  # 🌟 新增：守护进程轮询间隔（秒），默认 15 分钟
     is_locked: bool = False  # 🌟 新增：配置锁定状态（用于防止修改）
-    articles_per_section_limit: int = 10  # 🌟 新增：每个板块处理的文章上限
     api_balance_ok: bool = True  # 🌟 新增：API 余额状态（默认正常）
     # 🔐 安全字段：防篡改签名
     config_sign: str = ""  # HMAC-SHA256 签名
@@ -170,7 +169,6 @@ class ConfigService:
                 subscribed_sources=data.get('subscribedSources', default.subscribed_sources),  # 🌟 新增
                 polling_interval=data.get('pollingInterval', default.polling_interval),  # 🌟 新增
                 is_locked=is_locked,  # 🔐 使用签名验证后的锁定状态
-                articles_per_section_limit=data.get('articlesPerSectionLimit', default.articles_per_section_limit),  # 🌟 新增
                 api_balance_ok=data.get('apiBalanceOk', default.api_balance_ok),  # 🌟 新增：API 余额状态
                 # 🔐 安全字段
                 config_sign=data.get('configSign', ''),
@@ -237,7 +235,6 @@ class ConfigService:
                 subscribed_sources=config_dict.get('subscribedSources', []),  # 🌟 新增
                 polling_interval=config_dict.get('pollingInterval', 900),  # 🌟 新增
                 is_locked=config_dict.get('isLocked', False),  # 🌟 新增：配置锁定状态
-                articles_per_section_limit=config_dict.get('articlesPerSectionLimit', 10),  # 🌟 新增
                 api_balance_ok=config_dict.get('apiBalanceOk', True),  # 🌟 新增：API 余额状态
                 # 🔐 安全字段
                 config_sign=signature,
@@ -281,7 +278,6 @@ class ConfigService:
             "subscribedSources": config.subscribed_sources,  # 🌟 新增
             "pollingInterval": config.polling_interval,  # 🌟 新增
             "isLocked": config.is_locked,  # 🌟 新增：配置锁定状态
-            "articlesPerSectionLimit": config.articles_per_section_limit,  # 🌟 新增
             "apiBalanceOk": config.api_balance_ok,  # 🌟 新增：API 余额状态
             # 🔐 安全字段
             "configSign": config.config_sign,
@@ -326,7 +322,6 @@ class ConfigService:
             'subscribedSources': 'subscribed_sources',  # 🌟 新增
             'pollingInterval': 'polling_interval',  # 🌟 新增
             'isLocked': 'is_locked',  # 🌟 新增：配置锁定状态
-            'articlesPerSectionLimit': 'articles_per_section_limit',  # 🌟 新增
             'apiBalanceOk': 'api_balance_ok',  # 🌟 新增：API 余额状态
             # 🔐 安全字段
             'configSign': 'config_sign',

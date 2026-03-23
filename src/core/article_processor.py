@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ArticleContext:
     """文章处理上下文"""
+
     url: str
     title: str
     date: str
@@ -32,7 +33,8 @@ class ArticleContext:
 @dataclass
 class ProcessingTask:
     """处理任务"""
-    spider: 'BaseSpider'
+
+    spider: "BaseSpider"
     ctx: ArticleContext
     mode: str
     today_str: str
@@ -66,10 +68,23 @@ class ArticleProcessor:
 
     # 标题黑名单：过滤导航噪音
     TITLE_BLACKLIST = [
-    "EN", "English", "学院首页", "返回顶部", "网站地图",
-    "领导团队", "师资队伍", "教研团队", "实践团队", "客座教授",
-    "学院简介", "学院概况", "现任领导", "组织机构", "规章制度", "联系我们"
-]
+        "EN",
+        "English",
+        "学院首页",
+        "返回顶部",
+        "网站地图",
+        "领导团队",
+        "师资队伍",
+        "教研团队",
+        "实践团队",
+        "客座教授",
+        "学院简介",
+        "学院概况",
+        "现任领导",
+        "组织机构",
+        "规章制度",
+        "联系我们",
+    ]
 
     # 最小内容长度（字符数）
     MIN_CONTENT_LENGTH = 10
@@ -86,7 +101,9 @@ class ArticleProcessor:
         database,
         on_task_complete: Optional[Callable[[bool, str, Optional[Dict]], None]] = None,
         on_article_processed: Optional[OnArticleProcessedCallback] = None,
-        on_progress: Optional[Callable[[int, int, str], None]] = None  # 🌟 新增：AI 进度回调
+        on_progress: Optional[
+            Callable[[int, int, str], None]
+        ] = None,  # 🌟 新增：AI 进度回调
     ):
         """
         初始化文章处理器
@@ -109,8 +126,7 @@ class ArticleProcessor:
 
         # Worker 线程池
         self._executor = ThreadPoolExecutor(
-            max_workers=self.WORKER_COUNT,
-            thread_name_prefix="ArticleWorker"
+            max_workers=self.WORKER_COUNT, thread_name_prefix="ArticleWorker"
         )
 
         # 控制标志
@@ -123,12 +139,12 @@ class ArticleProcessor:
         # 统计信息（线程安全）
         self._stats_lock = threading.Lock()
         self._stats = {
-            'submitted': 0,      # 提交到队列的任务数
-            'processed': 0,      # 已处理完成的任务数
-            'success': 0,        # 成功入库的任务数
-            'failed': 0,         # 失败的任务数
-            'ai_total': 0,       # 🌟 新增：真正需要调用 AI 的任务数
-            'ai_completed': 0    # 🌟 新增：AI 调用完成的任务数
+            "submitted": 0,  # 提交到队列的任务数
+            "processed": 0,  # 已处理完成的任务数
+            "success": 0,  # 成功入库的任务数
+            "failed": 0,  # 失败的任务数
+            "ai_total": 0,  # 🌟 新增：真正需要调用 AI 的任务数
+            "ai_completed": 0,  # 🌟 新增：AI 调用完成的任务数
         }
 
         # 启动 Workers
@@ -164,7 +180,7 @@ class ArticleProcessor:
     def _worker_loop(self, worker_id: int):
         """
         Worker 主循环：从队列获取任务并处理
-        
+
         Args:
             worker_id: Worker 编号（用于日志）
         """
@@ -187,7 +203,9 @@ class ArticleProcessor:
 
                 # 🌟 核心修复：检查取消状态。如果用户点击了取消，充当“黑洞”瞬间清空队列
                 if self.is_cancel_requested():
-                    logger.info(f"Worker #{worker_id} 处于取消状态，快速丢弃任务: {task.ctx.title if task else 'None'}")
+                    logger.info(
+                        f"Worker #{worker_id} 处于取消状态，快速丢弃任务: {task.ctx.title if task else 'None'}"
+                    )
                     self._task_queue.task_done()
                     continue  # ✅ 关键：使用 continue 而不是 break！丢弃任务后回去继续监听队列！
 
@@ -197,11 +215,11 @@ class ArticleProcessor:
 
                     # 更新统计
                     with self._stats_lock:
-                        self._stats['processed'] += 1
+                        self._stats["processed"] += 1
                         if success:
-                            self._stats['success'] += 1
+                            self._stats["success"] += 1
                         else:
-                            self._stats['failed'] += 1
+                            self._stats["failed"] += 1
 
                     # 回调通知
                     if self.on_task_complete:
@@ -213,8 +231,8 @@ class ArticleProcessor:
                 except Exception as e:
                     logger.error(f"Worker #{worker_id} 处理任务异常: {e}")
                     with self._stats_lock:
-                        self._stats['processed'] += 1
-                        self._stats['failed'] += 1
+                        self._stats["processed"] += 1
+                        self._stats["failed"] += 1
 
                 finally:
                     # 无论成功失败，必须标记任务完成，防止队列阻塞
@@ -224,7 +242,10 @@ class ArticleProcessor:
                 logger.error(f"Worker #{worker_id} 循环异常: {e}")
 
         logger.debug(f"Worker #{worker_id} 已安全退出")
-    def _process_task(self, task: ProcessingTask) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+
+    def _process_task(
+        self, task: ProcessingTask
+    ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
         """
         处理单个任务（Worker 线程内执行）
 
@@ -249,9 +270,9 @@ class ArticleProcessor:
             return False, "detail_error", None
 
         # 2. 提取正文
-        raw_text = detail.get('body_text', '')
+        raw_text = detail.get("body_text", "")
         if not raw_text:
-            raw_text = detail.get('body_html', '')
+            raw_text = detail.get("body_html", "")
         ctx.raw_text = raw_text
 
         # 3. 内容长度校验
@@ -270,17 +291,15 @@ class ArticleProcessor:
             return False, "cancelled", None
 
         # 6. 🌟 统计真正调用 AI 的任务，并通知前端进度
-        # 分子：已完成 AI 调用的数量
-        # 分母：总共提交的任务数
         with self._stats_lock:
-            self._stats['ai_total'] += 1
-            ai_completed = self._stats['ai_completed']
-            total_submitted = self._stats['submitted']
+            self._stats["ai_total"] += 1
+            ai_completed = self._stats["ai_completed"]
+            ai_total = self._stats["ai_total"]
 
-        if self.on_progress and total_submitted > 0:
+        if self.on_progress and ai_total > 0:
             try:
-                # 回调参数：(已完成AI调用数量, 总提交任务数, 当前正在调用AI的标题)
-                self.on_progress(ai_completed, total_submitted, ctx.title)
+                # 回调参数：(已完成AI调用数量, 真实AI任务总数, 当前正在调用AI的标题)
+                self.on_progress(ai_completed, ai_total, ctx.title)
             except Exception as e:
                 logger.warning(f"进度回调执行失败: {e}")
 
@@ -290,14 +309,27 @@ class ArticleProcessor:
             summary = self.llm.summarize_article(ctx.title, raw_text)
         except Exception as e:
             logger.warning(f"AI 摘要生成异常 ({ctx.title}): {e}")
-            # 🌟 AI 调用完成（失败也算完成）
             with self._stats_lock:
-                self._stats['ai_completed'] += 1
+                self._stats["ai_completed"] += 1
+                ai_completed = self._stats["ai_completed"]
+                ai_total = self._stats["ai_total"]
+            if self.on_progress and ai_total > 0:
+                try:
+                    self.on_progress(ai_completed, ai_total, ctx.title)
+                except Exception:
+                    pass
             return False, "ai_error", None
 
-        # 🌟 AI 调用完成
+        # 🌟 AI 调用完成，推送最新进度（含完成信号）
         with self._stats_lock:
-            self._stats['ai_completed'] += 1
+            self._stats["ai_completed"] += 1
+            ai_completed = self._stats["ai_completed"]
+            ai_total = self._stats["ai_total"]
+        if self.on_progress and ai_total > 0:
+            try:
+                self.on_progress(ai_completed, ai_total, ctx.title)
+            except Exception:
+                pass
 
         # 7. 核心防线：拦截 AI 失败的情况
         if summary.startswith(self.AI_FAILURE_PREFIXES):
@@ -309,7 +341,7 @@ class ArticleProcessor:
         # summary = summary + f"\n\n---\n**🤖 AI 生成时间: {timestamp}**"
 
         # 8. 处理附件（强制初始化为空列表）
-        attachments_data = detail.get('attachments') or []
+        attachments_data = detail.get("attachments") or []
         if not isinstance(attachments_data, list):
             attachments_data = []
         attachments_json = json.dumps(attachments_data, ensure_ascii=False)
@@ -319,30 +351,32 @@ class ArticleProcessor:
             title=ctx.title,
             url=ctx.url,
             date=ctx.date,
-            exact_time=detail.get('exact_time', ''),
-            category=ctx.category or ctx.section_name or '未知类别',
-            department=ctx.department or detail.get('department', ''),
+            exact_time=detail.get("exact_time", ""),
+            category=ctx.category or ctx.section_name or "未知类别",
+            department=ctx.department or detail.get("department", ""),
             attachments=attachments_json,
             summary=summary,
             raw_content=raw_text,
-            source_name=ctx.source_name
+            source_name=ctx.source_name,
         )
 
         logger.info(f"✅ [{ctx.source_name}] 文章入库成功: {ctx.title}")
 
         # 10. 构建完整的文章数据并触发回调
         article_data = {
-            'title': ctx.title,
-            'url': ctx.url,
-            'date': ctx.date,
-            'source_name': ctx.source_name,
-            'category': ctx.category or ctx.section_name or '未知类别',
-            'department': ctx.department or detail.get('department', ''),
-            'exact_time': detail.get('exact_time', ''),
-            'attachments': attachments_data if isinstance(attachments_data, list) else [],
-            'summary': summary,
-            'raw_content': raw_text,
-            'is_read': 0
+            "title": ctx.title,
+            "url": ctx.url,
+            "date": ctx.date,
+            "source_name": ctx.source_name,
+            "category": ctx.category or ctx.section_name or "未知类别",
+            "department": ctx.department or detail.get("department", ""),
+            "exact_time": detail.get("exact_time", ""),
+            "attachments": (
+                attachments_data if isinstance(attachments_data, list) else []
+            ),
+            "summary": summary,
+            "raw_content": raw_text,
+            "is_read": 0,
         }
 
         if self.on_article_processed:
@@ -356,11 +390,11 @@ class ArticleProcessor:
 
     def submit(
         self,
-        spider: 'BaseSpider',
+        spider: "BaseSpider",
         ctx: ArticleContext,
-        mode: str = 'continuous',
+        mode: str = "continuous",
         today_str: str = "",
-        is_manual: bool = False
+        is_manual: bool = False,
     ) -> bool:
         """
         提交文章处理任务（异步，立即返回）
@@ -385,17 +419,13 @@ class ArticleProcessor:
             return False
 
         task = ProcessingTask(
-            spider=spider,
-            ctx=ctx,
-            mode=mode,
-            today_str=today_str,
-            is_manual=is_manual
+            spider=spider, ctx=ctx, mode=mode, today_str=today_str, is_manual=is_manual
         )
 
         try:
             self._task_queue.put(task, block=False)
             with self._stats_lock:
-                self._stats['submitted'] += 1
+                self._stats["submitted"] += 1
             return True
         except queue.Full:
             logger.warning(f"任务队列已满，拒绝任务: {ctx.title}")
@@ -403,11 +433,11 @@ class ArticleProcessor:
 
     def process(
         self,
-        spider: 'BaseSpider',
+        spider: "BaseSpider",
         ctx: ArticleContext,
         mode: str,
         today_str: str,
-        is_manual: bool
+        is_manual: bool,
     ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
         """
         同步处理单篇文章（保留向后兼容，但标记为已废弃）
@@ -425,13 +455,15 @@ class ArticleProcessor:
             (success: bool, reason: str, article_data: Optional[dict])
         """
         # 为了向后兼容，仍然提供同步处理能力
-        return self._process_task(ProcessingTask(
-            spider=spider,
-            ctx=ctx,
-            mode=mode,
-            today_str=today_str,
-            is_manual=is_manual
-        ))
+        return self._process_task(
+            ProcessingTask(
+                spider=spider,
+                ctx=ctx,
+                mode=mode,
+                today_str=today_str,
+                is_manual=is_manual,
+            )
+        )
 
     def should_skip_by_title(self, title: str) -> Tuple[bool, str]:
         """根据标题判断是否应该跳过"""
@@ -441,8 +473,8 @@ class ArticleProcessor:
 
     def should_skip_by_date(self, date: str, mode: str, today_str: str) -> bool:
         """根据日期判断是否应该跳过（当日追踪模式）"""
-        if mode == 'today' and date:
-            normalized_date = date.replace('/', '-').split()[0] if date else ''
+        if mode == "today" and date:
+            normalized_date = date.replace("/", "-").split()[0] if date else ""
             if normalized_date != today_str:
                 return True
         return False
@@ -455,31 +487,31 @@ class ArticleProcessor:
 
     def validate_content_length(self, raw_text: str) -> bool:
         """校验内容长度"""
-        cleaned = raw_text.replace(' ', '').replace('\n', '')
+        cleaned = raw_text.replace(" ", "").replace("\n", "")
         return len(cleaned) >= self.MIN_CONTENT_LENGTH
 
     def create_context(
         self,
         article: Dict[str, Any],
         source_name: str,
-        section_name: Optional[str] = None
+        section_name: Optional[str] = None,
     ) -> ArticleContext:
         """从文章字典创建处理上下文"""
         # 部门逻辑重构：
         # - 公文通：保持原有的发文单位（部门）提取逻辑
         # - 学院/中心：强制 department = source_name
-        department = article.get('department', '')
+        department = article.get("department", "")
         if source_name != "公文通" and ("学院" in source_name or "中心" in source_name):
             department = source_name
 
         return ArticleContext(
-            url=article.get('url', ''),
-            title=article.get('title', '未知标题'),
-            date=article.get('date', ''),
+            url=article.get("url", ""),
+            title=article.get("title", "未知标题"),
+            date=article.get("date", ""),
             source_name=source_name,
             section_name=section_name,
-            category=article.get('category', ''),
-            department=department
+            category=article.get("category", ""),
+            department=department,
         )
 
     def get_stats(self) -> Dict[str, int]:

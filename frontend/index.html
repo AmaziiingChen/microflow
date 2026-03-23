@@ -3116,7 +3116,7 @@
           <div class="progress-track">
             <div
               class="progress-fill"
-              :style="{ width: (aiProgress.total > 0 ? Math.min((aiProgress.completed + 1) / aiProgress.total * 100, 100) : 0) + '%' }"
+              :style="{ width: (aiProgress.total > 0 ? Math.min(aiProgress.completed / aiProgress.total * 100, 100) : 0) + '%' }"
             ></div>
           </div>
           <!-- 🌟 百分比和数量：放在进度条下方右侧 -->
@@ -3135,8 +3135,8 @@
               100% ( {{ aiProgress.total }} / {{ aiProgress.total }} )
             </template>
             <template v-else>
-              {{ Math.round((aiProgress.completed + 1) / aiProgress.total * 100)
-              }}% ( {{ aiProgress.completed + 1 }} / {{ aiProgress.total }} )
+              {{ Math.round(aiProgress.completed / aiProgress.total * 100)
+              }}% ( {{ aiProgress.completed }} / {{ aiProgress.total }} )
             </template>
           </div>
         </div>
@@ -5069,7 +5069,7 @@
 
             // 🌟 新增：带自动保存的闭环退出逻辑
             const closeSettingsWithAutoSave = async () => {
-              settingsMsg.value = "正在保存配置并应用...";
+              // settingsMsg.value = "正在保存配置并应用...";
               try {
                 // 1. 先呼叫后端保存
                 const res = await pywebview.api.save_config(

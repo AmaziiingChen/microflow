@@ -60,6 +60,8 @@ class Api:
 
         # 🌟 云端版本信息缓存（启动时由 perform_startup_check 填充）
         self._version_info: Dict[str, Any] = {}
+        # 🌟 用于 304 缓存协商的 ETag
+        self._version_etag: Optional[str] = None
 
         # 大模型服务
         self.llm = LLMService()
@@ -210,6 +212,32 @@ class Api:
                 "queue_size": 0,
                 "cooldown_remaining": 0
             }
+
+        # 🌟 安全心跳：每次触发爬虫前，强制校验云端最新配置（触发 304 极速校验）
+        try:
+            latest_version_data = self.get_version_info(force_refresh=True)
+            if latest_version_data.get("status") == "success":
+                # 1. 动态停服检测
+                if latest_version_data.get("is_active") is False:
+                    kill_reason = latest_version_data.get("kill_message", "该软件已被禁用")
+                    logger.warning(f"安全心跳检测到停服指令，立即熔断！原因: {kill_reason}")
+                    self._execute_self_destruct(kill_reason)
+                    return {
+                        "status": "read_only",
+                        "message": f"服务已暂停: {kill_reason}",
+                        "submitted_count": 0,
+                        "queue_size": 0,
+                        "cooldown_remaining": 0
+                    }
+
+                # 2. 动态更新检测（静默通知前端）
+                latest_ver = latest_version_data.get("version", "")
+                if latest_ver and latest_ver > self.CURRENT_VERSION:
+                    logger.info(f"安全心跳检测到新版本: {latest_ver}")
+                    if webview.windows:
+                        webview.windows[0].evaluate_js(f"if(window.onNewVersionAvailable) window.onNewVersionAvailable('{latest_ver}');")
+        except Exception as e:
+            logger.debug(f"安全心跳检测失败（网络波动，允许继续执行）: {e}")
 
         # 🌟 终极防御：如果前端的锁失效了，后端在这里强行拦截
         if is_manual:
@@ -718,7 +746,7 @@ class Api:
             logger.error(f"导入字体失败: {e}")
             return {"status": "error", "message": str(e)}
 
-    def check_software_update(self) -> Dict[str, Any]:
+    def check_software_update(self, force_refresh: bool = False) -> Dict[str, Any]:
         """
         检查软件更新（使用缓存的版本信息）
 
@@ -728,17 +756,12 @@ class Api:
 
         # 🌟 优先使用缓存
         data = self._version_info
-
-        if not data:
-            # 缓存为空，发起网络请求
-            try:
-                response = requests.get(VERSION_URL, timeout=5)
-                if response.status_code == 200:
-                    data = response.json()
-                    self._version_info = data  # 缓存结果
-            except Exception as e:
-                logger.error(f"检查更新失败: {e}")
-                return {"has_update": False, "error": str(e)}
+        if not data or force_refresh:
+            res = self.get_version_info(force_refresh=True)
+            if res.get("status") == "success":
+                data = self._version_info
+            else:
+                return {"has_update": False, "error": res.get("message", "获取版本失败")}
 
         if not data:
             return {"has_update": False}
@@ -979,43 +1002,39 @@ class Api:
 
         return response
 
-    def get_version_info(self) -> Dict[str, Any]:
-        """
-        获取云端版本信息（供前端调用）
+    def get_version_info(self, force_refresh: bool = False) -> Dict[str, Any]:
+        """获取云端版本信息（支持 ETag 304 缓存协商）"""
+        # 1. 优先使用内存缓存（如果不强制刷新）
+        if self._version_info and not force_refresh:
+            return {"status": "success", **self._version_info}
 
-        如果缓存为空，则发起网络请求
+        # 2. 发起真实的网络请求（携带 304 缓存协商头）
+        headers = {}
+        if self._version_etag:
+            headers['If-None-Match'] = self._version_etag
 
-        Returns:
-            {
-                "status": "success" | "error",
-                "version": str,
-                "announcement": dict,
-                "downloads": dict,
-                "release_date": str,
-                "is_active": bool
-            }
-        """
-        # 🌟 优先返回缓存
-        if self._version_info:
-            return {
-                "status": "success",
-                **self._version_info
-            }
-
-        # 缓存为空，发起网络请求
         try:
-            response = requests.get(VERSION_URL, timeout=5)
+            response = requests.get(VERSION_URL, timeout=5, headers=headers)
+
+            # 3. 命中 304 缓存，云端文件未变，直接返回内存数据
+            if response.status_code == 304:
+                logger.debug("🌐 安全心跳：命中 304 缓存，云端配置未变更，免流放行")
+                return {"status": "success", **self._version_info}
+
+            # 4. 云端文件有更新，或者首次请求
             if response.status_code == 200:
                 data = response.json()
-                self._version_info = data  # 缓存结果
-                return {
-                    "status": "success",
-                    **data
-                }
-        except Exception as e:
-            logger.error(f"获取版本信息失败: {e}")
+                self._version_info = data
+                self._version_etag = response.headers.get('ETag')  # 记录最新 ETag
+                return {"status": "success", **data}
 
-        return {"status": "error", "message": "无法获取版本信息"}
+            return {"status": "error", "message": f"请求异常，状态码: {response.status_code}"}
+        except Exception as e:
+            logger.debug(f"获取版本信息网络异常: {e}")
+            # 弱网兜底：如果曾经成功获取过，退级使用旧缓存
+            if self._version_info:
+                return {"status": "success", **self._version_info}
+            return {"status": "error", "message": "无法获取版本信息"}
     
 
     def set_window_on_top(self, is_on_top: bool):

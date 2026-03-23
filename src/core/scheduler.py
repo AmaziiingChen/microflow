@@ -22,6 +22,28 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _parse_date_safe(date_str: str) -> Optional[datetime]:
+    """
+    健壮的日期字符串标准化解析器（线程安全，纯函数）
+
+    支持格式：
+    - "2026-03-24"、"2026/03/24"（日期）
+    - "2026-03-24 10:30:00"、"2026/03/24 10:30:00"（日期时间）
+
+    Returns:
+        datetime 对象，解析失败返回 None
+    """
+    if not date_str:
+        return None
+    # 统一分隔符，截取前 10 位日期部分
+    normalized = date_str.strip().replace('/', '-')
+    date_part = normalized[:10]
+    try:
+        return datetime.strptime(date_part, '%Y-%m-%d')
+    except ValueError:
+        return None
+
+
 # 爬虫注册表：(爬虫类, 板块数量, 描述, 是否需要校园网)
 # 顺序：公文通 -> 中德智能制造 -> 人工智能 -> 新材料与新能源 -> 城市交通与物流 -> 健康与环境工程 -> 工程物理 -> 药学院 -> 集成电路与光电芯片 -> 未来技术 -> 创意设计 -> 商学院
 SPIDER_REGISTRY: List[Tuple[Type[BaseSpider], int, str, bool]] = [
@@ -64,8 +86,10 @@ class SpiderScheduler:
     4. 推送进度到前端
     """
 
-    # 🌟 V3 升级：移除硬编码常量，改为从配置服务动态读取
-    DEFAULT_ARTICLES_PER_SECTION_LIMIT = 10
+    # 🔐 后端硬编码安全边界（不对外暴露，不可被用户配置覆盖）
+    _FALLBACK_LIMIT = 10                  # 每板块最大抓取条数
+    _COLD_START_QUOTA_GWT = 10            # 公文通冷启动配额
+    _COLD_START_QUOTA_COLLEGE = 1         # 学院冷启动配额（跨板块累计）
 
     def __init__(
         self,
@@ -95,18 +119,6 @@ class SpiderScheduler:
         # 初始化爬虫
         self._init_spiders()
 
-    @property
-    def articles_per_section_limit(self) -> int:
-        """
-        动态获取每个板块处理的文章上限（支持热重载）
-
-        Returns:
-            每个板块处理的文章上限
-        """
-        if self.config_service:
-            return self.config_service.get('articlesPerSectionLimit', self.DEFAULT_ARTICLES_PER_SECTION_LIMIT)
-        return self.DEFAULT_ARTICLES_PER_SECTION_LIMIT
-
     def _init_spiders(self) -> None:
         """初始化所有爬虫实例"""
         for spider_cls, section_count, description, requires_intranet in SPIDER_REGISTRY:
@@ -122,12 +134,11 @@ class SpiderScheduler:
                 logger.error(f"❌ {spider_cls.__name__} 初始化失败: {e}")
 
     def estimate_total_tasks(self) -> int:
-        """预估总任务数（用于进度条显示，动态读取配置）"""
+        """预估总任务数（用于进度条显示）"""
         total = 0
-        limit = self.articles_per_section_limit
         for spider in self.active_spiders:
             section_count = self._get_section_count(spider)
-            total += section_count * limit
+            total += section_count * self._FALLBACK_LIMIT
         return max(total, 1)
 
     def _get_section_count(self, spider: BaseSpider) -> int:
@@ -356,11 +367,9 @@ class SpiderScheduler:
         """
         处理单个爬虫的所有板块（异步提交，线程安全）
 
-        Args:
-            spider: 爬虫实例
-            mode: 追踪模式
-            today_str: 今日日期字符串
-            is_manual: 是否手动触发
+        包含：
+        - 冷启动配额熔断（Cold Start Quota Circuit Breaker）
+        - 双轨时间拦截器（Dual-Track Time Horizon Interceptor）
 
         Returns:
             (来源名称, 提交数量, 错误列表) 元组
@@ -369,26 +378,59 @@ class SpiderScheduler:
         source_name = spider.SOURCE_NAME
         error_list: List[str] = []
 
+        # ── 冷启动状态推演 ──────────────────────────────────────────
+        existing_count = db.get_article_count_by_source(source_name)
+        is_cold_start = (existing_count == 0)
+
+        if is_cold_start:
+            # 公文通配额 10，其余学院跨板块累计 1
+            quota = self._COLD_START_QUOTA_GWT if source_name == "公文通" else self._COLD_START_QUOTA_COLLEGE
+            logger.info(f"❄️ [{source_name}] 冷启动模式，配额上限: {quota} 条")
+        else:
+            quota = None  # 非冷启动，不限配额
+
+        # ── 双轨时间游标计算 ────────────────────────────────────────
+        time_cutoff: Optional[datetime] = None
+        if not is_cold_start:
+            if mode == 'today':
+                # 当日追踪：游标为今日 00:00，宽容 2 小时防午夜断层
+                today_dt = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+                time_cutoff = today_dt - __import__('datetime').timedelta(hours=2)
+            elif mode == 'continuous':
+                # 持续追踪：游标为该来源最新文章日期
+                latest_date_str = db.get_latest_article_date_by_source(source_name)
+                if latest_date_str:
+                    time_cutoff = _parse_date_safe(latest_date_str)
+
         # 获取板块列表
         sections = self._get_sections(spider)
 
-        for section_name in sections:
-            if self._cancel_event.is_set():  # 🌟 核心防御：板块循环前检查是否刹车
-                break
-            try:
-                # 获取文章列表（传入 limit，让爬虫层控制抓取数量）
-                limit = self.articles_per_section_limit
-                if section_name:
-                    articles = spider.fetch_list(page_num=1, section_name=section_name, limit=limit)
-                else:
-                    articles = spider.fetch_list(page_num=1, limit=limit)
+        # 冷启动跨板块计数器
+        cold_yield_count = 0
 
-                # limit 已在爬虫层生效，无需再次截断
+        for section_name in sections:
+            if self._cancel_event.is_set():
+                break
+
+            # 冷启动配额短路：跨板块累计已达上限，终止所有剩余板块
+            if is_cold_start and quota is not None and cold_yield_count >= quota:
+                logger.info(f"❄️ [{source_name}] 冷启动配额已满（{cold_yield_count}/{quota}），终止剩余板块")
+                break
+
+            try:
+                if section_name:
+                    articles = spider.fetch_list(page_num=1, section_name=section_name, limit=self._FALLBACK_LIMIT)
+                else:
+                    articles = spider.fetch_list(page_num=1, limit=self._FALLBACK_LIMIT)
 
                 for article in articles:
-                    # 创建文章上下文
-                    if self._cancel_event.is_set():  # 🌟 核心防御：文章解析循环前检查是否刹车
+                    if self._cancel_event.is_set():
                         break
+
+                    # 冷启动配额短路（文章粒度）
+                    if is_cold_start and quota is not None and cold_yield_count >= quota:
+                        break
+
                     ctx = self.article_processor.create_context(
                         article=article,
                         source_name=source_name,
@@ -401,9 +443,17 @@ class SpiderScheduler:
                         logger.debug(f"跳过导航噪音（黑名单标题）: {ctx.title}")
                         continue
 
-                    # 当日追踪模式：跳过非今日文章
-                    if self.article_processor.should_skip_by_date(ctx.date, mode, today_str):
-                        continue
+                    # ── 双轨时间拦截断言 ────────────────────────────
+                    if time_cutoff is not None and ctx.date:
+                        article_dt = _parse_date_safe(ctx.date)
+                        if article_dt is not None and article_dt < time_cutoff:
+                            # 列表通常按时间倒序，遇到过期文章可直接 break 当前板块
+                            logger.debug(f"[{source_name}] 时间拦截：{ctx.date} < {time_cutoff.date()}，终止当前板块")
+                            break
+                    elif not is_cold_start:
+                        # 非冷启动且无时间游标时，走旧的 today 模式过滤兜底
+                        if self.article_processor.should_skip_by_date(ctx.date, mode, today_str):
+                            continue
 
                     # 持续追踪模式：快速跳过已存在的 URL
                     if self.article_processor.should_skip_by_url(ctx.url, is_manual):
@@ -413,10 +463,8 @@ class SpiderScheduler:
                     with self._progress_lock:
                         self._current_scanned += 1
                         current_scanned = self._current_scanned
-                    # 🌟 不再发送预估值，total 设为 0，前端只显示已扫描数量
                     self._push_progress(current_scanned, 0, ctx.title)
 
-                    # 🌟 异步提交到处理队列（立即返回，不阻塞）
                     if self.article_processor.submit(
                         spider=spider,
                         ctx=ctx,
@@ -425,6 +473,8 @@ class SpiderScheduler:
                         is_manual=is_manual
                     ):
                         submitted_count += 1
+                        if is_cold_start:
+                            cold_yield_count += 1
 
             except Exception as e:
                 section_label = f"板块 '{section_name}'" if section_name else "默认板块"

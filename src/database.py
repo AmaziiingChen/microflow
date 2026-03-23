@@ -500,6 +500,25 @@ class DatabaseManager:
             cursor.execute("SELECT DISTINCT source_name FROM articles ORDER BY source_name")
             return [row[0] for row in cursor.fetchall() if row[0]]
 
+    def get_article_count_by_source(self, source_name: str) -> int:
+        """查询指定来源的在库文章数（用于冷启动判断）"""
+        with self._get_read_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM articles WHERE source_name = ?", (source_name,))
+            row = cursor.fetchone()
+            return row[0] if row else 0
+
+    def get_latest_article_date_by_source(self, source_name: str) -> Optional[str]:
+        """查询指定来源最新一篇文章的发布日期（用于持续追踪时间游标）"""
+        with self._get_read_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT date FROM articles WHERE source_name = ? ORDER BY date DESC, exact_time DESC LIMIT 1",
+                (source_name,)
+            )
+            row = cursor.fetchone()
+            return row[0] if row else None
+
     def get_article_by_id(self, article_id: int) -> Optional[Dict[str, Any]]:
         """根据 ID 获取文章"""
         with self._get_read_connection() as conn:
