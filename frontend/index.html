@@ -21,6 +21,20 @@
         --btn-yield: #7caff4;
       }
 
+      /* 🌟 细节：专属的果冻高光选中态 */
+      ::selection {
+        /* 使用你主题的纯正蓝，但赋予 20% 的极高透明度 */
+        background: rgba(59, 134, 247, 0.2);
+        /* 保持文字原本的颜色，拒绝生硬反白，保留阅读质感 */
+        color: inherit;
+      }
+
+      /* 🌟 细节：搜索框里闪烁的打字光标也要换成你的主题色 */
+      input,
+      textarea {
+        caret-color: var(--accent-color);
+      }
+
       /* 🌟 专属内联设置卡片样式 */
       .inline-settings-card {
         cursor: default !important; /* 内部是表单，不显示手型 */
@@ -108,12 +122,41 @@
         scroll-behavior: smooth;
         min-height: 0 !important;
         -webkit-overflow-scrolling: touch !important;
+        /* 开启原生弹性阻尼 */
+        overscroll-behavior-y: contain;
       }
 
       /* 列表视图滚动条样式 - 与详情视图保持一致 */
       .list-view::-webkit-scrollbar {
         width: 6px;
         height: 4px;
+      }
+
+      /* ================= 绝杀 7：魔术底线 ================= */
+      .article-content a {
+        position: relative;
+        color: var(--accent-color);
+        text-decoration: none;
+        font-weight: 600;
+      }
+      .article-content a::after {
+        content: "";
+        position: absolute;
+        width: 100%;
+        height: 2px;
+        bottom: -2px;
+        left: 0;
+        background-color: var(--accent-color);
+        border-radius: 2px;
+        /* 核心：默认从右边消失 */
+        transform: scaleX(0);
+        transform-origin: right;
+        transition: transform 0.4s var(--curve-pop);
+      }
+      .article-content a:hover::after {
+        /* 悬浮时：从左边滑出填满 */
+        transform: scaleX(1);
+        transform-origin: left;
       }
 
       .list-view::-webkit-scrollbar-track {
@@ -1787,6 +1830,39 @@
         --btn-bg: rgba(0, 0, 0, 0.06);
 
         --curve-silky: cubic-bezier(0.22, 0.85, 0.15, 1);
+        /* 🌟 核心：iPhone 系统级弹性弹簧曲线 (强烈的物理弹性，极速启动，微妙回弹) */
+        --search-curve-expand: cubic-bezier(0.3, 1.65, 0.4, 1);
+        /* 🌟 收缩曲线：稍平滑，体现阻尼感 */
+        --search-curve-collapse: cubic-bezier(0.25, 1, 0.5, 1);
+
+        --search-bg-hover: rgba(0, 0, 0, 0.03);
+      }
+
+      /* ================= 绝杀 7：魔术底线 ================= */
+      .article-content a {
+        position: relative;
+        color: var(--accent-color);
+        text-decoration: none;
+        font-weight: 600;
+      }
+      .article-content a::after {
+        content: "";
+        position: absolute;
+        width: 100%;
+        height: 2px;
+        bottom: -2px;
+        left: 0;
+        background-color: var(--accent-color);
+        border-radius: 2px;
+        /* 核心：默认从右边消失 */
+        transform: scaleX(0);
+        transform-origin: right;
+        transition: transform 0.4s var(--curve-pop);
+      }
+      .article-content a:hover::after {
+        /* 悬浮时：从左边滑出填满 */
+        transform: scaleX(1);
+        transform-origin: left;
       }
 
       /* ============================================================
@@ -1830,6 +1906,22 @@
         box-sizing: border-box;
         --search-spring: cubic-bezier(0.32, 0, 0.2, 1);
         --search-settle: cubic-bezier(0.28, 0.84, 0.32, 1);
+
+        transition:
+          all 0.6s var(--curve-pop),
+          border-radius 0.6s ease;
+      }
+
+      .main-card-header.is-searching {
+        /* 搜索时微微悬浮放大，带来强烈的聚焦感 */
+        transform: scale(1.02) translateY(-4px);
+        /* 增加一层主题色的微光外晕，模拟灵动岛激活 */
+        box-shadow:
+          0 24px 48px rgba(0, 0, 0, 0.12),
+          0 0 0 4px rgba(59, 134, 247, 0.15),
+          inset 0 1px 1px rgba(255, 255, 255, 0.6);
+        /* 变形成更圆润的形态 */
+        border-radius: 20px;
       }
 
       /* 左、右护法容器：平时各占 50%，把中间元素死死挤在中心 */
@@ -5365,8 +5457,12 @@
               const headerButtons = document.querySelector(".main-card-header");
               const clickedInHeader = headerButtons?.contains(e.target);
 
-              // 如果点击不在搜索框内且不在底部功能栏内，关闭搜索
-              if (!clickedInSearch && !clickedInHeader) {
+              // 🌟 新增：检查点击是否在卡片内（卡片点击有自己的处理逻辑，不应关闭搜索）
+              const card = e.target.closest(".list-card");
+              const clickedInCard = card !== null;
+
+              // 如果点击不在搜索框内且不在底部功能栏内且不在卡片内，关闭搜索
+              if (!clickedInSearch && !clickedInHeader && !clickedInCard) {
                 closeSearchUI();
               }
             };
