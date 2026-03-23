@@ -13,12 +13,16 @@
         --card-bg: #ffffff;
         --text-main: #111827;
         --text-sub: #4b5563;
-        --accent-color: #3b86f7;
+        --accent-color: #408ff7;
         --border-color: #e5e7eb;
         /* Apple Store 级物理回弹曲线 */
         --curve-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
         /* 搜索聚焦时的让渡色 */
         --btn-yield: #7caff4;
+        /* 丝滑位移曲线：专管布局推拉，绝对不过冲，防止元素越界 */
+        --curve-apple-move: cubic-bezier(0.32, 0.72, 0, 1);
+        /* 专属果冻曲线：专管被挤压时的 Q 弹形变 */
+        --curve-apple-squish: cubic-bezier(0.34, 1.4, 0.64, 1);
       }
 
       /* 🌟 细节：专属的果冻高光选中态 */
@@ -1963,14 +1967,54 @@
         overflow: visible; /* 🌟 允许搜索框圆角正常显示 */
       }
 
-      /* 🌟 物理模拟 1：搜索框撞击 Today 按钮（已禁用） */
-      .main-card-header.is-searching .header-center {
-        margin: 0 4px;
+      /* 搜索展开时，中右侧受力挤压 */
+      .main-card-header.is-searching .header-center,
+      .main-card-header.is-searching .header-side.right {
+        /* 设定形变原点为右侧，让它们看起来是贴着右边框往里瘪 */
+        transform-origin: right center;
+        animation: apple-squish 0.6s var(--curve-apple-squish) forwards;
       }
 
-      /* 🌟 物理模拟 2：力量传递给最右侧更新按钮（已禁用） */
-      .main-card-header.is-searching .header-side.right {
-        flex: 0 0 auto;
+      /* 搜索收起时，真空回吸 */
+      .main-card-header:not(.is-searching) .header-center,
+      .main-card-header:not(.is-searching) .header-side.right {
+        transform-origin: right center;
+        animation: apple-vacuum 0.6s var(--curve-apple-squish) forwards;
+      }
+
+      /* 撞墙形变关键帧：X轴压扁，Y轴拉长 */
+      @keyframes apple-squish {
+        0% {
+          transform: scale(1);
+        }
+        25% {
+          transform: scaleX(0.82) scaleY(1.1) translateX(2px);
+        } /* 被左边冲过来的搜索框撞扁 */
+        55% {
+          transform: scaleX(1.04) scaleY(0.96) translateX(-1px);
+        } /* 弹性反弹 */
+        75% {
+          transform: scaleX(0.98) scaleY(1.02);
+        } /* 微弱余震 */
+        100% {
+          transform: scale(1);
+        }
+      }
+
+      /* 真空回拉关键帧 */
+      @keyframes apple-vacuum {
+        0% {
+          transform: scale(1);
+        }
+        25% {
+          transform: scaleX(1.1) scaleY(0.92) translateX(-3px);
+        } /* 被缩回的搜索框往左扯长 */
+        55% {
+          transform: scaleX(0.96) scaleY(1.04) translateX(1px);
+        }
+        100% {
+          transform: scale(1);
+        }
       }
 
       /* ============================================================
@@ -1996,11 +2040,20 @@
           height: 22px !important;
         }
         .search-morph-container {
-          height: 42px;
-          width: 42px;
+          /* 基础状态保持不变 */
+          transition:
+            width 0.6s var(--curve-apple-move),
+            background 0.3s ease,
+            box-shadow 0.3s ease;
         }
         .search-morph-container.is-active {
-          min-width: 0;
+          /* Apple 质感密码：微弱白底 + 极细内凹阴影雕刻感 + 蓝色外发光光晕 */
+          background: rgba(255, 255, 255, 0.75) !important;
+          box-shadow:
+            inset 0 1px 4px rgba(0, 0, 0, 0.05),
+            inset 0 0 0 1px rgba(0, 0, 0, 0.02),
+            0 0 0 3px rgba(87, 155, 240, 0.2) !important; /* 呼应你的 --accent-color */
+          cursor: text;
         }
         .btn-check:disabled,
         .btn-check.read-only-btn {
@@ -2013,6 +2066,9 @@
       /* ============================================================
          2. 搜索框同频弹性引擎 (替换原有的 search-morph-container)
          ============================================================ */
+      /* ============================================================
+         2. 搜索框同频弹性引擎 (Morphing 形变物理引擎)
+         ============================================================ */
       .search-morph-container {
         display: flex;
         align-items: center;
@@ -2021,26 +2077,35 @@
         border-radius: 22px;
         overflow: hidden;
         position: relative;
-        /* 🌟 核心修复：用真实的 width 代替 max-width，动画速度来回绝对一致 */
-        width: 44px;
+        width: 44px; /* 完美的起始正圆 */
         flex-grow: 0;
         box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+
+        /* 🌟 收缩时的阻尼感曲线 (失去焦点时平滑退回正圆) */
         transition:
-          width 0.54s var(--search-spring),
-          background-color 0.42s var(--search-settle),
-          border-radius 0.54s var(--search-spring),
-          box-shadow 0.42s var(--search-settle),
-          transform 0.54s var(--search-settle);
+          width 0.45s var(--search-curve-collapse),
+          background-color 0.3s ease,
+          border-radius 0.45s var(--search-curve-collapse),
+          box-shadow 0.3s ease,
+          transform 0.45s var(--search-curve-collapse);
       }
 
       .search-morph-container.is-active {
-        width: 100%; /* 填满左侧护法提供的庞大空间 */
+        width: 100%;
         flex-grow: 1;
         background: var(--pill-bg);
-        border-radius: 22px; /* 🌟 明确设置圆角，确保展开时也是圆角矩形 */
+        border-radius: 22px;
         box-shadow:
           inset 0 1px 1px rgba(255, 255, 255, 0.65),
           0 8px 20px rgba(15, 23, 42, 0.08);
+
+        /* 🌟 展开时的爆发弹簧曲线 (极速拉伸并带有完美回弹) */
+        transition:
+          width 0.6s var(--search-curve-expand),
+          background-color 0.4s ease,
+          border-radius 0.6s var(--search-curve-expand),
+          box-shadow 0.4s ease,
+          transform 0.6s var(--search-curve-expand);
       }
 
       /* ============================================================
@@ -2181,7 +2246,8 @@
          - 今日按钮变为圆形关闭按钮
          ============================================================ */
       .dock-group.is-collapsed {
-        background: transparent;
+        /* 🌟 保持半透明背景，避免透出父容器的白色背景形成矩形 */
+        background: var(--pill-bg);
         padding: 0;
         gap: 0;
         pointer-events: none;
@@ -2210,6 +2276,9 @@
         transform: scale(0.9) !important;
       }
 
+      /* ============================================================
+         🛠️ 终极修复：绝对空间隔离引擎 (彻底告别光标跳动)
+         ============================================================ */
       .search-input {
         flex: 1;
         height: 100%;
@@ -2229,6 +2298,11 @@
       }
       .search-morph-container.is-active .search-input {
         opacity: 1;
+        transform: translateX(0);
+        /* 延迟 0.05秒 触发弹跳，视觉上会极其顺滑 */
+        transition:
+          opacity 0.4s ease 0.1s,
+          transform 0.6s var(--curve-apple-squish) 0.05s;
       }
       .search-input::placeholder {
         color: #9ca3af;
@@ -2243,8 +2317,10 @@
          图标尺寸：      18px × 18px
          描边宽度：      2.2px
          ============================================================ */
+      /* ============================================================
+         【搜索图标按钮】search-icon-wrapper
+         ============================================================ */
       .search-icon-wrapper {
-        /* 🌟 核心修复 2：设置为绝对定位并靠右。彻底摆脱隐形输入框的挤压！ */
         position: absolute;
         right: 0;
         width: 44px;
@@ -2257,28 +2333,43 @@
         flex-shrink: 0;
         background: transparent;
         color: var(--text-main);
+
         transition:
-          width 0.54s var(--search-spring),
-          height 0.54s var(--search-spring),
-          margin 0.54s var(--search-spring),
-          transform 0.54s var(--search-settle);
+          width 0.45s var(--search-curve-collapse),
+          height 0.45s var(--search-curve-collapse),
+          margin 0.45s var(--search-curve-collapse),
+          transform 0.4s var(--search-curve-collapse);
       }
+
       .search-morph-container.is-active .search-icon-wrapper {
         margin: 4px;
         width: 36px;
         height: 36px;
+        /* 展开时图标容器应用爆发弹簧 */
+        transition:
+          width 0.6s var(--search-curve-expand),
+          height 0.6s var(--search-curve-expand),
+          margin 0.6s var(--search-curve-expand),
+          transform 0.6s var(--search-curve-expand);
       }
+
       .search-morph-container.is-active .search-icon-wrapper:active {
-        transform: scale(0.9);
+        transform: scale(0.85); /* 更加清脆的下压感 */
       }
+
+      /* 🌟 内部 SVG 图标的灵性旋转 */
       .search-icon-wrapper svg {
         width: 18px;
         height: 18px;
         stroke-width: 2.2px;
-        transition: transform 0.54s var(--search-settle);
+        transform: scale(1) rotate(0deg);
+        transition: transform 0.45s var(--search-curve-collapse);
       }
+
       .search-morph-container.is-active .search-icon-wrapper svg {
-        transform: scale(0.96);
+        /* 当从大圆变成小按钮时，放大镜会轻微缩小，并带有一个 -15度 的潇洒侧位回旋 */
+        transform: scale(0.9) rotate(-15deg);
+        transition: transform 0.6s var(--search-curve-expand);
       }
 
       /* ============================================================
