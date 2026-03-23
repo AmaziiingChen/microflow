@@ -1038,12 +1038,39 @@ class Api:
     
 
     def set_window_on_top(self, is_on_top: bool):
-        """前端调用：切换窗口置顶状态"""
-        if self.window:
-            # 🌟 修复：改为对属性进行赋值
-            self.window.on_top = is_on_top
-            return {"status": "success", "is_pinned": is_on_top}
-        return {"status": "error"}
+        """前端调用：切换窗口置顶状态
+
+        注意：在 Windows 上，窗口操作必须在 UI 线程执行，
+        否则会导致死锁或无响应。
+        """
+        if not self.window:
+            return {"status": "error", "message": "窗口未初始化"}
+
+        try:
+            # 🌟 Windows 平台特殊处理：使用线程避免阻塞
+            if platform.system() == "Windows":
+                import threading
+
+                def _set_on_top_safe():
+                    try:
+                        self.window.on_top = is_on_top
+                        logger.info(f"Windows: 窗口置顶状态已设置为 {is_on_top}")
+                    except Exception as e:
+                        logger.error(f"Windows 设置置顶失败: {e}")
+
+                # 在新线程中执行，避免阻塞前端
+                thread = threading.Thread(target=_set_on_top_safe, daemon=True)
+                thread.start()
+                # 不等待结果，立即返回，避免阻塞
+                return {"status": "success", "is_pinned": is_on_top, "async": True}
+            else:
+                # macOS 可以直接设置
+                self.window.on_top = is_on_top
+                return {"status": "success", "is_pinned": is_on_top}
+
+        except Exception as e:
+            logger.error(f"设置窗口置顶失败: {e}")
+            return {"status": "error", "message": str(e)}
 
     def get_local_ai_icon(self, model_name: str) -> Dict[str, Any]:
         """

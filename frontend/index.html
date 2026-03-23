@@ -13,7 +13,7 @@
         --card-bg: #ffffff;
         --text-main: #111827;
         --text-sub: #4b5563;
-        --accent-color: #579bf0;
+        --accent-color: #3b86f7;
         --border-color: #e5e7eb;
         /* Apple Store 级物理回弹曲线 */
         --curve-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -25,7 +25,23 @@
       .inline-settings-card {
         cursor: default !important; /* 内部是表单，不显示手型 */
         padding: 24px 20px !important;
+        display: block !important; /* 🌟 覆盖 list-card 的 flex 布局 */
+        /* 入场动画：与消息卡片一致 */
+        animation: cardPopIn 0.4s var(--curve-pop);
       }
+
+      /* 入场动画关键帧 */
+      @keyframes cardPopIn {
+        from {
+          opacity: 0;
+          transform: translateY(20px) scale(0.96);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+
       .inline-settings-card:hover,
       .inline-settings-card:active {
         transform: none !important; /* 🌟 屏蔽物理悬浮与下压，方便内部输入框交互 */
@@ -35,10 +51,11 @@
       .list-date {
         margin-left: auto; /* 在 flex 中把它推向最右边 */
         font-weight: 600;
-        color: #9ca3af;
+        color: #808080; /* 🌟 与部门、类别标签颜色保持一致 */
         display: flex;
         letter-spacing: 0.5px;
-        font-size: 12px;
+        font-size: 11px; /* 🌟 字体缩小到11px，与所有底层标签完全统一 */
+        height: 22px; /* 🌟 锁定高度 22px，保证底对齐水平线完美拉直 */
         /* 🚀 核心防御：时间是绝对的视觉锚点，严禁被压缩 */
         flex-shrink: 0;
         align-items: center; /* 保证和前面的标签完美水平居中对齐 */
@@ -85,7 +102,7 @@
       .list-view {
         flex: 1;
         overflow-y: auto; /* 允许纵向滚动 */
-        padding: 20px;
+        padding: 12px;
         padding-bottom: 80px; /* 为底部悬浮功能栏留出空间 */
         /* 优化：平滑滚动 */
         scroll-behavior: smooth;
@@ -202,37 +219,8 @@
         transform: scale(0.96) !important;
         transition: transform 0.15s cubic-bezier(0.2, 0.9, 0.4, 1.1) !important;
       }
-      /* 脉冲光晕动画 */
-      @keyframes btn-pulse {
-        0% {
-          box-shadow: 0 0 0 0 rgba(87, 155, 240, 0.4);
-        }
-        70% {
-          box-shadow: 0 0 0 8px rgba(87, 155, 240, 0);
-        }
-        100% {
-          box-shadow: 0 0 0 0 rgba(87, 155, 240, 0);
-        }
-      }
-      .btn-pulse {
-        animation: btn-pulse 0.5s ease-out;
-      }
-      /* 数字变化时的放大动画 */
-      @keyframes number-pop {
-        0% {
-          transform: scale(1);
-        }
-        50% {
-          transform: scale(1.1);
-        }
-        100% {
-          transform: scale(1);
-        }
-      }
-      .number-pop {
-        display: inline-block;
-        animation: number-pop 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-      }
+      /* 脉冲光晕动画（已禁用） */
+      /* 数字变化时的放大动画（已禁用） */
       /* 字体导入按钮 - 大气风格 */
       .import-font-btn {
         padding: 8px 20px !important;
@@ -274,13 +262,14 @@
 
       .list-card {
         background: var(--card-bg);
-        border-radius: 16px; /* 变圆润 */
-        padding: 16px 20px; /* 大幅增加内呼吸空间 */
+        border-radius: 24px; /* 🌟 严谨公式：外圆角(24) = 内圆角(12) + 内边距(12) */
+        padding: 12px;
         margin-bottom: 12px;
         cursor: pointer;
         position: relative;
         display: flex;
-        flex-direction: column;
+        flex-direction: row;
+        align-items: flex-start;
         border: 1px solid rgba(0, 0, 0, 0.03); /* 极浅的物理边界 */
         /* 复合阴影：上层接触阴影，下层环境漫反射 */
         box-shadow:
@@ -294,6 +283,103 @@
           border-color 0.4s ease,
           background-color 0.3s ease;
       }
+
+      /* 🌟 卡片内容容器 */
+      .card-content-wrapper {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between; /* 强制上下两极分布（顶对齐、底对齐） */
+        min-height: 80px; /* 严格等于左侧总高度：图标(48) + 间距(10) + 标签(22) = 80 */
+      }
+
+      /* 🌟 部门图标样式：遵循外圆角24=内圆角12+边距12 */
+      .department-icon {
+        flex-shrink: 0;
+        width: 48px; /* 修正为 48x48 的正方形 */
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px; /* 严格执行内圆角 12px */
+        box-shadow: none;
+        border: none;
+        opacity: 0.8; /* 在此添加透明度 */
+      }
+
+      .department-icon svg {
+        width: 24px;
+        height: 24px;
+        opacity: 1; /* 在此添加透明度 */
+        color: #ffffff;
+      }
+
+      /* 🌟 新增：左侧专属 AI 标签样式 */
+      .card-left-column .ai-tag-left {
+        font-size: 11px !important;
+        padding: 0 6px !important;
+        width: 46px; /* 🌟 与部门图标宽度对齐 */
+        margin-left: 14px; /* 🌟 向右偏移：圆点(8) + 间距(6) = 14px，与图标对齐 */
+        height: 22px !important; /* 锁定高度，与右侧底栏完美对齐 */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-weight: 800;
+        letter-spacing: 1px;
+        color: #ffffff;
+        line-height: 1;
+        opacity: 1; /* 在此添加透明度 */
+      }
+
+      /* 🌟 新增：左侧视觉列容器 */
+      .card-left-column {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px; /* 内部上下间距统一为 10px */
+        flex-shrink: 0;
+        width: 62px; /* 宽度容纳未读圆点 + 间距 + 部门图标 */
+        margin-right: 12px; /* 右侧元素间距，严格等于卡片全局 Padding 12px */
+      }
+
+      /* 🌟 图标行：包含未读圆点和部门图标 */
+      .card-left-column .icon-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      /* 🌟 未读圆点 */
+      .unread-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: #3378f9;
+        flex-shrink: 0;
+        transition: opacity 0.3s ease;
+      }
+
+      /* 🌟 已读时圆点隐藏但保留空间 */
+      .unread-dot.unread-dot-hidden {
+        opacity: 0;
+      }
+
+      .card-left-column .department-icon svg {
+        width: 28px;
+        height: 28px;
+        color: currentColor;
+      }
+
+      .department-icon svg path {
+        fill: #ffffff;
+        fill-opacity: 1;
+      }
+
       /* 悬浮态：Z轴微抬升 (已降低高度) */
       .list-card:hover {
         transform: translateY(-2px); /* 悬浮高度收敛，更具分量感 */
@@ -318,7 +404,7 @@
       .announcement-card {
         background: var(--card-bg);
         border-radius: 16px; /* 变圆润 */
-        padding: 16px 20px; /* 大幅增加内呼吸空间 */
+        padding: 8px 20px; /* 大幅增加内呼吸空间 */
         margin-bottom: 12px;
         cursor: pointer;
         position: relative;
@@ -366,6 +452,21 @@
       .announcement-card.read .announcement-icon {
         filter: grayscale(0.5);
       }
+
+      .article-stack {
+        opacity: 1;
+        transform: translateY(0);
+        transition:
+          opacity 0.26s cubic-bezier(0.32, 0, 0.2, 1),
+          transform 0.26s cubic-bezier(0.32, 0, 0.2, 1);
+      }
+
+      .article-stack.is-switching {
+        opacity: 0;
+        transform: translateY(10px);
+        pointer-events: none;
+      }
+
       .announcement-icon {
         font-size: 1.3rem;
         margin-right: 8px;
@@ -374,6 +475,7 @@
       .list-card.announcement-card .list-card-title {
         font-weight: 700;
         color: #b45309;
+        font-size: 20px; /* 🌟 公告卡片独立字体大小，不继承通用样式 */
       }
 
       /* 标题行：从 center 改回 flex-start，应对多行标题 */
@@ -381,7 +483,7 @@
         display: flex;
         align-items: flex-start;
         gap: 10px;
-        margin-bottom: 12px; /* 拉开标题与底部标签的间距 */
+        margin-bottom: 0; /* 🌟 删掉写死的 margin，交由外层的 space-between 引擎自动撑开，实现绝对顶对齐 */
       }
 
       .title-row .list-card-title {
@@ -389,16 +491,33 @@
         margin: 0;
       }
 
-      /* 附件图标：对齐第一行文字的视觉中心 */
+      /* 🌟 图标容器：两行布局，附件在上，收藏在下 */
+      .title-icons {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        flex-shrink: 0;
+      }
+
+      .title-icons .attachment-icon,
+      .title-icons .favorite-icon {
+        margin-top: 0;
+      }
+
+      .icon-placeholder {
+        width: 16px;
+        height: 22.5px; /* 🌟 与标题行高一致 */
+      }
+
+      /* 附件图标：对齐第一行文字中心 */
       .attachment-icon {
         flex-shrink: 0;
         width: 16px;
-        height: 16px;
-        opacity: 0.5;
+        height: 22.5px; /* 🌟 与标题行高一致 (15px × 1.5)，实现垂直居中对齐 */
+        opacity: 0.5; /* 🌟 降低10%透明度 (原0.5) */
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        margin-top: 4px; /* 下沉一点，与 16px 标题首行对齐 */
       }
       .attachment-icon svg {
         width: 16px;
@@ -408,24 +527,37 @@
         opacity: 1;
       }
 
-      /* 🌟 收藏图标样式（只读显示） */
+      /* 🌟 收藏图标样式：对齐第二行文字中心 */
       .favorite-icon {
         flex-shrink: 0;
         width: 18px;
-        height: 18px;
+        height: 22.5px; /* 🌟 与标题行高一致 (15px × 1.5)，实现垂直居中对齐 */
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        margin-top: 3px;
-        margin-left: 4px;
+        opacity: 0.7; /* 🌟 降低20%透明度 */
       }
       .favorite-icon svg {
         width: 16px;
         height: 16px;
       }
+      /* 🌟 收藏图标可点击样式 */
+      .favorite-icon.clickable {
+        cursor: pointer;
+        transition:
+          transform 0.2s ease,
+          opacity 0.2s ease;
+      }
+      .favorite-icon.clickable:hover {
+        transform: scale(1.2);
+        opacity: 0.8;
+      }
+      .favorite-icon.clickable:active {
+        transform: scale(0.95);
+      }
 
       .list-card-title {
-        font-size: 16px; /* 字体加大，提升阅读直觉 */
+        font-size: 15px; /* 字体加大，提升阅读直觉 */
         font-weight: 700;
         margin: 0;
         line-height: 1.5;
@@ -440,30 +572,28 @@
       }
       /* 未读标题：醒目的红色 */
       .list-card-title.unread {
-        color: #b72a5c;
+        color: #636366;
       }
-      /* 已读标题：柔和的灰色 */
+      /* 已读标题：保持黑色，不再变灰 */
       .list-card-title.read {
-        color: #959ca9;
+        color: #636366;
       }
 
       /* 元数据行：增加统一的 gap */
       .article-meta {
         display: flex;
         flex-wrap: nowrap;
-        gap: 10px; /* 替代原本子元素的 margin-right，更优雅 */
+        gap: 10px; /* 🌟 与左侧的内部间距 10px 严格对齐 */
         align-items: center;
-        font-size: 12px;
         min-width: 0;
       }
 
       .meta-item {
         color: #959aa4;
-        font-size: 12px;
+        font-size: 11px; /* 🌟 统一缩小字号，避免头重脚轻 */
         font-weight: 500;
         white-space: nowrap;
         flex-shrink: 0;
-        /* 删除了原有的 margin-right: 12px，交给父元素的 gap 管理 */
         line-height: 1;
         display: flex;
         align-items: center;
@@ -471,32 +601,23 @@
 
       .meta-tag-gray {
         background-color: #f3f4f6;
-        color: #959aa4;
-        padding: 4px 8px;
-        border-radius: 6px;
-        font-size: 12px;
-        font-weight: 600;
-        border: 0px solid #e5e7eb;
-        line-height: 1;
+        color: #808080;
+        padding: 0 6px; /* 🌟 与左侧 AI 标签保持一致 */
+        height: 22px; /* 🌟 核心：高度死死锁定 22px，与左侧 AI 标签完全一致 */
+        border-radius: 6px; /* 🌟 与左侧 AI 标签保持相同的圆角 */
+        font-size: 11px; /* 🌟 与左侧 AI 标签字号一致 */
+        font-weight: 700; /* 🌟 字重与 AI 标签一致 */
+        border: none;
 
-        /* 🚀 核心修复：文字截断控制 */
-        display: inline-block; /* 替代原本的 inline-flex，对 ellipsis 渲染更稳定 */
-        vertical-align: middle;
-        max-width: 200px; /* 设定最大安全宽度（大约可容纳 10 个中文字符） */
+        /* 🚀 核心修复：文字截断与居中控制 */
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        max-width: 120px;
         overflow: hidden;
-        text-overflow: ellipsis; /* 超出显示省略号... */
-        white-space: nowrap; /* 绝对不许换行 */
-        flex-shrink: 1; /* 允许在极窄屏幕下继续被压缩 */
-      }
-
-      /* 已读卡片元数据行：整体变淡 */
-      .list-card.read .article-meta {
-        opacity: 0.75;
-      }
-      /* 已读卡片灰色标签额外调暗 */
-      .list-card.read .meta-tag-gray {
-        background-color: #f0f0f0;
-        color: #d5cece;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex-shrink: 1;
       }
 
       /* 详情视图 (现代微缩放渐变效果) */
@@ -632,7 +753,6 @@
       .badge-snapshot:hover {
         background: #e8e0ff;
         border-color: #cdbdff;
-        transform: scale(1.05); /* 悬停时稍微放大，物理反馈更好 */
       }
       .badge-snapshot:active {
         transform: scale(0.95);
@@ -685,7 +805,6 @@
       .badge-clear:hover {
         background: #ffe4e6; /* 悬浮时背景加深一点 */
         border-color: #fda4af; /* 悬浮时边框加深一点 */
-        transform: scale(1.05); /* 悬停时稍微放大，物理反馈更好 */
       }
       .badge-clear:active {
         transform: scale(0.95);
@@ -931,7 +1050,7 @@
       }
       .meta-badge {
         background: #f3f4f6;
-        color: #6b7280;
+        color: #808080;
         padding: 4px 10px;
         border-radius: 6px;
         font-size: 12px;
@@ -1150,58 +1269,117 @@
         display: flex;
         gap: 10px;
       }
-      /* ================= 底部操作按钮 (macOS 红绿灯风格) ================= */
+      /* ================= 底部操作按钮 (纯图标胶囊风格) ================= */
       .action-btn {
-        padding: 8px 16px;
+        position: relative;
+        width: 60px; /* 强制固定为宽胶囊 */
+        height: 38px;
+        padding: 0;
         border: none;
-        border-radius: 6px;
+        border-radius: 19px; /* 胶囊圆角 */
         cursor: pointer;
-        font-size: 13px;
-        font-weight: 600;
         color: white;
-        /* 🌟 核心修复：引入 macOS 经典的丝滑物理缓动函数 */
-        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-        /* 默认带一点极细微的阴影，增加实体感 */
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-        /* 🌟 核心修复 1：无论如何挤压，文字绝对不允许换行 */
-        white-space: nowrap;
-        /* 🌟 核心修复 2：在 Flex 布局中，宁愿撑破父元素，也绝对不允许被压缩 */
+        transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
       }
 
-      /* 按下时的微缩放物理反馈 */
+      .action-btn:hover {
+        transform: scale(1.08);
+      }
       .action-btn:active {
-        transform: scale(0.95);
-        box-shadow: none;
+        transform: scale(0.92);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
       }
 
-      /* 🟢 复制全文 (macOS 绿: #34C759) */
+      .btn-icon {
+        width: 18px;
+        height: 18px;
+        flex-shrink: 0;
+        position: absolute;
+        transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+
+      /* 🟢 1. 复制按钮动画 */
       .btn-copy {
         background: #65c466;
       }
       .btn-copy:hover {
         background: #54a255;
-        /* 悬浮时增加同色系的柔和发光投影，质感拉满 */
-        /* box-shadow: 0 4px 12px rgba(52, 199, 89, 0.25);  */
+      }
+      .btn-copy .icon-copy {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+      .btn-copy .icon-check {
+        opacity: 0;
+        transform: scale(0.5) rotate(-45deg);
       }
 
-      /* 🟡 查看原文 (macOS 橘: #FF9F0A) 
-        注：Apple 在需要配白字时，会用更深的 Amber(橘黄) 替代纯黄，以保证可读性 */
+      .btn-copy.is-copied {
+        background: #65c466;
+        transform: scale(1.05);
+      }
+      .btn-copy.is-copied .icon-copy {
+        opacity: 0;
+        transform: scale(0) translateY(12px);
+      }
+      .btn-copy.is-copied .icon-check {
+        opacity: 1;
+        transform: scale(1.1) rotate(0deg);
+      }
+
+      /* 🟡 2. 查看原文按钮动画 */
       .btn-view {
         background: #f2ca44;
       }
       .btn-view:hover {
         background: #c9a738;
-        /* box-shadow: 0 4px 12px rgba(255, 159, 10, 0.25);  */
+      }
+      .btn-view:hover .icon-view {
+        transform: translate(2px, -2px);
+      }
+      .btn-view.is-launching .icon-view {
+        animation: shoot-out 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
       }
 
-      /* 🔴 关闭窗口 (macOS 红: #FF3B30) */
+      @keyframes shoot-out {
+        0% {
+          transform: translate(0, 0) scale(1);
+          opacity: 1;
+        }
+        40% {
+          transform: translate(20px, -20px) scale(0.8);
+          opacity: 0;
+        }
+        41% {
+          transform: translate(-20px, 20px) scale(0.5);
+          opacity: 0;
+        }
+        100% {
+          transform: translate(0, 0) scale(1);
+          opacity: 1;
+        }
+      }
+
+      /* 🔴 3. 关闭按钮动画 */
       .btn-back {
         background: #ec6765;
       }
       .btn-back:hover {
-        background: #c45554; /* 悬浮时变为更深的 Apple 警告红 */
-        /* box-shadow: 0 4px 12px rgba(255, 59, 48, 0.25);  */
+        background: #c45554;
+      }
+      .btn-back.is-closing {
+        transform: scale(0);
+        opacity: 0;
+        pointer-events: none;
+      }
+      .btn-back.is-closing .icon-close {
+        transform: rotate(90deg);
       }
 
       /* 🌟 收藏按钮 (金色) */
@@ -1422,6 +1600,20 @@
         font-size: 13px;
         line-height: 1.5;
       }
+      /* System Prompt textarea 细滚动条 */
+      textarea.form-input::-webkit-scrollbar {
+        width: 4px;
+      }
+      textarea.form-input::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      textarea.form-input::-webkit-scrollbar-thumb {
+        background-color: rgba(0, 0, 0, 0.12);
+        border-radius: 2px;
+      }
+      textarea.form-input::-webkit-scrollbar-thumb:hover {
+        background-color: rgba(0, 0, 0, 0.25);
+      }
 
       .form-row {
         display: flex;
@@ -1593,6 +1785,8 @@
         overflow: hidden;
         min-width: 0;
         box-sizing: border-box;
+        --search-spring: cubic-bezier(0.32, 0, 0.2, 1);
+        --search-settle: cubic-bezier(0.28, 0.84, 0.32, 1);
       }
 
       /* 左、右护法容器：平时各占 50%，把中间元素死死挤在中心 */
@@ -1602,8 +1796,7 @@
         align-items: center;
         min-width: 0; /* 🌟 防止子元素撑开容器 */
         overflow: hidden; /* 🌟 隐藏溢出内容 */
-        /* 🌟 使用更长的过渡时间让布局变化更平滑 */
-        transition: flex 1s var(--curve-silky);
+        transition: flex 0.54s var(--search-spring);
       }
       .header-side.left {
         justify-content: flex-start;
@@ -1621,93 +1814,28 @@
         margin: 0 8px;
         min-width: 0; /* 🌟 防止溢出 */
         z-index: 1; /* 🌟 低于右侧更新按钮，让展开动画从下方滑过 */
-        transition: margin 1s var(--curve-silky);
+        transition: margin 0.54s var(--search-spring);
       }
 
       /* 搜索激活时：左侧护法疯狂膨胀，接管全屏 */
+      .main-card-header.is-searching {
+        overflow: visible; /* 🌟 允许搜索框圆角正常显示 */
+      }
+
       .main-card-header.is-searching .header-side.left {
         flex: 100; /* 以绝对优势挤压其余空间 */
-        transition: flex 1s var(--curve-silky) 0.1s;
+        border-radius: 22px; /* 🌟 添加圆角，与搜索框圆角匹配 */
+        overflow: visible; /* 🌟 允许搜索框圆角正常显示 */
       }
 
-      /* 🌟 物理模拟 1：搜索框撞击 Today 按钮 */
+      /* 🌟 物理模拟 1：搜索框撞击 Today 按钮（已禁用） */
       .main-card-header.is-searching .header-center {
         margin: 0 4px;
-        /* 🌟 时长设为 1s，与搜索框展开的总时长保持绝对同频，不使用任何 delay */
-        animation: center-squish 1s var(--curve-silky) forwards;
       }
 
-      /* 🌟 百分比时间差引擎：前 35% 时间，搜索框还在延伸的路上 */
-      @keyframes center-squish {
-        0%,
-        35% {
-          transform: scale(1) translateX(0);
-        } /* 等待撞击...保持不动 */
-        50% {
-          transform: scaleX(0.85) scaleY(1.05) translateX(4px);
-        } /* 撞到了！被向右挤扁 */
-        75% {
-          transform: scaleX(1.02) scaleY(0.98) translateX(-2px);
-        } /* 弹性反弹 */
-        100% {
-          transform: scale(1) translateX(0);
-        } /* 最终恢复平稳 */
-      }
-
-      /* 🌟 物理模拟 2：力量传递给最右侧更新按钮 */
+      /* 🌟 物理模拟 2：力量传递给最右侧更新按钮（已禁用） */
       .main-card-header.is-searching .header-side.right {
         flex: 0 0 auto;
-        animation: right-side-squish 1s var(--curve-silky) forwards;
-      }
-
-      /* 🌟 力量传递需要时间，更新按钮受力比 Today 按钮更晚 */
-      @keyframes right-side-squish {
-        0%,
-        45% {
-          transform: scale(1) translateX(0);
-        } /* 前 45% 不动，等待力量传递 */
-        60% {
-          transform: scaleX(0.88) scaleY(1.05) translateX(4px);
-        } /* 被挤扁 */
-        80% {
-          transform: scaleX(1.02) scaleY(0.98) translateX(-2px);
-        } /* 反弹 */
-        100% {
-          transform: scale(1) translateX(0);
-        }
-      }
-
-      /* 🌟 搜索收起时的链式恢复动画（可以保持极简，因为平移掩盖了突兀感） */
-      .main-card-header:not(.is-searching) .header-center {
-        animation: center-bounce 0.6s var(--curve-silky) forwards;
-      }
-
-      @keyframes center-bounce {
-        0% {
-          transform: scale(1);
-        }
-        50% {
-          transform: scale(0.96);
-        } /* 释放后轻微收缩回弹 */
-        100% {
-          transform: scale(1);
-        }
-      }
-
-      .main-card-header:not(.is-searching) .header-side.right {
-        animation: right-side-bounce 0.6s var(--curve-silky) forwards;
-      }
-
-      @keyframes right-side-bounce {
-        0% {
-          transform: scale(1);
-        }
-        60% {
-          transform: scale(0.96);
-        } /* 稍晚一点回弹 */
-        100% {
-          transform: scale(1);
-        }
       }
 
       /* ============================================================
@@ -1725,12 +1853,16 @@
           height: 34px;
         }
         .btn-check {
-          width: 38px !important;
-          height: 38px !important;
+          width: 42px !important;
+          height: 42px !important;
+        }
+        .btn-check svg {
+          width: 22px !important;
+          height: 22px !important;
         }
         .search-morph-container {
-          height: 38px;
-          width: 38px;
+          height: 42px;
+          width: 42px;
         }
         .search-morph-container.is-active {
           min-width: 0;
@@ -1757,48 +1889,23 @@
         /* 🌟 核心修复：用真实的 width 代替 max-width，动画速度来回绝对一致 */
         width: 44px;
         flex-grow: 0;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
         transition:
-          width 1s var(--curve-silky),
-          flex-grow 1s var(--curve-silky),
-          background 0.6s ease;
+          width 0.54s var(--search-spring),
+          background-color 0.42s var(--search-settle),
+          border-radius 0.54s var(--search-spring),
+          box-shadow 0.42s var(--search-settle),
+          transform 0.54s var(--search-settle);
       }
 
       .search-morph-container.is-active {
         width: 100%; /* 填满左侧护法提供的庞大空间 */
         flex-grow: 1;
         background: var(--pill-bg);
-        /* 🌟 展开动画：先快速冲出，再平滑稳定 */
-        animation: search-expand 0.8s var(--curve-silky) forwards;
-      }
-
-      /* 🌟 搜索框展开动画 */
-      @keyframes search-expand {
-        0% {
-          width: 44px;
-        }
-        60% {
-          /* 先冲到略超过目标位置（弹性过冲） */
-        }
-        100% {
-          width: 100%;
-        }
-      }
-
-      /* 🌟 搜索框收起动画：延迟开始，配合 dock-group 展开 */
-      .search-morph-container:not(.is-active) {
-        animation: search-collapse 0.6s var(--curve-silky) forwards;
-      }
-
-      @keyframes search-collapse {
-        0% {
-          width: 100%;
-        }
-        50% {
-          /* 先收缩到比目标更小（弹性回弹） */
-        }
-        100% {
-          width: 44px;
-        }
+        border-radius: 22px; /* 🌟 明确设置圆角，确保展开时也是圆角矩形 */
+        box-shadow:
+          inset 0 1px 1px rgba(255, 255, 255, 0.65),
+          0 8px 20px rgba(15, 23, 42, 0.08);
       }
 
       /* ============================================================
@@ -1814,11 +1921,10 @@
         overflow: hidden;
         position: relative; /* 🌟 创建层叠上下文 */
         z-index: 1; /* 🌟 确保在更新按钮下方 */
-        will-change: max-width, background;
         transition:
-          max-width 0.8s var(--curve-silky),
-          background 0.8s var(--curve-silky),
-          padding 0.8s var(--curve-silky);
+          gap 0.54s var(--search-spring),
+          padding 0.54s var(--search-spring),
+          background-color 0.38s var(--search-settle);
       }
 
       /* 悬浮项：轻微放大 + 背景高亮 */
@@ -1905,11 +2011,11 @@
          颜色：          currentColor - 继承文字颜色 var(--text-main)
          ============================================================ */
       .dock-item {
-        width: 50px;
-        height: 38px;
+        width: 44px;
+        height: 44px;
         /* 🌟 核心防御：绝对不允许按钮在小屏幕或拥挤时被挤压变形 */
         flex-shrink: 0;
-        border-radius: 19px;
+        border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -1918,14 +2024,11 @@
         border: none;
         color: var(--text-main);
         position: relative;
-        will-change: transform, background, width, margin;
         transition:
-          transform 0.5s var(--curve-silky),
-          opacity 0.4s ease,
-          background 0.3s ease,
-          box-shadow 0.4s var(--curve-pop),
-          width 0.8s var(--curve-silky),
-          margin 0.8s var(--curve-silky);
+          width 0.54s var(--search-spring),
+          opacity 0.36s var(--search-settle),
+          transform 0.54s var(--search-spring),
+          background-color 0.3s ease;
       }
       /* ✅ 确保你有这段代码（如果没有就加上） */
       .dock-item svg {
@@ -1935,7 +2038,7 @@
       }
 
       /* ============================================================
-         【搜索激活态】dock-group.is-collapsed - 灵动挤压动画
+         【搜索激活态】dock-group.is-collapsed
          ------------------------------------------------------------
          搜索展开时，dock-group 坍塌为单一的"今日"按钮：
          - 背景渐变透明
@@ -1947,20 +2050,6 @@
         padding: 0;
         gap: 0;
         pointer-events: none;
-        /* 🌟 移除 scaleX，避免子元素被压扁成椭圆 */
-        animation: dock-collapse 0.5s var(--curve-silky) forwards;
-      }
-
-      /* 🌟 坍塌动画关键帧：只动画 gap 和 padding，不变形子元素 */
-      @keyframes dock-collapse {
-        0% {
-          gap: 10%;
-          padding: 2px;
-        }
-        100% {
-          gap: 0;
-          padding: 0;
-        }
       }
 
       .dock-group.is-collapsed .dock-item.hide-on-search {
@@ -1968,18 +2057,8 @@
         opacity: 0;
         margin: 0;
         padding: 0;
-        /* 🌟 核心修复 1：绝对不要用 scale(0)！
-           改为向左平移 -20px。这样恢复时，它们会优雅地从 Today 按钮背后滑出来，绝不会乱飞 */
-        transform: translateX(-20px);
+        transform: translateX(-14px) scale(0.92);
         pointer-events: none;
-
-        /* 🌟 核心修复 2：清理掉 Claude 写的一大堆错乱的延迟，保持丝滑 */
-        transition:
-          width 0.4s var(--curve-silky),
-          opacity 0.3s ease,
-          margin 0.4s ease,
-          transform 0.4s var(--curve-silky),
-          padding 0.4s ease;
       }
       .dock-group.is-collapsed .dock-item.today-btn {
         /* 🌟 保持正圆，不受父容器影响 */
@@ -1991,27 +2070,9 @@
         opacity: 1;
         pointer-events: auto;
         flex-shrink: 0;
-        /* 🌟 今日按钮延迟出现，配合挤压动画 */
-        transition: all 0.5s var(--curve-silky) 0.15s;
       }
       .dock-group.is-collapsed .dock-item.today-btn:active {
         transform: scale(0.9) !important;
-      }
-
-      /* 🌟 恢复动画：平滑展开 */
-      .dock-group:not(.is-collapsed) {
-        animation: dock-expand 0.6s var(--curve-silky) forwards;
-      }
-
-      @keyframes dock-expand {
-        0% {
-          gap: 0;
-          padding: 0;
-        }
-        100% {
-          gap: 10%;
-          padding: 2px;
-        }
       }
 
       .search-input {
@@ -2027,14 +2088,12 @@
         padding: 0 44px 0 16px;
         min-width: 0;
         opacity: 0;
-        transform: translateX(10px);
         transition:
-          opacity 0.4s ease,
-          transform 0.8s var(--curve-silky);
+          opacity 0.26s ease,
+          padding 0.54s var(--search-spring);
       }
       .search-morph-container.is-active .search-input {
         opacity: 1;
-        transform: translateX(0);
       }
       .search-input::placeholder {
         color: #9ca3af;
@@ -2062,13 +2121,14 @@
         cursor: pointer;
         flex-shrink: 0;
         background: transparent;
-        transition:
-          background 0.4s ease,
-          transform 0.2s ease;
         color: var(--text-main);
+        transition:
+          width 0.54s var(--search-spring),
+          height 0.54s var(--search-spring),
+          margin 0.54s var(--search-spring),
+          transform 0.54s var(--search-settle);
       }
       .search-morph-container.is-active .search-icon-wrapper {
-        background: var(--btn-bg);
         margin: 4px;
         width: 36px;
         height: 36px;
@@ -2080,6 +2140,10 @@
         width: 18px;
         height: 18px;
         stroke-width: 2.2px;
+        transition: transform 0.54s var(--search-settle);
+      }
+      .search-morph-container.is-active .search-icon-wrapper svg {
+        transform: scale(0.96);
       }
 
       /* ============================================================
@@ -2103,14 +2167,14 @@
            宽高：        44px × 44px - 正圆形
            圆角：        50% - 完美正圆
            底色：        var(--btn-bg) #e5e7eb
-           图标：        自绘刷新 SVG，18px × 18px
+           图标：        自绘刷新 SVG，20px × 20px
 
          冷却态（倒计时）：
-           宽度：        68px - 小胶囊
-           圆角：        22px - 胶囊形
+           宽高：        44px × 44px - 正圆形
+           圆角：        50% - 完美正圆
            底色：        var(--pill-bg) #f3f4f6
            文字颜色：    #9ca3af (灰色)
-           字体大小：    13px
+           字体大小：    12px
 
          只读态：
            与冷却态样式一致
@@ -2131,10 +2195,19 @@
         border: none;
         cursor: pointer;
         flex-shrink: 0;
-        transition: all 0.8s var(--curve-silky);
         position: relative;
         z-index: 3; /* 🌟 高于中间按钮组，确保展开动画从下方滑过 */
         overflow: hidden;
+        transition:
+          transform 0.24s ease,
+          background-color 0.24s ease,
+          width 0.32s var(--search-settle),
+          height 0.32s var(--search-settle);
+      }
+
+      .btn-check svg {
+        width: 20px;
+        height: 20px;
       }
 
       .btn-check:hover {
@@ -2148,7 +2221,7 @@
       /* ============================================================
          3. 冷却按钮样式 - 保持正圆不变
          ============================================================ */
-      /* 冷却/只读状态：保持正圆，只改变颜色 */
+      /* 冷却/只读状态：保持正圆形 */
       .btn-check:disabled,
       .btn-check.read-only-btn {
         width: 44px !important;
@@ -2161,11 +2234,10 @@
         border: none !important;
         cursor: not-allowed;
         letter-spacing: -0.5px;
-        transition: all 0.4s var(--curve-silky) !important;
       }
 
       .main-card-header.is-searching .btn-check:not(:disabled) {
-        /* 🌟 保持正圆，只缩放整体 */
+        /* 🌟 保持正圆形，只缩放整体 */
         transform: scale(0.96);
         border-radius: 50% !important;
       }
@@ -2184,7 +2256,9 @@
       .badge-favorite::after,
       .badge-pin::after,
       .badge-home::after,
-      .badge-clear::after {
+      .badge-clear::after,
+      .action-btn::after {
+        /* 👈 新增这一行 */
         content: attr(data-tooltip); /* 自动读取 HTML 上的 data-tooltip 文本 */
         position: absolute;
         top: calc(100% + 10px);
@@ -2225,7 +2299,9 @@
       .badge-favorite::before,
       .badge-pin::before,
       .badge-home::before,
-      .badge-clear::before {
+      .badge-clear::before,
+      .action-btn::before {
+        /* 👈 新增这一行 */
         content: "";
         position: absolute;
         top: 100%;
@@ -2256,6 +2332,7 @@
       .badge-favorite:hover::after,
       .badge-pin:hover::after,
       .badge-home:hover::after,
+      .action-btn:hover::after, /* 👈 新增这两行 */
       .badge-clear:hover::after {
         opacity: 1;
         visibility: visible;
@@ -2280,6 +2357,17 @@
         /* 小三角跟随气泡同步显示 */
         transition: all 0.4s ease;
         transition-delay: 0.1s;
+      }
+
+      /* 4. 🚫 禁用特定按钮的 Tooltip */
+      .no-tooltip::after,
+      .no-tooltip::before,
+      .no-tooltip:hover::after,
+      .no-tooltip:hover::before {
+        content: none !important;
+        display: none !important;
+        opacity: 0 !important;
+        visibility: hidden !important;
       }
 
       .settings-title {
@@ -2326,54 +2414,188 @@
         letter-spacing: 0.5px;
       }
 
-      /* ================= 新增：来源筛选栏样式 ================= */
+      /* ================= 新增：来源筛选栏样式 (Apple 极简物理风格) ================= */
+      /* 筛选标签容器 - Apple 极简物理展开 */
       .filter-scroll-container {
+        --chip-motion-duration: 0.68s;
+        --chip-motion-ease: cubic-bezier(0.32, 0, 0.2, 1);
+        --chip-compact-width: 52px;
+        --chip-expanded-width: 204px;
         display: flex;
         overflow-x: auto;
-        padding: 0 0 0px 0;
+        align-items: center;
         gap: 10px;
+        padding-block: 2px;
+        padding-inline: 0;
         margin-top: 0;
         margin-bottom: 14px;
         scrollbar-width: none;
         scroll-behavior: smooth;
+        scroll-padding-inline: 0;
+        overscroll-behavior-x: contain;
+        -webkit-overflow-scrolling: touch;
       }
       .filter-scroll-container::-webkit-scrollbar {
         display: none;
       }
+
+      /* 筛选标签 - 无阴影、无外边框 */
       .filter-chip {
-        padding: 6px 16px;
-        border-radius: 20px;
-        background: rgba(255, 255, 255, 0.85);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        color: var(--text-sub);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: var(--chip-compact-width);
+        padding: 8px 14px;
+        border-radius: 999px;
+        background: #ebebf0;
+        color: #3c3c43;
         font-size: 13px;
-        font-weight: 600;
+        font-weight: 700;
         cursor: pointer;
         white-space: nowrap;
-        border: 1px solid rgba(0, 0, 0, 0.08);
+        border: none;
+        outline: none;
         user-select: none;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+        flex-shrink: 0;
+        overflow: hidden;
         transition:
-          all 0.4s var(--curve-pop),
-          background-color 0.2s ease,
-          color 0.2s ease;
-        transform-origin: center; /* 确保是从中心缩放 */
+          width var(--chip-motion-duration) var(--chip-motion-ease),
+          background-color var(--chip-motion-duration) var(--chip-motion-ease),
+          color var(--chip-motion-duration) var(--chip-motion-ease),
+          padding-inline var(--chip-motion-duration) var(--chip-motion-ease),
+          filter 0.28s ease;
       }
+
+      .filter-chip.is-first {
+        justify-content: center;
+      }
+
+      .filter-chip.is-first.active {
+        justify-content: center;
+      }
+
+      .filter-chip.is-last {
+        flex-direction: row-reverse;
+        justify-content: center;
+      }
+
+      .filter-chip.is-last.active {
+        justify-content: center;
+      }
+
+      .filter-chip.is-middle {
+        justify-content: center;
+      }
+
+      .filter-chip-inner {
+        display: inline-flex;
+        align-items: center;
+        justify-content: inherit;
+        gap: 0;
+        min-width: 0;
+        transition: gap var(--chip-motion-duration) var(--chip-motion-ease);
+      }
+
+      .filter-chip.active .filter-chip-inner {
+        gap: 8px;
+      }
+
+      .filter-chip.is-middle.active .filter-chip-inner {
+        gap: 6px;
+      }
+
+      .filter-chip.is-last.active .filter-chip-inner {
+        gap: 8px;
+      }
+
+      .filter-chip-icon {
+        width: 16px;
+        height: 16px;
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: inherit;
+        transition:
+          color var(--chip-motion-duration) var(--chip-motion-ease),
+          opacity var(--chip-motion-duration) var(--chip-motion-ease),
+          transform 0.22s cubic-bezier(0.32, 0, 0.2, 1);
+      }
+      .filter-chip-icon svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      .filter-chip[data-source-key="source-4"] .filter-chip-icon {
+        width: 20px;
+      }
+
+      .filter-chip-text {
+        display: inline-block;
+        overflow: hidden;
+        max-width: 0;
+        opacity: 0;
+        transform: scaleX(0.94);
+        transform-origin: center center;
+        white-space: nowrap;
+        will-change: max-width, opacity, transform;
+        transition:
+          max-width var(--chip-motion-duration) var(--chip-motion-ease),
+          opacity var(--chip-motion-duration) var(--chip-motion-ease),
+          transform var(--chip-motion-duration) var(--chip-motion-ease);
+      }
+
+      .filter-chip.is-first .filter-chip-text {
+        transform-origin: left center;
+      }
+
+      .filter-chip.is-first.active .filter-chip-text {
+        transform-origin: center center;
+      }
+
+      .filter-chip.is-last .filter-chip-text {
+        transform-origin: right center;
+      }
+
+      .filter-chip.is-last.active .filter-chip-text {
+        transform-origin: center center;
+      }
+
       .filter-chip.active {
-        background: rgba(52, 120, 246, 0.1);
-        color: var(--accent-color);
-        border-color: rgba(52, 120, 246, 0.3);
-      }
-      .filter-chip:hover:not(.active) {
-        background: #e5e7eb;
-      }
-      .filter-chip:active {
-        background: var(--btn-bg);
+        width: var(--chip-expanded-width);
+        background: var(--chip-active-bg, #007aff);
         color: #ffffff;
-        /* 🌟 点击激活时，按钮像心跳一样变大一点，提示当前所在位置 */
+        padding-inline: 18px;
+        filter: saturate(1.02);
+      }
+
+      .filter-chip.active .filter-chip-icon,
+      .filter-chip.active .filter-chip-text {
+        color: #ffffff;
+      }
+
+      .filter-chip.active .filter-chip-text {
+        max-width: calc(var(--chip-expanded-width) - 64px);
+        opacity: 1;
+        transform: scaleX(1);
+      }
+
+      .filter-chip:not(.active) .filter-chip-icon,
+      .filter-chip:not(.active) .filter-chip-text {
+        color: #6e6e73;
+      }
+
+      .filter-chip:hover:not(.active) {
+        background: #e1e1e8;
+      }
+
+      .filter-chip:hover:not(.active) .filter-chip-icon {
         transform: scale(1.08);
-        box-shadow: 0 4px 12px rgba(87, 155, 240, 0.25);
+      }
+
+      .filter-chip:active {
+        filter: brightness(0.99);
       }
 
       /* 🎯 进度条外框 */
@@ -2665,46 +2887,27 @@
         display: none;
       }
 
-      /* 8种莫兰迪配色选中态（为胶囊按钮专属定制，自带同色系极浅高光阴影） */
-      .subs-chip.active-morandi-0 {
-        background-color: #e8d4d4;
-        color: #8b6b6b;
-        box-shadow: 0 2px 6px rgba(139, 107, 107, 0.15);
+      /* 🌟 订阅管理选中态（统一白色字体，背景色由 :style 动态设置） */
+      .subs-chip.subs-chip-active {
+        color: #ffffff;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
       }
-      .subs-chip.active-morandi-1 {
-        background-color: #d4e0e8;
-        color: #5b7a8c;
-        box-shadow: 0 2px 6px rgba(91, 122, 140, 0.15);
+
+      /* 🌟 订阅管理图标样式 */
+      .subs-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        transition: background-color 0.2s ease;
       }
-      .subs-chip.active-morandi-2 {
-        background-color: #d4e4d8;
-        color: #5b8066;
-        box-shadow: 0 2px 6px rgba(91, 128, 102, 0.15);
-      }
-      .subs-chip.active-morandi-3 {
-        background-color: #e0d8e8;
-        color: #7b6b8c;
-        box-shadow: 0 2px 6px rgba(123, 107, 140, 0.15);
-      }
-      .subs-chip.active-morandi-4 {
-        background-color: #f0e8d8;
-        color: #8b7b5b;
-        box-shadow: 0 2px 6px rgba(139, 123, 91, 0.15);
-      }
-      .subs-chip.active-morandi-5 {
-        background-color: #e8dcc8;
-        color: #8b7a5b;
-        box-shadow: 0 2px 6px rgba(139, 122, 91, 0.15);
-      }
-      .subs-chip.active-morandi-6 {
-        background-color: #d8e0e0;
-        color: #6b8080;
-        box-shadow: 0 2px 6px rgba(107, 128, 128, 0.15);
-      }
-      .subs-chip.active-morandi-7 {
-        background-color: #e4dcd4;
-        color: #7b6b5b;
-        box-shadow: 0 2px 6px rgba(123, 107, 91, 0.15);
+
+      .subs-icon svg {
+        width: 18px;
+        height: 18px;
       }
 
       /* ================= 新增：置顶图钉按钮 ================= */
@@ -2830,46 +3033,11 @@
       }
 
       /* =========================================
-           🌟 新增：公文列表筛选过渡动画 (洗牌 & 浮现)
+           公文列表筛选过渡动画（已禁用）
            ========================================= */
-      /* 确保外层容器有相对定位，供离开的元素绝对定位使用 */
+      /* 确保外层容器有相对定位 */
       .relative-container {
         position: relative;
-      }
-
-      /* 进场和出场的过程动画 */
-      .list-pop-move, /* 这个是 Vue 专属，处理列表中其他元素位置改变时的平滑位移 */
-        .list-pop-enter-active,
-        .list-pop-leave-active {
-        transition: all 0.5s var(--curve-pop);
-        /* pointer-events: none; 在动画期间，彻底禁用卡片的鼠标交互 */
-      }
-
-      /* 进场的初始状态：透明 + 微微向下偏移 + 稍微缩小 */
-      .list-pop-enter-from {
-        opacity: 0;
-        transform: translateY(20px) scale(0.96);
-      }
-
-      /* 出场的最终状态：透明 + 微微向上偏移 (像被推上去了一样) */
-      .list-pop-leave-to {
-        opacity: 0;
-        transform: translateY(-20px) scale(0.96);
-      }
-
-      /* 🌟 核心魔法：让离开的元素脱离文档流，这样新进来的元素才能顺滑地“挤”到它们的位置上 */
-      .list-pop-leave-active {
-        position: absolute;
-        width: 100%; /* 防止绝对定位导致卡片宽度塌陷 */
-        z-index: 0;
-        /* 🌟 核心修复：防止幽灵点击！*/
-        /* 让即将消失的卡片彻底失去物理碰撞体积，鼠标点击会直接穿透它，点到下方的按钮 */
-        pointer-events: none;
-      }
-
-      /* 确保进场的卡片在上方 */
-      .list-pop-enter-active {
-        z-index: 1;
       }
 
       /* ============================================================
@@ -3135,8 +3303,8 @@
               100% ( {{ aiProgress.total }} / {{ aiProgress.total }} )
             </template>
             <template v-else>
-              {{ Math.round(aiProgress.completed / aiProgress.total * 100)
-              }}% ( {{ aiProgress.completed }} / {{ aiProgress.total }} )
+              {{ Math.round(aiProgress.completed / aiProgress.total * 100) }}% (
+              {{ aiProgress.completed }} / {{ aiProgress.total }} )
             </template>
           </div>
         </div>
@@ -3155,18 +3323,28 @@
         <div
           v-if="activeSource !== '收藏' && !isSettingsOpen"
           class="filter-scroll-container"
+          ref="filterScrollContainer"
         >
           <div
-            v-for="src in sources"
-            :key="src"
-            :class="['filter-chip', { active: activeSource === src }]"
+            v-for="(src, index) in sources"
+            :key="src.key"
+            :class="[
+              'filter-chip',
+              { active: activeSource === src.name },
+              getSourcePositionClass(index, sources.length)
+            ]"
+            :style="getSourceStyle(src, activeSource === src.name)"
+            :data-source-key="src.key"
             @click="filterBySource(src)"
           >
-            {{ src }}
+            <span class="filter-chip-inner">
+              <span class="filter-chip-icon" v-html="getSourceIcon(src)"></span>
+              <span class="filter-chip-text">{{ src.name }}</span>
+            </span>
           </div>
         </div>
 
-        <transition-group name="list-pop" tag="div" style="position: relative">
+        <div class="relative-container">
           <div
             v-if="isSettingsOpen"
             key="system_settings_card"
@@ -3244,7 +3422,9 @@
                 <label class="form-label" style="margin: 0"
                   >System Prompt</label
                 >
-                <button class="badge-refresh" @click="resetPrompt">重置</button>
+                <button class="badge-refresh no-tooltip" @click="resetPrompt">
+                  重置
+                </button>
               </div>
               <textarea
                 v-model="config.prompt"
@@ -3339,7 +3519,7 @@
                       '未导入字体' }}
                     </span>
                     <button
-                      class="badge-attachment import-font-btn"
+                      class="badge-attachment import-font-btn no-tooltip"
                       style="margin: 0"
                       @click.stop="importCustomFont"
                     >
@@ -3493,10 +3673,12 @@
                 数据订阅管理
               </div>
               <div style="display: flex; gap: 8px">
-                <span class="badge-attachment" @click="selectAllSources"
+                <span
+                  class="badge-attachment no-tooltip"
+                  @click="selectAllSources"
                   >全选</span
                 >
-                <span class="badge-clear" @click="deselectAllSources"
+                <span class="badge-clear no-tooltip" @click="deselectAllSources"
                   >清空</span
                 >
               </div>
@@ -3520,19 +3702,29 @@
                   align-items: center;
                   padding: 12px 16px;
                 "
-                :class="(config.subscribedSources || []).includes(source) ? 'active-morandi-' + (index % 8) : ''"
+                :class="(config.subscribedSources || []).includes(source) ? 'subs-chip-active' : ''"
+                :style="(config.subscribedSources || []).includes(source) ? { backgroundColor: getSubsChipColor(source), color: '#ffffff' } : {}"
               >
-                <span style="font-size: 14px">{{ source }}</span>
-                <input
-                  type="checkbox"
-                  :value="source"
-                  v-model="config.subscribedSources"
-                />
-                <span
-                  v-show="(config.subscribedSources || []).includes(source)"
-                  style="font-weight: 900; opacity: 0.8; font-size: 15px"
-                  >✓</span
-                >
+                <div style="display: flex; align-items: center; gap: 10px">
+                  <div
+                    class="subs-icon"
+                    :style="(config.subscribedSources || []).includes(source) ? { backgroundColor: 'rgba(255,255,255,0.25)' } : { backgroundColor: getSubsChipColor(source) }"
+                    v-html="getSubsIcon(source)"
+                  ></div>
+                  <span style="font-size: 14px">{{ source }}</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <input
+                    type="checkbox"
+                    :value="source"
+                    v-model="config.subscribedSources"
+                  />
+                  <span
+                    v-show="(config.subscribedSources || []).includes(source)"
+                    style="font-weight: 900; opacity: 0.8; font-size: 15px"
+                    >✓</span
+                  >
+                </div>
               </label>
             </div>
 
@@ -3542,140 +3734,173 @@
           </div>
 
           <!-- 🌟 设置面板打开时，隐藏其他公文卡片 -->
-          <template
+          <div
             v-if="!isSettingsOpen"
-            v-for="(item, index) in processedArticles"
+            class="article-stack"
+            :class="{ 'is-switching': isListSwitching }"
           >
-            <div
-              v-if="item.isHeader"
-              :key="'header_' + item.title"
-              class="date-group-header"
-            >
-              {{ item.title }}
-            </div>
-
-            <div
-              v-else
-              :key="item.id || item.url"
-              :class="['list-card', { 'announcement-card': item.is_announcement, 'read': item.is_read && item.is_announcement }]"
-              @click="item.is_announcement ? handleNoticeClick(item) : openDetail(item)"
-            >
-              <div class="title-row">
-                <h3
-                  class="list-card-title"
-                  :class="item.is_read === 0 ? 'unread' : 'read'"
-                >
-                  <!-- 🌟 公告图标 -->
-                  <span v-if="item.is_announcement" class="announcement-icon"
-                    >📢</span
-                  >
-                  {{ item.title }}
-                </h3>
-                <!-- 附件图标：仅当有附件时显示，公告不显示 -->
-                <span
-                  v-if="!item.is_announcement && item.parsedAttachments && item.parsedAttachments.length > 0"
-                  class="attachment-icon"
-                  :title="'共 ' + item.parsedAttachments.length + ' 个附件'"
-                >
-                  <svg
-                    viewBox="0 0 1024 1024"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      d="M147.328 0C101.504 0 64 36.864 64 81.92v860.16C64 987.136 101.504 1024 147.328 1024h729.344c45.824 0 83.328-36.864 83.328-81.92V286.72L668.288 0h-520.96z"
-                      fill="#BBC6FF"
-                    />
-                    <path
-                      d="M750.592 293.568h208L667.392 2.304v208c0 45.824 37.376 83.2 83.2 83.2M512 352c0 17.6-14.4 32-32 32h-256a32.064 32.064 0 0 1-32-32c0-17.6 14.4-32 32-32h256c17.6 0 32 14.4 32 32m256 192c0 17.6-13.888 32-30.848 32H222.848A31.552 31.552 0 0 1 192 544c0-17.6 13.888-32 30.848-32h514.304c16.96 0 30.848 14.4 30.848 32m64 192c0 17.6-15.424 32-34.304 32H226.304C207.36 768 192 753.6 192 736s15.36-32 34.304-32h571.392c18.88 0 34.304 14.4 34.304 32"
-                      fill="#8395FF"
-                    />
-                  </svg>
-                </span>
-                <!-- 🌟 收藏图标：只读显示，仅在已收藏时出现 -->
-                <span
-                  v-if="!item.is_announcement && item.is_favorite"
-                  class="favorite-icon is-favorite"
-                  title="已收藏"
-                  style="color: #f5b014"
-                >
-                  <svg
-                    t="1774199426448"
-                    class="icon"
-                    viewBox="0 0 1024 1024"
-                    version="1.1"
-                    xmlns="http://www.w3.org/2000/svg"
-                    p-id="91854"
-                    width="200"
-                    height="200"
-                  >
-                    <path
-                      d="M512 0a57.051429 57.051429 0 0 0-51.931429 33.645714L346.697143 274.285714a58.514286 58.514286 0 0 1-43.885714 32.914286l-253.074286 38.034286a61.44 61.44 0 0 0-32.182857 103.131428l183.588571 187.245715a64.365714 64.365714 0 0 1 18.285714 53.394285L174.08 950.857143a59.977143 59.977143 0 0 0 57.051429 73.142857 54.125714 54.125714 0 0 0 27.062857-7.314286l226.742857-124.342857a53.394286 53.394286 0 0 1 54.125714 0l226.742857 124.342857a54.125714 54.125714 0 0 0 27.062857 7.314286 59.977143 59.977143 0 0 0 57.051429-73.142857L804.571429 689.005714a64.365714 64.365714 0 0 1 16.822857-53.394285l183.588571-187.245715a61.44 61.44 0 0 0-32.182857-103.131428L721.188571 307.2a58.514286 58.514286 0 0 1-43.885714-32.914286L563.931429 33.645714A57.051429 57.051429 0 0 0 512 0z"
-                      fill="#FCCF07"
-                      p-id="91855"
-                    ></path>
-                  </svg>
-                </span>
-              </div>
-              <!-- 元数据行：AI 标签 + 来源 + 分类 + 时间 -->
-              <div class="article-meta">
-                <!-- AI 标签：只渲染第一个，使用莫兰迪配色循环 -->
-                <span
-                  v-if="item.parsedTags && item.parsedTags.length > 0"
-                  :class="['tag', item.is_announcement ? 'tag-blue' : 'morandi-' + (index % 8), { 'tag-dimmed': item.is_read && !item.is_announcement }]"
-                >
-                  {{ item.parsedTags[0] }}
-                </span>
-                <!-- 部门：优先显示（公文通场景） -->
-                <span class="meta-tag-gray" v-if="item.department"
-                  >{{ item.department }}</span
-                >
-                <!-- 来源：非公文通且不与部门重复时显示 -->
-                <span
-                  class="meta-tag-gray"
-                  v-if="item.source_name && item.source_name !== '公文通' && item.source_name !== item.department"
-                  >{{ item.source_name }}</span
-                >
-                <!-- 分类：不与部门、来源重复时显示 -->
-                <span
-                  class="meta-tag-gray"
-                  v-if="item.category && item.category !== item.department && item.category !== item.source_name"
-                  >{{ item.category }}</span
-                >
-                <!-- 精确时间：右对齐，永远中灰 -->
-                <span class="list-date"
-                  >{{ item.formattedTime || item.exact_time || item.date
-                  }}</span
-                >
-              </div>
-              <!-- 🌟 欠费卡片专属按钮区域 -->
+            <template v-for="(item, index) in processedArticles">
               <div
-                v-if="item.id === 'balance_warning'"
-                style="
-                  margin-top: 10px;
-                  display: flex;
-                  gap: 10px;
-                  justify-content: flex-end;
-                  padding: 0 4px;
-                "
+                v-if="item.isHeader"
+                :key="'header_' + item.title"
+                class="date-group-header"
               >
-                <button
-                  class="action-btn btn-primary"
-                  @click.stop="clearBalanceWarning"
-                  style="padding: 6px 14px; font-size: 12px"
-                >
-                  {{ item.button_text }}
-                </button>
-                <button
-                  class="action-btn btn-secondary"
-                  @click.stop="dismissBalanceWarning"
-                  style="padding: 6px 14px; font-size: 12px"
-                >
-                  不再提醒
-                </button>
+                {{ item.title }}
               </div>
-            </div>
-          </template>
-        </transition-group>
+
+              <div
+                v-else
+                :key="item.id || item.url"
+                :class="['list-card', { 'announcement-card': item.is_announcement, 'read': item.is_read && item.is_announcement }]"
+                @click="item.is_announcement ? handleNoticeClick(item) : openDetail(item)"
+              >
+                <!-- 🌟 部门图标：显示在左侧 -->
+                <div v-if="!item.is_announcement" class="card-left-column">
+                  <div class="icon-row">
+                    <span
+                      class="unread-dot"
+                      :class="{ 'unread-dot-hidden': item.is_read !== 0 }"
+                    ></span>
+                    <div
+                      class="department-icon"
+                      :style="{ backgroundColor: getDepartmentColor(item.department) }"
+                      v-html="getDepartmentIcon(item.department)"
+                    ></div>
+                  </div>
+
+                  <span
+                    v-if="item.parsedTags && item.parsedTags.length > 0"
+                    class="tag ai-tag-left"
+                    :style="{ backgroundColor: getAITagBgColor(item.department) }"
+                  >
+                    {{ item.parsedTags[0].slice(0, 2) }}
+                  </span>
+                </div>
+
+                <div class="card-content-wrapper">
+                  <div class="title-row">
+                    <h3
+                      class="list-card-title"
+                      :class="item.is_read === 0 ? 'unread' : 'read'"
+                    >
+                      {{ item.title }}
+                    </h3>
+                    <!-- 🌟 图标容器：附件在上，收藏在下 -->
+                    <div
+                      class="title-icons"
+                      v-if="!item.is_announcement && (item.parsedAttachments?.length > 0 || item.is_favorite)"
+                    >
+                      <!-- 第一行：附件图标（如果有）或 占位符 -->
+                      <span
+                        v-if="item.parsedAttachments && item.parsedAttachments.length > 0"
+                        class="attachment-icon"
+                        :title="'共 ' + item.parsedAttachments.length + ' 个附件'"
+                      >
+                        <svg
+                          viewBox="0 0 1024 1024"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <path
+                            d="M147.328 0C101.504 0 64 36.864 64 81.92v860.16C64 987.136 101.504 1024 147.328 1024h729.344c45.824 0 83.328-36.864 83.328-81.92V286.72L668.288 0h-520.96z"
+                            fill="#BBC6FF"
+                          />
+                          <path
+                            d="M750.592 293.568h208L667.392 2.304v208c0 45.824 37.376 83.2 83.2 83.2M512 352c0 17.6-14.4 32-32 32h-256a32.064 32.064 0 0 1-32-32c0-17.6 14.4-32 32-32h256c17.6 0 32 14.4 32 32m256 192c0 17.6-13.888 32-30.848 32H222.848A31.552 31.552 0 0 1 192 544c0-17.6 13.888-32 30.848-32h514.304c16.96 0 30.848 14.4 30.848 32m64 192c0 17.6-15.424 32-34.304 32H226.304C207.36 768 192 753.6 192 736s15.36-32 34.304-32h571.392c18.88 0 34.304 14.4 34.304 32"
+                            fill="#8395FF"
+                          />
+                        </svg>
+                      </span>
+                      <span v-else class="icon-placeholder"></span>
+                      <!-- 第二行：收藏图标（如果有）或 占位符 -->
+                      <span
+                        v-if="item.is_favorite"
+                        class="favorite-icon is-favorite clickable"
+                        title="点击取消收藏"
+                        style="color: #f5b014"
+                        @click.stop="toggleFavoriteWithAnim(item, $event)"
+                      >
+                        <svg
+                          t="1774199426448"
+                          class="icon"
+                          viewBox="0 0 1024 1024"
+                          version="1.1"
+                          xmlns="http://www.w3.org/2000/svg"
+                          p-id="91854"
+                          width="200"
+                          height="200"
+                        >
+                          <path
+                            d="M512 0a57.051429 57.051429 0 0 0-51.931429 33.645714L346.697143 274.285714a58.514286 58.514286 0 0 1-43.885714 32.914286l-253.074286 38.034286a61.44 61.44 0 0 0-32.182857 103.131428l183.588571 187.245715a64.365714 64.365714 0 0 1 18.285714 53.394285L174.08 950.857143a59.977143 59.977143 0 0 0 57.051429 73.142857 54.125714 54.125714 0 0 0 27.062857-7.314286l226.742857-124.342857a53.394286 53.394286 0 0 1 54.125714 0l226.742857 124.342857a54.125714 54.125714 0 0 0 27.062857 7.314286 59.977143 59.977143 0 0 0 57.051429-73.142857L804.571429 689.005714a64.365714 64.365714 0 0 1 16.822857-53.394285l183.588571-187.245715a61.44 61.44 0 0 0-32.182857-103.131428L721.188571 307.2a58.514286 58.514286 0 0 1-43.885714-32.914286L563.931429 33.645714A57.051429 57.051429 0 0 0 512 0z"
+                            fill="#FCCF07"
+                            p-id="91855"
+                          ></path>
+                        </svg>
+                      </span>
+                      <span v-else class="icon-placeholder"></span>
+                    </div>
+                  </div>
+                  <!-- 元数据行：AI 标签 + 来源 + 分类 + 时间 -->
+                  <div class="article-meta">
+                    <!-- AI 标签：只渲染第一个，使用莫兰迪配色循环 -->
+                    <span
+                      v-if="item.is_announcement && item.parsedTags && item.parsedTags.length > 0"
+                      :class="['tag', 'tag-blue', { 'tag-dimmed': item.is_read }]"
+                    >
+                      {{ item.parsedTags[0] }}
+                    </span>
+                    <!-- 部门：优先显示（公文通场景） -->
+                    <span class="meta-tag-gray" v-if="item.department"
+                      >{{ item.department }}</span
+                    >
+                    <!-- 来源：非公文通且不与部门重复时显示 -->
+                    <span
+                      class="meta-tag-gray"
+                      v-if="item.source_name && item.source_name !== '公文通' && item.source_name !== item.department"
+                      >{{ item.source_name }}</span
+                    >
+                    <!-- 分类：不与部门、来源重复时显示 -->
+                    <span
+                      class="meta-tag-gray"
+                      v-if="item.category && item.category !== item.department && item.category !== item.source_name"
+                      >{{ item.category }}</span
+                    >
+                    <!-- 精确时间：右对齐，永远中灰 -->
+                    <span class="list-date"
+                      >{{ item.formattedTime || item.exact_time || item.date
+                      }}</span
+                    >
+                  </div>
+                  <!-- 🌟 欠费卡片专属按钮区域 -->
+                  <div
+                    v-if="item.id === 'balance_warning'"
+                    style="
+                      margin-top: 10px;
+                      display: flex;
+                      gap: 10px;
+                      justify-content: flex-end;
+                      padding: 0 4px;
+                    "
+                  >
+                    <button
+                      class="action-btn btn-primary"
+                      @click.stop="clearBalanceWarning"
+                      style="padding: 6px 14px; font-size: 12px"
+                    >
+                      {{ item.button_text }}
+                    </button>
+                    <button
+                      class="action-btn btn-secondary"
+                      @click.stop="dismissBalanceWarning"
+                      style="padding: 6px 14px; font-size: 12px"
+                    >
+                      不再提醒
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
         <div
           class="list-view"
           style="padding-top: 0; min-height: 40px; overflow: hidden"
@@ -3686,7 +3911,7 @@
               >找到 {{ processedArticles.filter(a => !a.is_announcement &&
               !a.isHeader).length }} 篇相关条目</span
             >
-            <span v-else-if="noMoreData"
+            <span v-else-if="noMoreData && !isSettingsOpen"
               >共 {{ processedArticles.filter(a => !a.is_announcement &&
               !a.isHeader).length }} 篇条目</span
             >
@@ -4276,19 +4501,69 @@
             </div>
             <div class="btn-group">
               <button
+                ref="copyBtnRef"
                 class="action-btn btn-copy"
-                @click="copyText(activeArticle)"
+                data-tooltip="复制"
+                @click="copyText(activeArticle, $event)"
               >
-                复制内容
+                <svg
+                  class="btn-icon icon-copy"
+                  viewBox="0 0 24.4531 28.4863"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M15.293 7.46582C15.293 8.41309 15.9619 9.07715 16.9092 9.07715L22.5098 9.07715L22.5098 18.2031C22.5098 20.4198 21.3043 21.6448 19.0967 21.6499L19.0967 16.1035C19.1064 14.3604 18.623 13.0664 17.5537 11.9873L12.5391 6.91895C11.3965 5.76172 10.1416 5.24902 8.39355 5.24902L6.58203 5.2438L6.58203 4.98047C6.58203 2.82227 7.79785 1.57715 10.0098 1.57715L15.293 1.57715ZM17.876 2.68066L21.5381 6.46973C21.9629 6.9043 22.2559 7.24121 22.2852 7.6123L17.2949 7.6123C16.9287 7.6123 16.7676 7.44629 16.7676 7.0752L16.7627 1.95801C17.1387 1.9873 17.4902 2.27051 17.876 2.68066Z"
+                    fill="currentColor"
+                  />
+                  <path
+                    d="M10.6201 14.5215L17.3242 14.5117C17.1973 14.043 16.8945 13.5742 16.4307 13.1006L11.416 8.03223C10.9424 7.55371 10.5273 7.23145 10.0488 7.08008L10.0488 13.9307C10.0488 14.3115 10.2539 14.5215 10.6201 14.5215ZM5.00977 26.8994L14.082 26.8994C16.2988 26.8994 17.5098 25.6738 17.5098 23.4521L17.5098 16.1084L10.3418 16.1084C9.10645 16.1084 8.46191 15.459 8.46191 14.2285L8.46191 6.82617L5.00977 6.82617C2.79785 6.82617 1.58203 8.04199 1.58203 10.2734L1.58203 23.4521C1.58203 25.6836 2.79785 26.8994 5.00977 26.8994Z"
+                    fill="currentColor"
+                  />
+                </svg>
+                <svg
+                  class="btn-icon icon-check"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"
+                    fill="currentColor"
+                  />
+                </svg>
               </button>
+
               <button
                 class="action-btn btn-view"
-                @click="openBrowser(activeArticle.url)"
+                data-tooltip="查看原文"
+                @click="openBrowser(activeArticle.url, $event)"
               >
-                查看原文
+                <svg
+                  class="btn-icon icon-view"
+                  viewBox="0 0 21.5635 19.9456"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M1.78027 11.1251L8.70898 11.1398C8.80664 11.1398 8.8457 11.1788 8.8457 11.2765L8.85546 18.1759C8.85546 20.1974 11.4629 20.6369 12.3418 18.7081L19.5 3.11244C20.4424 1.04213 18.8652-0.422718 16.8242 0.505016L1.18456 7.6681C-0.656255 8.50306-0.270513 11.1154 1.78027 11.1251Z"
+                    fill="currentColor"
+                  />
+                </svg>
               </button>
-              <button class="action-btn btn-back" @click="closeAppWindow">
-                关闭
+
+              <button
+                class="action-btn btn-back"
+                data-tooltip="关闭"
+                @click="closeAppWindow($event)"
+              >
+                <svg
+                  class="btn-icon icon-close"
+                  viewBox="0 0 16.8712 16.5346"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M13.4642 0.515675L0.484912 13.5024C-0.16047 14.1403-0.170235 15.3409 0.507294 16.0235C1.19228 16.6988 2.40777 16.6764 3.03823 16.0459L16.0175 3.06669C16.6852 2.39893 16.6801 1.23566 15.9876 0.545518C15.2952-0.146932 14.1417-0.156698 13.4642 0.515675ZM16.0175 13.4875L3.03823 0.508214C2.40031-0.12455 1.19744-0.156698 0.507294 0.538057C-0.175391 1.23051-0.153009 2.42131 0.484912 3.05923L13.4642 16.0385C14.1319 16.7062 15.2975 16.7011 15.9876 16.0161C16.6778 15.3236 16.6852 14.1627 16.0175 13.4875Z"
+                    fill="currentColor"
+                  />
+                </svg>
               </button>
             </div>
           </div>
@@ -4307,8 +4582,152 @@
         console.error("Promise错误:", event.reason);
       });
 
+      const FILTER_CHIP_COLORS = [
+        "rgb(183,42,92)",
+        "rgb(255,56,60)",
+        "rgb(255,141,40)",
+        "rgb(0,136,255)",
+        "rgb(52,199,89)",
+        "rgb(255,204,0)",
+        "rgb(48,176,199)",
+        "rgb(0,199,190)",
+        "rgb(255,141,40)",
+        "rgb(175,82,222)",
+        "rgb(44,44,46)",
+        "rgb(162,132,94)",
+        "rgb(50,173,230)",
+      ];
+
+      const SOURCE_ICON_CATALOG = [
+        {
+          name: "公文通",
+          svg: '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 21.8848 21.5723">\n<g>\n<rect height="21.5723" opacity="0" width="21.8848" x="0" y="0"/>\n<path d="M21.5234 5.78125L21.5234 13.2617C21.5234 16.123 19.9609 17.7246 17.0508 17.7246L10.4492 17.7246L6.92383 20.9473C6.46484 21.377 6.18164 21.5723 5.80078 21.5723C5.24414 21.5723 4.93164 21.1719 4.93164 20.5664L4.93164 17.7246L4.47266 17.7246C1.5625 17.7246 0 16.1328 0 13.2617L0 5.78125C0 2.91016 1.5625 1.30859 4.47266 1.30859L17.0508 1.30859C19.9609 1.30859 21.5234 2.91992 21.5234 5.78125ZM5.57617 12.1191C5.25391 12.1191 4.99023 12.3828 4.99023 12.7148C4.99023 13.0371 5.25391 13.291 5.57617 13.291L12.2461 13.291C12.5684 13.291 12.8223 13.0371 12.8223 12.7148C12.8223 12.3828 12.5684 12.1191 12.2461 12.1191ZM5.57617 8.84766C5.25391 8.84766 4.99023 9.11133 4.99023 9.42383C4.99023 9.75586 5.25391 10.0195 5.57617 10.0195L15.8301 10.0195C16.1523 10.0195 16.4062 9.75586 16.4062 9.42383C16.4062 9.11133 16.1523 8.84766 15.8301 8.84766ZM5.57617 5.57617C5.25391 5.57617 4.99023 5.83984 4.99023 6.15234C4.99023 6.48438 5.25391 6.73828 5.57617 6.73828L15.8301 6.73828C16.1523 6.73828 16.4062 6.48438 16.4062 6.15234C16.4062 5.83984 16.1523 5.57617 15.8301 5.57617Z" fill="black" fill-opacity="0.85"/>\n</g>\n</svg>',
+        },
+        {
+          name: "中德智能制造学院",
+          svg: '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 20.9131 22.9517">\n<g>\n<rect height="22.9517" opacity="0" width="20.9131" x="0" y="0"/>\n<path d="M10.2588 10.6995L19.7852 5.21606C19.6191 5.04517 19.4287 4.88403 19.209 4.75708L11.626 0.377197C10.7715-0.125732 9.78027-0.125732 8.93066 0.377197L1.34277 4.75708C1.11816 4.88892 0.917969 5.05005 0.742188 5.23071ZM9.38477 12.2766L0.0195312 6.90552C0.00488281 7.00806 0 7.1106 0 7.21313L0 15.8508C0 16.8323 0.50293 17.7014 1.34277 18.1799L8.93066 22.5647C9.07715 22.6477 9.22363 22.7307 9.38477 22.7844ZM11.1914 12.2424L11.1914 22.7795C11.3477 22.7258 11.4941 22.6477 11.6504 22.5598L19.2285 18.175C20.0488 17.7063 20.5518 16.8225 20.5518 15.8459L20.5518 7.20337C20.5518 7.10083 20.5371 6.97876 20.5273 6.87622Z" fill="black" fill-opacity="0.85"/>\n</g>\n</svg>',
+        },
+        {
+          name: "人工智能学院",
+          svg: '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 22.6078 22.8223">\n<g>\n<rect height="22.8223" opacity="0" width="22.6078" x="0" y="0"/>\n<path d="M16.0646 21.4941C17.676 20.7422 18.0666 19.209 18.1056 17.2266C18.1349 15.9082 17.9982 14.375 18.3205 12.9199C18.633 11.5137 19.4338 10.1855 19.9806 8.96484C20.801 7.19727 21.1037 5.63477 20.0099 4.24805C18.8869 2.86133 17.3049 2.8125 15.381 3.21289C14.0724 3.50586 12.5978 3.95508 11.1232 3.95508C9.64862 3.95508 8.17401 3.50586 6.87518 3.21289C4.94159 2.80273 3.34979 2.86133 2.24627 4.24805C1.14276 5.63477 1.44549 7.19727 2.2658 8.96484C2.81268 10.1855 3.60369 11.5137 3.92596 12.9297C4.24823 14.375 4.11151 15.9082 4.1408 17.2266C4.17987 19.209 4.57049 20.7422 6.18182 21.4941C6.66034 21.7285 7.12909 21.8359 7.58807 21.8359C8.65252 21.8359 9.68768 21.2695 10.7717 20.4297C11.8459 19.6289 12.9982 18.5645 14.3068 17.9297C15.6447 17.2852 17.1486 17.0801 18.4279 16.7578C20.3615 16.2793 21.758 15.5566 22.1584 13.8281C22.5588 12.1094 21.6115 10.8203 20.0881 9.58008C19.0431 8.7207 17.7736 7.86133 16.8459 6.70898C15.9377 5.56641 15.4201 4.15039 14.8146 2.94922C13.9162 1.20117 12.9006 0 11.1232 0C9.35565 0 8.33026 1.20117 7.44159 2.94922C6.83612 4.15039 6.30877 5.55664 5.3908 6.70898C4.47284 7.87109 3.2033 8.7207 2.16815 9.58008C0.64471 10.8203-0.302555 12.1094 0.0880695 13.8281C0.48846 15.5566 1.88494 16.2793 3.79901 16.7578C5.1076 17.0801 6.60174 17.2852 7.93963 17.9297C9.23846 18.5645 10.4006 19.6191 11.465 20.4395C12.549 21.2695 13.5842 21.8359 14.6486 21.8359C15.1174 21.8359 15.5861 21.7285 16.0646 21.4941ZM15.3908 20.0977C14.2971 20.6055 13.3791 19.9023 12.4416 19.1992C11.2697 18.3203 10.0099 17.1875 8.63299 16.5234C7.20721 15.8398 5.57635 15.5762 4.1701 15.2344C3.01776 14.9414 1.89471 14.6582 1.62127 13.4766C1.3576 12.3047 2.24627 11.5625 3.14471 10.8008C4.26776 9.87305 5.64471 8.91602 6.61151 7.69531C7.59784 6.48438 8.18377 4.95117 8.84784 3.65234C9.38494 2.58789 9.92205 1.57227 11.1232 1.57227C12.3342 1.57227 12.8615 2.58789 13.3986 3.65234C14.0529 4.95117 14.6486 6.47461 15.6252 7.69531C16.6017 8.92578 17.9689 9.87305 19.092 10.8008C20.0099 11.5625 20.8889 12.3047 20.6252 13.4766C20.3517 14.6582 19.2287 14.9414 18.0764 15.2344C16.7385 15.5566 15.0392 15.8398 13.6135 16.5234C12.2365 17.1875 10.9377 18.3398 9.80487 19.209C8.86737 19.9023 7.93963 20.6055 6.85565 20.0977C5.78143 19.5703 5.74237 18.3984 5.71307 17.2168C5.68377 15.7715 5.80096 14.1113 5.45916 12.5684C5.1076 11.084 4.30682 9.62891 3.68182 8.28125C3.21307 7.2168 2.72479 6.16211 3.46698 5.23438C4.22869 4.29688 5.35174 4.51172 6.51385 4.74609C7.92987 5.04883 9.54119 5.52734 11.1232 5.52734C12.7053 5.52734 14.3166 5.04883 15.7326 4.74609C16.8947 4.50195 18.0178 4.29688 18.7697 5.23438C19.5217 6.16211 19.0334 7.2168 18.5646 8.28125C17.9396 9.62891 17.1291 11.084 16.7971 12.5781C16.4455 14.1113 16.5627 15.7715 16.5334 17.2168C16.5041 18.3984 16.4748 19.5703 15.3908 20.0977Z" fill="black" fill-opacity="0.85"/>\n</g>\n</svg>',
+        },
+        {
+          name: "新材料与新能源学院",
+          svg: '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 15.3955 23.2139">\n<g>\n<rect height="23.2139" opacity="0" width="15.3955" x="0" y="0"/>\n<path d="M0 12.8032C0 13.2573 0.351562 13.5845 0.825195 13.5845L6.7334 13.5845L3.64746 21.7485C3.20312 22.9155 4.41406 23.5356 5.19043 22.5933L14.7461 10.9624C14.9414 10.728 15.0342 10.5034 15.0342 10.2495C15.0342 9.79541 14.6826 9.46337 14.209 9.46337L8.30078 9.46337L11.3867 1.29931C11.8359 0.137203 10.6201-0.482914 9.84375 0.459468L0.288086 12.0903C0.0927734 12.3247 0 12.5542 0 12.8032Z" fill="black" fill-opacity="0.85"/>\n</g>\n</svg>',
+        },
+        {
+          name: "城市交通与物流学院",
+          svg: '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 35.1562 15.8301">\n<g>\n<rect height="15.8301" opacity="0" width="35.1562" x="0" y="0"/>\n<path d="M3.10547 13.7012L3.7207 13.7012C3.66211 13.3984 3.62305 13.0957 3.62305 12.7832C3.62305 10.5078 5.41016 8.7207 7.69531 8.7207C9.98047 8.7207 11.7676 10.5078 11.7676 12.7832C11.7676 13.0957 11.7285 13.3984 11.6602 13.7012L23.1152 13.7012C23.0566 13.3984 23.0176 13.0957 23.0176 12.7832C23.0176 10.5078 24.8145 8.7207 27.0898 8.7207C29.375 8.7207 31.1719 10.5078 31.1719 12.7832C31.1719 13.0957 31.1328 13.3984 31.0645 13.7012L31.6895 13.7012C33.8281 13.7012 34.7949 12.6855 34.7949 10.4199L34.7949 7.71484C34.7949 5.89844 33.916 4.76562 32.0605 4.16016L30.5078 3.64258C28.5352 1.96289 25.8203 0 22.1582 0L20.6738 0C16.6895 0 15.0098 0.400391 12.6172 1.9043L8.66211 4.38477L4.33594 4.91211C1.63086 5.24414 0 6.92383 0 9.22852L0 10.4785C0 12.7051 0.986328 13.7012 3.10547 13.7012ZM7.69531 15.7129C9.3457 15.7129 10.6348 14.4238 10.6348 12.7832C10.6348 11.1426 9.3457 9.85352 7.69531 9.85352C6.05469 9.85352 4.76562 11.1426 4.76562 12.7832C4.76562 14.4238 6.05469 15.7129 7.69531 15.7129ZM27.0898 15.7129C28.7402 15.7129 30.0293 14.4238 30.0293 12.7832C30.0293 11.1426 28.7402 9.85352 27.0898 9.85352C25.4492 9.85352 24.1602 11.1426 24.1602 12.7832C24.1602 14.4238 25.4492 15.7129 27.0898 15.7129Z" fill="black" fill-opacity="0.85"/>\n</g>\n</svg>',
+        },
+        {
+          name: "健康与环境工程学院",
+          svg: '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 21.4453 18.5254">\n<g>\n<rect height="18.5254" opacity="0" width="21.4453" x="0" y="0"/>\n<path d="M0.283203 1.18164C0.078125 2.17773 0 3.47656 0 4.3457C0 11.6504 4.3457 16.4746 10.9863 16.4746C15.2637 16.4746 17.2754 13.9551 17.7148 13.1445L16.4941 13.1152C17.7637 14.4434 18.3301 15.8691 18.9746 17.8906C19.1211 18.3594 19.4434 18.5254 19.7852 18.5254C20.5078 18.5254 21.084 17.9004 21.084 17.041C21.084 15.6934 19.1504 13.3496 18.1445 12.4023C13.8672 8.45703 7.35352 10.791 5.67383 6.43555C5.54688 6.10352 5.89844 5.81055 6.2207 6.14258C9.58984 9.51172 13.9258 6.66992 18.1445 10.5566C18.4766 10.8496 18.8672 10.6934 18.9258 10.3418C18.9746 10.0586 19.0039 9.60938 19.0039 9.17969C19.0039 4.41406 15.6836 2.11914 11.0156 2.11914C9.45312 2.11914 7.62695 2.5 6.19141 2.5C4.61914 2.5 2.85156 2.37305 1.44531 0.869141C1.04492 0.458984 0.439453 0.517578 0.283203 1.18164Z" fill="black" fill-opacity="0.85"/>\n</g>\n</svg>',
+        },
+        {
+          name: "工程物理学院",
+          svg: '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 21.2089 23.5439">\n<g>\n<rect height="23.5439" opacity="0" width="21.2089" x="0" y="0"/>\n<path d="M2.93375 12.8584C1.56384 14.4709 1.07461 15.9399 1.65351 16.9421C2.23923 17.9502 3.75742 18.2635 5.83716 17.8882C5.96325 18.3882 6.11003 18.8536 6.27474 19.284C3.46097 19.7705 1.31399 19.2269 0.416356 17.6653C-0.489248 16.107 0.11154 13.9746 1.94239 11.7807C2.23317 12.1388 2.56338 12.499 2.93375 12.8584ZM10.609 17.9265C9.59555 18.3707 8.61883 18.7181 7.6989 18.963C7.53923 18.5363 7.39779 18.0615 7.27588 17.545C7.75312 17.4087 8.25363 17.2392 8.77149 17.0401C9.39683 17.3766 10.0111 17.6731 10.609 17.9265ZM14.2395 16.0098C13.9609 16.1857 13.6722 16.359 13.3761 16.53C13.0621 16.7111 12.75 16.8837 12.4416 17.0428C11.8499 16.8159 11.2353 16.55 10.6028 16.2453C11.2491 15.9351 11.9145 15.5834 12.5929 15.1915C13.2599 14.8056 13.8869 14.4114 14.4683 14.0129C14.4165 14.7157 14.3394 15.3829 14.2395 16.0098ZM18.2843 12.862C17.609 13.5387 16.8198 14.2133 15.9227 14.8701C16.0025 14.2213 16.0528 13.5362 16.074 12.8214C16.5086 12.4727 16.9044 12.1244 17.2636 11.7792C17.6519 12.1455 17.9937 12.5079 18.2843 12.862ZM20.7933 5.90799C21.6915 7.46466 21.0965 9.59183 19.2776 11.7802C18.9863 11.4205 18.6553 11.0589 18.2841 10.6981C19.6466 9.09152 20.1326 7.62793 19.5541 6.62089C18.9676 5.61048 17.4517 5.29654 15.375 5.67202C15.2491 5.17242 15.1026 4.70709 14.938 4.27685C17.7488 3.79125 19.8928 4.34111 20.7933 5.90799ZM5.13298 10.7464C4.70232 11.0919 4.30993 11.4372 3.95344 11.7795C3.56673 11.4148 3.22608 11.0543 2.93621 10.7021C3.6079 10.0308 4.39162 9.36164 5.28112 8.70975C5.20228 9.35493 5.15289 10.0359 5.13298 10.7464ZM10.6107 7.31871C9.97238 7.62634 9.31569 7.97398 8.6461 8.36088C7.9664 8.7519 7.32806 9.15204 6.73647 9.55679C6.7879 8.85914 6.86391 8.19592 6.96203 7.57144C7.25535 7.38556 7.56017 7.20266 7.87321 7.02233C8.17845 6.84587 8.48186 6.67744 8.78155 6.52272C9.37014 6.74926 9.98147 7.01452 10.6107 7.31871ZM13.9336 6.01687C13.4593 6.1528 12.9619 6.32169 12.4474 6.51986C11.8242 6.18394 11.2117 5.88748 10.6155 5.63423C11.6235 5.19078 12.5949 4.8441 13.5099 4.59948C13.67 5.02589 13.8116 5.50041 13.9336 6.01687Z" fill="black" fill-opacity="0.85"/>\n<path d="M20.7933 17.6653C19.8939 19.224 17.7493 19.7675 14.9364 19.281C15.1008 18.8508 15.2472 18.3856 15.3729 17.8859C17.453 18.2637 18.9688 17.9502 19.5541 16.9421C20.3836 15.5071 19.0307 13.1211 16.0743 10.7319C16.054 10.0223 16.0045 9.342 15.9256 8.69755C20.2028 11.8341 22.1172 15.3617 20.7933 17.6653ZM8.6461 15.2103C10.5536 16.3088 12.3567 17.0897 13.9318 17.5445C13.81 18.0609 13.6686 18.5355 13.509 18.9621C11.7843 18.5014 9.86769 17.695 7.87321 16.5489C7.56084 16.3684 7.25665 16.1854 6.96611 15.9987C6.86714 15.3742 6.7906 14.71 6.73903 14.0106C7.33076 14.4161 7.96783 14.8175 8.6461 15.2103ZM6.27293 4.27459C6.10793 4.70509 5.961 5.17066 5.83475 5.67057C3.75507 5.29045 2.23969 5.60125 1.65562 6.60842C0.827741 8.04826 2.17722 10.4251 5.13362 12.8191C5.15458 13.5288 5.20442 14.2092 5.28356 14.8537C1.00517 11.7089-0.911565 8.18178 0.416356 5.89553C1.31485 4.33925 3.46036 3.79141 6.27293 4.27459ZM13.3761 7.03078L14.2428 7.55632C14.3418 8.18116 14.4183 8.84544 14.47 9.54465C13.8863 9.14697 13.2596 8.7537 12.5929 8.36932C10.6736 7.26069 8.85903 6.47227 7.27482 6.01307C7.39723 5.49553 7.53941 5.02008 7.69996 4.59287C9.43659 5.05517 11.3678 5.86933 13.3761 7.03078Z" fill="black" fill-opacity="0.85"/>\n<path d="M10.6038 23.5439C13.7417 23.5439 16.0964 18.7479 16.0964 11.7657C16.0964 4.80871 13.7417 0.0168764 10.6038 0.0168764C7.47407 0.0168764 5.11121 4.80871 5.11121 11.7657C5.11121 18.7479 7.47407 23.5439 10.6038 23.5439ZM10.6038 22.1182C8.38171 22.1182 6.65698 17.9002 6.65698 11.7657C6.65698 5.65426 8.38171 1.45301 10.6038 1.45301C12.8259 1.45301 14.5506 5.65426 14.5506 11.7657C14.5506 17.9002 12.8259 22.1182 10.6038 22.1182Z" fill="black" fill-opacity="0.85"/>\n<path d="M10.6038 13.8511C11.7441 13.8511 12.6704 12.9248 12.6704 11.7742C12.6704 10.6339 11.7441 9.70759 10.6038 9.70759C9.45316 9.70759 8.52683 10.6339 8.52683 11.7742C8.52683 12.9248 9.45316 13.8511 10.6038 13.8511Z" fill="black" fill-opacity="0.85"/>\n</g>\n</svg>',
+        },
+        {
+          name: "药学院",
+          svg: '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 19.0332 20.498">\n<g>\n<rect height="20.498" opacity="0" width="19.0332" x="0" y="0"/>\n<path d="M13.8965 0.810547C13.8965 1.25977 13.5547 1.64062 13.0664 1.64062L13.0078 1.64062L13.0078 8.88672L17.9688 16.0059C18.4277 16.6699 18.6719 17.334 18.6719 17.832C18.6719 19.3262 17.666 20.4785 16.0059 20.4785L2.66602 20.4785C1.00586 20.4785 0 19.3262 0 17.832C0 17.334 0.205078 16.7188 0.615234 16.1328L5.66406 8.88672L5.66406 1.64062L5.5957 1.64062C5.10742 1.64062 4.77539 1.25977 4.77539 0.810547C4.77539 0.361328 5.10742 0 5.5957 0L13.0664 0C13.5547 0 13.8965 0.361328 13.8965 0.810547ZM7.22656 8.60352L7.22656 9.74609L9.01367 9.74609C9.33594 9.74609 9.58008 9.50195 9.58008 9.16992C9.58008 8.86719 9.32617 8.60352 9.01367 8.60352ZM7.22656 5.82031L7.22656 6.96289L9.01367 6.96289C9.33594 6.96289 9.58008 6.70898 9.58008 6.37695C9.58008 6.07422 9.31641 5.82031 9.00391 5.82031ZM7.22656 3.02734L7.22656 4.16992L9.00391 4.16992C9.32617 4.16992 9.57031 3.92578 9.57031 3.59375C9.57031 3.29102 9.30664 3.02734 8.99414 3.02734Z" fill="black" fill-opacity="0.85"/>\n</g>\n</svg>',
+        },
+        {
+          name: "集成电路与光电芯片学院",
+          svg: '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 20.0098 19.6582">\n<g>\n<rect height="19.6582" opacity="0" width="20.0098" x="0" y="0"/>\n<path d="M0 13.0664C0 13.5352 0.3125 13.8574 0.78125 13.8574L1.78711 13.8574L1.78711 17.0996C1.78711 17.5684 2.09961 17.8711 2.56836 17.8711L5.80078 17.8711L5.80078 18.877C5.80078 19.3457 6.12305 19.6582 6.5918 19.6582C7.06055 19.6582 7.37305 19.3457 7.37305 18.877L7.37305 17.8711L9.04297 17.8711L9.04297 18.877C9.04297 19.3457 9.35547 19.6582 9.82422 19.6582C10.293 19.6582 10.6152 19.3457 10.6152 18.877L10.6152 17.8711L12.2754 17.8711L12.2754 18.877C12.2754 19.3457 12.5879 19.6582 13.0566 19.6582C13.5352 19.6582 13.8477 19.3457 13.8477 18.877L13.8477 17.8711L17.0801 17.8711C17.5488 17.8711 17.8613 17.5684 17.8613 17.0996L17.8613 13.8477L18.8672 13.8477C19.3359 13.8477 19.6484 13.5254 19.6484 13.0566C19.6484 12.5879 19.3359 12.2754 18.8672 12.2754L17.8613 12.2754L17.8613 10.6055L18.8672 10.6055C19.3359 10.6055 19.6484 10.293 19.6484 9.82422C19.6484 9.35547 19.3359 9.0332 18.8672 9.0332L17.8613 9.0332L17.8613 7.37305L18.8672 7.37305C19.3359 7.37305 19.6484 7.05078 19.6484 6.58203C19.6484 6.11328 19.3359 5.80078 18.8672 5.80078L17.8613 5.80078L17.8613 2.57812C17.8613 2.10938 17.5488 1.79688 17.0801 1.79688L13.8477 1.79688L13.8477 0.800781C13.8477 0.332031 13.5352 0.00976562 13.0566 0.00976562C12.5879 0.00976562 12.2754 0.332031 12.2754 0.800781L12.2754 1.79688L10.6152 1.79688L10.6152 0.800781C10.6152 0.332031 10.293 0.00976562 9.82422 0.00976562C9.35547 0.00976562 9.04297 0.332031 9.04297 0.800781L9.04297 1.79688L7.37305 1.79688L7.37305 0.800781C7.37305 0.332031 7.06055 0.00976562 6.5918 0.00976562C6.12305 0.00976562 5.80078 0.332031 5.80078 0.800781L5.80078 1.79688L2.56836 1.79688C2.09961 1.79688 1.78711 2.10938 1.78711 2.57812L1.78711 5.81055L0.78125 5.81055C0.3125 5.81055 0 6.12305 0 6.5918C0 7.06055 0.3125 7.38281 0.78125 7.38281L1.78711 7.38281L1.78711 9.04297L0.78125 9.04297C0.3125 9.04297 0 9.36523 0 9.83398C0 10.3027 0.3125 10.6152 0.78125 10.6152L1.78711 10.6152L1.78711 12.2852L0.78125 12.2852C0.3125 12.2852 0 12.5977 0 13.0664ZM6.09375 14.3457C5.57617 14.3457 5.32227 14.1016 5.32227 13.5645L5.32227 6.10352C5.32227 5.57617 5.57617 5.33203 6.09375 5.33203L13.5742 5.33203C14.0918 5.33203 14.3359 5.57617 14.3359 6.10352L14.3359 13.5645C14.3359 14.1016 14.0918 14.3457 13.5742 14.3457ZM6.65039 12.7734C6.65039 12.9199 6.74805 13.0176 6.89453 13.0176L12.7637 13.0176C12.9199 13.0176 13.0078 12.9199 13.0078 12.7734L13.0078 6.9043C13.0078 6.74805 12.9199 6.66016 12.7637 6.66016L6.89453 6.66016C6.74805 6.66016 6.65039 6.74805 6.65039 6.9043Z" fill="black" fill-opacity="0.85"/>\n</g>\n</svg>',
+        },
+        {
+          name: "未来技术学院",
+          svg: '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 24.4727 24.1211">\n<g>\n<rect height="24.1211" opacity="0" width="24.4727" x="0" y="0"/>\n<path d="M11.1328 19.2209L11.1328 21.6327C6.57261 21.1966 2.93865 17.5612 2.49855 12.998L4.90649 12.998C5.32028 16.2417 7.88849 18.8106 11.1328 19.2209ZM12.9932 21.6325L12.9932 19.2203C16.2398 18.8086 18.81 16.2404 19.2243 12.998L21.6323 12.998C21.1918 17.5599 17.5557 21.1945 12.9932 21.6325ZM21.633 11.1377L19.2265 11.1377C18.8178 7.88909 16.2447 5.31733 12.9932 4.90558L12.9932 2.4983C17.5603 2.93624 21.199 6.57357 21.633 11.1377ZM11.1328 4.90501C7.8836 5.31535 5.31254 7.88784 4.90427 11.1377L2.49785 11.1377C2.93142 6.57225 6.56808 2.93413 11.1328 2.4981Z" fill="black" fill-opacity="0.85"/>\n<path d="M12.0605 8.36426C12.5879 8.36426 12.9932 7.94922 12.9932 7.42676L12.9932 0.952148C12.9932 0.429688 12.5879 0.00976562 12.0605 0.00976562C11.5381 0.00976562 11.1328 0.429688 11.1328 0.952148L11.1328 7.42676C11.1328 7.94922 11.5381 8.36426 12.0605 8.36426ZM0.9375 12.998L7.41699 12.998C7.93945 12.998 8.35449 12.5879 8.35449 12.0654C8.35449 11.543 7.93945 11.1377 7.41699 11.1377L0.9375 11.1377C0.415039 11.1377 0 11.543 0 12.0654C0 12.5879 0.415039 12.998 0.9375 12.998ZM12.0605 24.1211C12.5879 24.1211 12.9932 23.7061 12.9932 23.1836L12.9932 16.709C12.9932 16.1816 12.5879 15.7715 12.0605 15.7715C11.5381 15.7715 11.1328 16.1816 11.1328 16.709L11.1328 23.1836C11.1328 23.7061 11.5381 24.1211 12.0605 24.1211ZM16.6943 12.998L23.1689 12.998C23.6963 12.998 24.1113 12.5879 24.1113 12.0654C24.1113 11.543 23.6963 11.1377 23.1689 11.1377L16.6943 11.1377C16.1719 11.1377 15.7568 11.543 15.7568 12.0654C15.7568 12.5879 16.1719 12.998 16.6943 12.998Z" fill="black" fill-opacity="0.85"/>\n<path d="M12.0557 13.8281C13.0273 13.8281 13.8184 13.0371 13.8184 12.0654C13.8184 11.0938 13.0273 10.3027 12.0557 10.3027C11.084 10.3027 10.293 11.0938 10.293 12.0654C10.293 13.0371 11.084 13.8281 12.0557 13.8281Z" fill="black" fill-opacity="0.85"/>\n</g>\n</svg>',
+        },
+        {
+          name: "创意设计学院",
+          svg: '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 21.0725 19.7894">\n<g>\n<rect height="19.7894" opacity="0" width="21.0725" x="0" y="0"/>\n<path d="M0.428813 12.5656C0.936626 13.0734 1.96202 13.2004 2.75303 12.4875C3.0167 12.2531 3.56358 11.6672 4.6085 10.6222C9.59874 5.56363 12.8898 2.24332 13.5929 2.87809C14.1593 3.37613 12.4308 5.81754 10.7901 8.08317C7.71397 12.3703 5.2628 15.339 7.0792 17.1554C8.53428 18.6105 10.7999 17.1457 14.2862 14.089C16.2491 12.3605 17.7237 10.964 18.1534 11.4035C18.4757 11.716 17.9776 12.5461 17.2452 13.8156C16.298 15.4367 15.1163 17.175 16.2491 18.3078C17.0304 19.0793 18.544 18.7472 20.4093 16.9211C20.7413 16.589 20.8194 16.2179 20.5558 15.9543C20.3019 15.7101 19.9503 15.7492 19.6866 15.9933C18.3292 17.3214 17.4405 17.7414 17.2159 17.507C16.9523 17.2531 17.4308 16.3839 18.4269 14.6359C19.6866 12.4289 20.3605 11.0422 19.296 10.007C17.8702 8.62028 16.1808 10.1047 13.0558 12.8488C10.1163 15.4367 9.25694 15.8566 8.88584 15.4953C8.3878 14.9875 9.14952 14.089 12.4405 9.48942C15.5167 5.18278 17.3038 2.49723 15.6339 0.885901C13.3585-1.3309 10.4288 0.417151 2.40147 8.3566C1.33702 9.41129 0.751079 9.96793 0.516704 10.2218C-0.235249 11.0519-0.0789993 12.0578 0.428813 12.5656Z" fill="black" fill-opacity="0.85"/>\n</g>\n</svg>',
+        },
+        {
+          name: "商学院",
+          svg: '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 15.2539 18.4082">\n<g>\n<rect height="18.4082" opacity="0" width="15.2539" x="0" y="0"/>\n<path d="M7.44629 18.3984C8.44727 18.3984 9.13086 17.7148 9.13086 16.7139L9.13086 11.5332L14.5264 2.80762C14.751 2.44629 14.8926 2.03613 14.8926 1.61621C14.8926 0.668945 14.1406 0 13.1543 0C12.4268 0 11.9092 0.415039 11.5723 1.07422L7.52441 8.4375L7.43164 8.4375L3.37891 1.08398C3.02734 0.371094 2.55859 0 1.77246 0C0.756836 0 0 0.678711 0 1.63574C0 2.06055 0.126953 2.45117 0.356445 2.81738L5.75195 11.5332L5.75195 16.7139C5.75195 17.7148 6.44531 18.3984 7.44629 18.3984ZM1.29395 10.9033C1.29395 11.2256 1.55762 11.4844 1.875 11.4844L13.0566 11.4844C13.3691 11.4844 13.6328 11.2256 13.6328 10.9033C13.6328 10.5859 13.3691 10.3271 13.0566 10.3271L1.875 10.3271C1.55762 10.3271 1.29395 10.5859 1.29395 10.9033ZM1.29395 14.0918C1.29395 14.4092 1.55762 14.668 1.875 14.668L13.0566 14.668C13.3691 14.668 13.6328 14.4092 13.6328 14.0918C13.6328 13.7695 13.3691 13.5107 13.0566 13.5107L1.875 13.5107C1.55762 13.5107 1.29395 13.7695 1.29395 14.0918Z" fill="black" fill-opacity="0.85"/>\n</g>\n</svg>',
+        },
+        {
+          name: "外国语学院",
+          svg: '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 20.2832 19.9316">\n<g>\n<rect height="19.9316" opacity="0" width="20.2832" x="0" y="0"/>\n<path d="M2.23633 14.2676C3.71094 13.1543 3.66211 11.2793 4.21875 11.2793C4.52148 11.2793 4.82422 11.543 5.35156 12.2168C6.25 13.3789 6.8457 13.9551 7.45117 13.9551C8.01758 13.9551 8.71094 13.125 8.71094 12.4609C8.71094 12.1484 8.125 11.748 8.125 11.5137C8.125 11.377 8.26172 11.3086 8.45703 11.3086C9.83398 11.3086 11.0449 10.1562 11.0449 9.23828C11.0449 8.58398 9.98047 7.97852 9.98047 7.55859C9.98047 7.38281 10.127 7.26562 10.3027 7.26562C10.4199 7.26562 10.5566 7.31445 10.7324 7.44141C11.7969 8.28125 12.2949 7.8418 12.3926 7.30469C12.4316 7.08008 12.5586 6.8457 13.1152 6.57227C14.2773 5.95703 15.0977 5.11719 15.0977 4.46289C15.0977 3.73047 13.7695 3.10547 13.7695 2.82227C13.7695 2.66602 14.0137 2.5293 14.6582 2.33398C13.6523 1.41602 12.0508 0.742188 9.95117 0.742188C4.43359 0.957031 0.849609 4.90234 0.820312 9.96094C0.810547 11.543 1.30859 13.1152 2.23633 14.2676ZM14.3164 18.2129C16.2305 16.9922 17.6367 15.5078 18.5352 13.7891C18.3691 12.5391 17.7734 11.8164 16.9336 11.8164C16.709 11.8164 16.4258 11.8555 16.1719 11.9434C15.8301 12.0508 15.7617 12.0312 15.4883 11.7188C15.0977 11.2695 14.7559 11.1133 14.2188 11.1133C13.2031 11.1133 12.6172 11.6406 12.1777 12.959C12.0508 13.3594 11.875 13.4961 11.1914 13.7598L10.7812 13.9062C10.0195 14.1992 9.82422 14.7461 10.0879 15.8984C10.3223 16.9141 10.8105 17.4316 11.5039 17.4316C12.1289 17.4316 12.5098 17.207 12.9395 17.207C13.5645 17.1875 13.877 17.5977 14.3164 18.2129ZM12.3145 9.36523C12.9492 9.36523 13.2324 8.79883 13.9453 8.58398C14.4141 8.44727 14.668 7.96875 14.668 7.55859C14.668 7.22656 14.502 6.94336 14.1406 6.94336C13.7598 6.94336 13.4082 7.23633 13.1738 7.73438C13.0469 8.01758 12.832 8.1543 12.3145 8.30078C11.9043 8.42773 11.7578 8.57422 11.7578 8.88672C11.7578 9.21875 12.0215 9.36523 12.3145 9.36523ZM9.48242 13.877C10.0391 13.877 10.5859 13.2324 10.5859 12.6562C10.5859 11.9434 10.293 11.6113 9.95117 11.6113C9.58008 11.6113 9.3457 12.0508 9.3457 12.7148C9.3457 13.0957 9.01367 13.1055 9.01367 13.4863C9.01367 13.7207 9.19922 13.877 9.48242 13.877ZM7.77344 15.6641C8.20312 15.6641 8.4668 15.4395 8.4668 15.0879C8.4668 14.8145 8.26172 14.6387 7.96875 14.6387C6.78711 14.6387 6.73828 13.9746 6.17188 13.9746C5.85938 13.9746 5.64453 14.1602 5.64453 14.4336C5.64453 14.6484 5.85938 14.8145 6.15234 14.8145C6.77734 14.8145 6.48438 15.6641 7.77344 15.6641ZM9.96094 19.9219C15.459 19.9219 19.9219 15.459 19.9219 9.96094C19.9219 4.46289 15.459 0 9.96094 0C4.46289 0 0 4.46289 0 9.96094C0 15.459 4.46289 19.9219 9.96094 19.9219ZM9.96094 18.5938C5.19531 18.5938 1.32812 14.7266 1.32812 9.96094C1.32812 5.19531 5.19531 1.32812 9.96094 1.32812C14.7266 1.32812 18.5938 5.19531 18.5938 9.96094C18.5938 14.7266 14.7266 18.5938 9.96094 18.5938Z" fill="black" fill-opacity="0.85"/>\n</g>\n</svg>',
+        },
+      ];
+
+      // 🌟 修复：清洗 SVG 中写死的黑色，让它能跟随 CSS 变色
+      const getDepartmentIcon = (departmentName) => {
+        // 默认使用公文通的图标（第一个）
+        const defaultIcon = SOURCE_ICON_CATALOG[0];
+        if (!departmentName)
+          return defaultIcon.svg
+            .replace(/fill="black"/g, 'fill="currentColor"')
+            .replace(/fill-opacity="0\.85"/g, "");
+
+        const found = SOURCE_ICON_CATALOG.find(
+          (item) => item.name === departmentName,
+        );
+        // 如果找不到匹配的部门，使用公文通的图标
+        const svgToUse = found ? found.svg : defaultIcon.svg;
+        return svgToUse
+          .replace(/fill="black"/g, 'fill="currentColor"')
+          .replace(/fill-opacity="0\.85"/g, "");
+      };
+
+      // 🌟 新增：获取部门对应的筛选栏专属颜色
+      const getDepartmentColor = (departmentName) => {
+        const index = SOURCE_ICON_CATALOG.findIndex(
+          (item) => item.name === departmentName,
+        );
+        // 如果找到了对应的部门，并且有对应的 FILTER_CHIP_COLORS
+        if (index !== -1 && FILTER_CHIP_COLORS[index]) {
+          return FILTER_CHIP_COLORS[index];
+        }
+        // 默认使用公文通的颜色（第一个）
+        return FILTER_CHIP_COLORS[0] || "rgb(2, 132, 199)";
+      };
+
+      // 🌟 新增：获取 AI 标签背景色（带透明度）
+      const getAITagBgColor = (departmentName) => {
+        const color = getDepartmentColor(departmentName);
+        // 将 rgb(r,g,b) 转换为 rgba(r,g,b,0.7)
+        const match = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+        if (match) {
+          return `rgba(${match[1]}, ${match[2]}, ${match[3]}, 0.8)`;
+        }
+        return color;
+      };
+
+      // 🌟 新增：获取订阅管理中的来源颜色（带 0.8 透明度）
+      const getSubsChipColor = (sourceName) => {
+        const index = SOURCE_ICON_CATALOG.findIndex(
+          (item) => item.name === sourceName,
+        );
+        let color;
+        if (index !== -1 && FILTER_CHIP_COLORS[index]) {
+          color = FILTER_CHIP_COLORS[index];
+        } else {
+          color = FILTER_CHIP_COLORS[0] || "rgb(2, 132, 199)";
+        }
+        // 将 rgb(r,g,b) 转换为 rgba(r,g,b,0.8)
+        const match = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+        if (match) {
+          return `rgba(${match[1]}, ${match[2]}, ${match[3]}, 0.8)`;
+        }
+        return color;
+      };
+
+      // 🌟 新增：获取订阅管理中的来源图标
+      const getSubsIcon = (sourceName) => {
+        const found = SOURCE_ICON_CATALOG.find(
+          (item) => item.name === sourceName,
+        );
+        const svgToUse = found ? found.svg : SOURCE_ICON_CATALOG[0].svg;
+        return svgToUse
+          .replace(/fill="black"/g, 'fill="currentColor"')
+          .replace(/fill-opacity="0\.85"/g, "");
+      };
+
       try {
-        const { createApp, ref, computed, onMounted, watch } = Vue;
+        const { createApp, ref, computed, onMounted, watch, nextTick } = Vue;
 
         const app = createApp({
           setup() {
@@ -4456,30 +4875,6 @@
               );
             };
 
-            // 为按钮添加脉冲光晕动画
-            const pulseButton = (btnElement) => {
-              if (!btnElement) return;
-              btnElement.classList.add("btn-pulse");
-              setTimeout(() => btnElement.classList.remove("btn-pulse"), 500);
-            };
-
-            // // 监听 updateCooldown 变化，触发数字动画
-            // watch(updateCooldown, (newVal, oldVal) => {
-            //     if (isUpdateDisabled.value && newVal !== oldVal) {
-            //         const btn = document.querySelector('.btn-check');
-            //         if (btn) {
-            //             // 给数字部分添加跳动效果
-            //             const textSpan = btn.querySelector('span');
-            //             if (textSpan && textSpan.innerText.includes('s')) {
-            //                 textSpan.classList.add('number-pop');
-            //                 setTimeout(() => textSpan.classList.remove('number-pop'), 200);
-            //             }
-            //             // 按钮整体脉冲
-            //             pulseButton(btn);
-            //         }
-            //     }
-            // });
-
             // 🎯 进度条相关变量
             const totalTasks = ref(0);
             const completedTasks = ref(0);
@@ -4527,8 +4922,6 @@
               category: "v1.0.0",
               tags: ["新手指南", "版本 1.0.0"],
               url: "https://github.com/AmaziiingChen/microflow",
-              summary:
-                "初次见面！为了让 AI 能够为您智能总结公文，请点击本卡片进入设置界面，配置您的 API 密钥。这里未来也会是接收最新版本更新和系统通知的地方。",
               content:
                 "亲爱的同学/老师，欢迎使用 MicroFlow！<br><br>为了让 AI 能够为您智能总结长篇公文，您需要先配置 AI 的 API 密钥。<br><br>👉 **配置方法**：请点击本界面**左上角的「设置/齿轮」图标**，在弹出的面板中填入您的 API 信息。<br><br>配置完成后，您就可以体验极速的公文摘要功能了。本卡片不仅是新手指南，未来也会在这里向您推送最新的版本更新说明。",
               is_announcement: true,
@@ -4829,7 +5222,7 @@
                 nextTick(() => {
                   setTimeout(() => {
                     if (searchInputRef.value) searchInputRef.value.focus();
-                  }, 300); // 留出贝塞尔曲线形变的时间
+                  }, 300); // 与当前无过冲的贝塞尔形变节奏对齐
                 });
               } else {
                 // 2. 已展开时：如果输入框有内容，强制触发一次搜索
@@ -4881,41 +5274,61 @@
                   await closeSettingsWithAutoSave();
                 }
                 // 默认状态下，重置筛选到"全部"
-                filterBySource("全部");
+                filterBySource(allSourceOption);
               }
             };
 
-            // 🌟 新增：所有可用来源（固定顺序，与后端 SPIDER_REGISTRY 一致）
-            const allAvailableSources = ref([
-              "公文通",
-              "中德智能制造学院",
-              "人工智能学院",
-              "新材料与新能源学院",
-              "城市交通与物流学院",
-              "健康与环境工程学院",
-              "工程物理学院",
-              "药学院",
-              "集成电路与光电芯片学院",
-              "未来技术学院",
-              "创意设计学院",
-              "商学院",
-              "外国语学院",
-            ]);
+            const filterScrollContainer = ref(null);
 
-            // 🌟 修改：sources 改为 computed，根据订阅设置动态生成筛选栏
-            // 始终以"全部"开头，后面跟着订阅的学院（按固定顺序）
-            // 注意：顶部已有收藏按钮，这里不再添加"收藏"选项
+            const normalizeSourceSvg = (svg) =>
+              svg
+                .replace(/fill=\"black\"/g, 'fill="currentColor"')
+                .replace(/fill-opacity=\"0\\.85\"/g, "");
+
+            const allSourceOption = {
+              key: "source-all",
+              name: "全部",
+              color: "#007aff",
+              svg: `<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="1.8"></circle>
+                <circle cx="10" cy="10" r="2.4" fill="currentColor"></circle>
+              </svg>`,
+            };
+
+            const sourceCatalog = SOURCE_ICON_CATALOG.map((source, index) => ({
+              key: `source-${index}`,
+              index,
+              name: source.name,
+              color: FILTER_CHIP_COLORS[index],
+              svg: normalizeSourceSvg(source.svg),
+            }));
+
+            const getSourcePositionClass = (index, total) => {
+              if (index === 0) return "is-first";
+              if (index === total - 1) return "is-last";
+              return "is-middle";
+            };
+
+            const getSourceStyle = (source) => ({
+              "--chip-active-bg": source.color || "#007aff",
+            });
+
+            const getSourceIcon = (source) => source.svg;
+
+            const allAvailableSources = ref(
+              sourceCatalog.map((source) => source.name),
+            );
+
             const sources = computed(() => {
               const subscribed = config.value.subscribedSources || [];
-              if (subscribed.length === 0) {
-                // 未设置订阅时显示全部（不含收藏）
-                return ["全部", ...allAvailableSources.value];
-              }
-              // 按固定顺序过滤出订阅的来源
-              const ordered = allAvailableSources.value.filter((s) =>
-                subscribed.includes(s),
-              );
-              return ["全部", ...ordered];
+              const visibleAcademies =
+                subscribed.length === 0
+                  ? sourceCatalog
+                  : sourceCatalog.filter((source) =>
+                      subscribed.includes(source.name),
+                    );
+
+              return [allSourceOption, ...visibleAcademies];
             });
 
             const activeSource = ref("全部");
@@ -5391,6 +5804,22 @@
             const page = ref(1);
             const isLoadingMore = ref(false);
             const noMoreData = ref(false);
+            const isListSwitching = ref(false);
+
+            const sleep = (ms) =>
+              new Promise((resolve) => {
+                setTimeout(resolve, ms);
+              });
+
+            const runArticleSwitchTransition = async (updater) => {
+              isListSwitching.value = true;
+              const updatePromise = updater();
+              await Promise.all([sleep(180), updatePromise]);
+              await nextTick();
+              requestAnimationFrame(() => {
+                isListSwitching.value = false;
+              });
+            };
 
             // 分离出独立的加载下一页函数
             const loadMoreArticles = async () => {
@@ -5435,47 +5864,115 @@
               isLoadingMore.value = false;
             };
 
+            const CHIP_MOTION_MS = 680;
+            const CHIP_SCROLL_MS = 680;
+
+            let filterScrollFrame = null;
+
+            const easeScrollProgress = (progress) => {
+              const clamped = Math.min(Math.max(progress, 0), 1);
+              return 1 - Math.pow(1 - clamped, 3);
+            };
+
+            const animateFilterScroll = (container, targetLeft) => {
+              if (filterScrollFrame) {
+                cancelAnimationFrame(filterScrollFrame);
+                filterScrollFrame = null;
+              }
+
+              const startLeft = container.scrollLeft;
+              const distance = targetLeft - startLeft;
+              if (Math.abs(distance) < 1) {
+                container.scrollLeft = targetLeft;
+                return;
+              }
+
+              const startTime = performance.now();
+
+              const tick = (now) => {
+                const elapsed = now - startTime;
+                const progress = Math.min(elapsed / CHIP_SCROLL_MS, 1);
+                const eased = easeScrollProgress(progress);
+                container.scrollLeft = startLeft + distance * eased;
+
+                if (progress < 1) {
+                  filterScrollFrame = requestAnimationFrame(tick);
+                } else {
+                  filterScrollFrame = null;
+                }
+              };
+
+              filterScrollFrame = requestAnimationFrame(tick);
+            };
+
+            const scrollActiveChipToCenter = async (sourceKey) => {
+              await nextTick();
+
+              const container = filterScrollContainer.value;
+              if (!container) return;
+
+              const chip = container.querySelector(
+                `[data-source-key="${sourceKey}"]`,
+              );
+              if (!chip) return;
+
+              const containerRect = container.getBoundingClientRect();
+              const chipRect = chip.getBoundingClientRect();
+              const maxScrollLeft = Math.max(
+                0,
+                container.scrollWidth - container.clientWidth,
+              );
+              const isFirstChip = chip === container.firstElementChild;
+              const isLastChip = chip === container.lastElementChild;
+
+              if (isFirstChip) {
+                return;
+              }
+
+              if (isLastChip) {
+                return;
+              }
+
+              const targetLeft =
+                container.scrollLeft +
+                (chipRect.left - containerRect.left) -
+                container.clientWidth / 2 +
+                chipRect.width / 2;
+              const clampedLeft = Math.min(
+                Math.max(0, targetLeft),
+                maxScrollLeft,
+              );
+
+              animateFilterScroll(container, clampedLeft);
+            };
+
             // 🌟 新增：按来源筛选方法
-            const filterBySource = async (source) => {
+            const filterBySource = async (sourceInput) => {
+              const source =
+                typeof sourceInput === "string"
+                  ? sourceInput === "全部"
+                    ? allSourceOption
+                    : {
+                        key:
+                          sourceInput === "收藏"
+                            ? "source-favorites"
+                            : `source-${sourceInput}`,
+                        name: sourceInput,
+                      }
+                  : sourceInput;
+
               // 🌟 如果设置面板打开，先自动保存并关闭
               if (isSettingsOpen.value) {
                 await closeSettingsWithAutoSave();
               }
 
-              if (activeSource.value === source) return; // 点击已选中的不重复请求
-
-              // 🌟 滚动居中逻辑：将被点击的筛选标签滚动到容器中间
-              const container = document.querySelector(
-                ".filter-scroll-container",
-              );
-              if (container) {
-                const chips = container.querySelectorAll(".filter-chip");
-                const sourceIndex = sources.value.indexOf(source);
-                const totalSources = sources.value.length;
-
-                // 只有当不是第一个也不是最后两个元素时才居中（避免两侧不平衡）
-                if (
-                  sourceIndex > 0 &&
-                  sourceIndex < totalSources - 2 &&
-                  chips[sourceIndex]
-                ) {
-                  const chip = chips[sourceIndex];
-                  const containerWidth = container.clientWidth;
-                  const chipLeft = chip.offsetLeft;
-                  const chipWidth = chip.clientWidth;
-                  // 计算让元素居中所需的滚动位置
-                  const scrollTarget =
-                    chipLeft - containerWidth / 2 + chipWidth / 2;
-                  container.scrollTo({
-                    left: Math.max(0, scrollTarget),
-                    behavior: "smooth",
-                  });
-                }
+              if (activeSource.value === source.name) {
+                await scrollActiveChipToCenter(source.key);
+                return;
               }
 
-              activeSource.value = source;
+              activeSource.value = source.name;
               page.value = 1;
-              articles.value = [];
               noMoreData.value = false;
 
               // 🌟 修复：当点击"全部"且有订阅时，传递订阅来源列表，避免返回未订阅的文章
@@ -5483,12 +5980,12 @@
               let sourceNamesParam = null;
               let favoritesOnly = false;
 
-              if (source === "全部") {
+              if (source.name === "全部") {
                 const subscribed = config.value.subscribedSources || [];
                 if (subscribed.length > 0) {
                   sourceNamesParam = subscribed;
                 }
-              } else if (source === "收藏") {
+              } else if (source.name === "收藏") {
                 // 🌟 收藏筛选：设置 favoritesOnly 标志
                 favoritesOnly = true;
                 const subscribed = config.value.subscribedSources || [];
@@ -5496,34 +5993,38 @@
                   sourceNamesParam = subscribed;
                 }
               } else {
-                sourceParam = source;
+                sourceParam = source.name;
               }
 
               // 🌟 修复 3：如果搜索框里有内容，切换来源时应该在【当前搜索词】下进行过滤，而不是重置列表
-              if (isSearching.value || searchQuery.value.trim()) {
-                const keyword = searchQuery.value.trim();
-                const res = await pywebview.api.search_articles(
-                  keyword,
-                  sourceParam,
-                  favoritesOnly,
-                );
-                if (res.status === "success") {
-                  articles.value = res.data;
+              const scrollPromise = scrollActiveChipToCenter(source.key);
+              const switchPromise = runArticleSwitchTransition(async () => {
+                if (isSearching.value || searchQuery.value.trim()) {
+                  const keyword = searchQuery.value.trim();
+                  const res = await pywebview.api.search_articles(
+                    keyword,
+                    sourceParam,
+                    favoritesOnly,
+                  );
+                  if (res.status === "success") {
+                    articles.value = res.data;
+                  }
+                } else {
+                  // 正常无搜索时的切换逻辑
+                  const res = await pywebview.api.get_history_paged(
+                    1,
+                    20,
+                    sourceParam,
+                    sourceNamesParam,
+                    favoritesOnly,
+                  );
+                  if (res.status === "success") {
+                    articles.value = res.data;
+                    if (res.data.length < 20) noMoreData.value = true;
+                  }
                 }
-              } else {
-                // 正常无搜索时的切换逻辑
-                const res = await pywebview.api.get_history_paged(
-                  1,
-                  20,
-                  sourceParam,
-                  sourceNamesParam,
-                  favoritesOnly,
-                );
-                if (res.status === "success") {
-                  articles.value = res.data;
-                  if (res.data.length < 20) noMoreData.value = true;
-                }
-              }
+              });
+              await Promise.all([scrollPromise, switchPromise]);
             };
 
             onMounted(() => {
@@ -5919,7 +6420,6 @@
 
               const btn = document.querySelector(".btn-check");
               animateButtonClick(btn);
-              pulseButton(btn); // 请求开始时脉冲
 
               statusMsg.value = "";
 
@@ -5945,16 +6445,6 @@
                   articles.value = res.data;
                   page.value = 1;
                   noMoreData.value = false;
-
-                  // 🌟 新增：刷新来源列表
-                  try {
-                    const sourcesRes = await pywebview.api.get_all_sources();
-                    if (sourcesRes.status === "success" && sourcesRes.data) {
-                      sources.value = ["全部", ...sourcesRes.data];
-                    }
-                  } catch (e) {
-                    console.warn("刷新来源列表失败:", e);
-                  }
 
                   const count = res.submitted_count || 0;
                   if (count > 0) {
@@ -6008,7 +6498,6 @@
                 // 🌟 异常时关闭加载
                 isLoading.value = false;
               } finally {
-                pulseButton(btn); // 状态切换完成时脉冲
                 startCooldown(cooldownRemaining);
               }
             };
@@ -6216,7 +6705,7 @@
                 dwellTimer = setTimeout(() => {
                   hasDweltEnough.value = true;
                   checkAndMarkRead(); // 时间到了，检查是否看完了底部
-                }, 2000);
+                }, 500);
               }
             };
 
@@ -6322,17 +6811,26 @@
               }
             };
 
-            // 👇 新增：呼叫 Python 后端关闭或隐藏窗口
-            const closeAppWindow = () => {
-              if (
-                window.pywebview &&
-                window.pywebview.api &&
-                window.pywebview.api.hide_window
-              ) {
-                window.pywebview.api.hide_window();
-              } else {
-                console.error("未找到后端的 hide_window 方法");
-              }
+            // 👇 修改：呼叫 Python 后端关闭或隐藏窗口
+            const closeAppWindow = (event) => {
+              // 1. 触发坍缩消失动画
+              const btn = event ? event.currentTarget : null;
+              if (btn) btn.classList.add("is-closing");
+
+              // 2. 延迟 300ms 等待动画完成后再真正隐藏窗口
+              setTimeout(() => {
+                if (
+                  window.pywebview &&
+                  window.pywebview.api &&
+                  window.pywebview.api.hide_window
+                ) {
+                  window.pywebview.api.hide_window();
+                } else {
+                  console.error("未找到后端的 hide_window 方法");
+                }
+                // 窗口隐藏后移除动画类，以备下次打开时恢复原样
+                if (btn) btn.classList.remove("is-closing");
+              }, 300);
             };
             // --- 替换原有的 renderMarkdown ---
             // --- 替换原有的 renderMarkdown ---
@@ -6343,8 +6841,15 @@
             };
 
             // 核心：调用 Python 打开系统浏览器
-            const openBrowser = (url) => {
+            const openBrowser = (url, event) => {
               forceMarkRead(); // 🚀 记录实质性交互
+
+              // 触发飞箭动画
+              const btn = event ? event.currentTarget : null;
+              if (btn) {
+                btn.classList.add("is-launching");
+                setTimeout(() => btn.classList.remove("is-launching"), 600);
+              }
               pywebview.api.open_browser(url);
             };
 
@@ -6366,14 +6871,19 @@
               // 3. 优雅拼装最终分享文本
               const textToCopy = `${item.title}\n发布日期：${item.date}\n\n${cleanSummary}\n\n🔗 详情链接：${item.url}`;
 
+              // 👇 替换原有的 copyText 函数的最后一步
               // 4. 写入剪贴板
               navigator.clipboard
                 .writeText(textToCopy)
                 .then(() => {
-                  const btn = document.querySelector(".btn-copy");
-                  const oldText = btn.innerText;
-                  btn.innerText = "复制成功";
-                  setTimeout(() => (btn.innerText = oldText), 2000);
+                  // 获取当前点击的按钮并赋予动画类名
+                  const btn = event
+                    ? event.currentTarget
+                    : document.querySelector(".btn-copy");
+                  if (btn) {
+                    btn.classList.add("is-copied");
+                    setTimeout(() => btn.classList.remove("is-copied"), 1500);
+                  }
                 })
                 .catch((err) => {
                   console.error("复制失败", err);
@@ -7000,10 +7510,15 @@
               togglePin,
 
               // 来源与订阅
+              filterScrollContainer,
               sources,
               activeSource,
               filterBySource,
+              isListSwitching,
               allAvailableSources,
+              getSourcePositionClass,
+              getSourceStyle,
+              getSourceIcon,
               selectAllSources,
               deselectAllSources,
 
@@ -7023,6 +7538,13 @@
               isBalanceWarningDismissed,
               clearBalanceWarning,
               dismissBalanceWarning,
+
+              // 🌟 部门图标
+              getDepartmentIcon,
+              getDepartmentColor,
+              getAITagBgColor,
+              getSubsChipColor,
+              getSubsIcon,
             };
           },
         }).mount("#app");

@@ -371,6 +371,20 @@
 .inline-settings-card {
   cursor: default !important;
   padding: 24px 20px !important;
+  /* 入场动画：与消息卡片一致 */
+  animation: cardPopIn 0.4s var(--curve-pop, cubic-bezier(0.34, 1.56, 0.64, 1));
+}
+
+/* 入场动画关键帧 */
+@keyframes cardPopIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .inline-settings-card:hover,

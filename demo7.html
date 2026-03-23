@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>纯图标按钮 - 极简物理动画</title>
+    <style>
+      :root {
+        /* Apple 级物理弹簧曲线 */
+        --curve-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+        --curve-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+
+        --btn-bg: #f2f2f7;
+        --btn-hover: #e5e5ea;
+        --icon-color: #1c1c1e;
+      }
+
+      body {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        margin: 0;
+        background: #ffffff;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      }
+
+      /* 模拟你界面的胶囊容器 */
+      .action-bar {
+        display: flex;
+        gap: 16px;
+        padding: 12px 24px;
+        background: #ffffff;
+        border-radius: 40px;
+        box-shadow:
+          0 10px 40px rgba(0, 0, 0, 0.08),
+          0 1px 3px rgba(0, 0, 0, 0.04);
+        border: 1px solid rgba(0, 0, 0, 0.05);
+      }
+
+      /* 基础按钮样式：完美的正圆 */
+      .icon-btn {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: var(--btn-bg);
+        border: none;
+        cursor: pointer;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        position: relative;
+        overflow: hidden;
+        color: var(--icon-color);
+        /* 强制开启硬件加速 */
+        will-change: transform, background-color;
+        transition:
+          background-color 0.3s ease,
+          transform 0.4s var(--curve-spring);
+      }
+
+      /* 悬浮时的微微放大，增加呼吸感 */
+      .icon-btn:hover {
+        background: var(--btn-hover);
+        transform: scale(1.08);
+      }
+
+      /* 按下时的基础物理下压 */
+      .icon-btn:active {
+        transform: scale(0.92);
+        transition: transform 0.1s ease; /* 按下瞬间要快，不需要弹簧 */
+      }
+
+      /* 内部 SVG 的通用设定 */
+      .icon-btn svg {
+        width: 20px;
+        height: 20px;
+        fill: currentColor;
+        transition: all 0.4s var(--curve-spring);
+        position: absolute;
+      }
+
+      /* ============================================================
+       1. 复制按钮 (Copy & Success Swap)
+       ============================================================ */
+      .btn-copy .icon-check {
+        opacity: 0;
+        transform: scale(0.5) rotate(-45deg);
+        color: #ffffff;
+      }
+
+      /* 激活态：图标无缝切换 + 背景变绿 */
+      .btn-copy.is-copied {
+        background: #34c759; /* Apple 成功绿 */
+        color: #ffffff;
+        transform: scale(1.05); /* 成功时有一个微微膨胀的喜悦感 */
+      }
+      .btn-copy.is-copied .icon-doc {
+        opacity: 0;
+        transform: scale(0.5) translateY(-10px);
+      }
+      .btn-copy.is-copied .icon-check {
+        opacity: 1;
+        transform: scale(1.2) rotate(0deg);
+      }
+
+      /* ============================================================
+       2. 前往原文 (Launch Arrow)
+       ============================================================ */
+      /* 悬浮时，箭头微微向右上角抬头，暗示方向 */
+      .btn-view:hover .icon-arrow {
+        transform: translate(2px, -2px);
+      }
+
+      /* 激活态：箭头向右上角发射冲出屏幕，同时一个新的箭头从左下角补位进来 */
+      .btn-view.is-launching .icon-arrow {
+        animation: shoot-out 0.6s var(--curve-smooth) forwards;
+      }
+
+      @keyframes shoot-out {
+        0% {
+          transform: translate(0, 0) scale(1);
+          opacity: 1;
+        }
+        40% {
+          transform: translate(15px, -15px) scale(0.8);
+          opacity: 0;
+        } /* 飞出右上角 */
+        41% {
+          transform: translate(-15px, 15px) scale(0.5);
+          opacity: 0;
+        } /* 瞬间瞬移到底部准备 */
+        100% {
+          transform: translate(0, 0) scale(1);
+          opacity: 1;
+        } /* 回归原位 */
+      }
+
+      /* ============================================================
+       3. 关闭按钮 (Spin & Collapse)
+       ============================================================ */
+      /* 悬浮危险色警告 */
+      .btn-close:hover {
+        background: #ffe5e5;
+        color: #ff3b30;
+      }
+
+      /* 激活态：旋转 90 度并坍塌 */
+      .btn-close.is-closing {
+        background: #ff3b30;
+        color: #ffffff;
+        transform: scale(0);
+        opacity: 0;
+        pointer-events: none;
+      }
+      .btn-close.is-closing svg {
+        transform: rotate(90deg);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="action-bar">
+      <button class="icon-btn btn-copy" onclick="handleCopy(this)" title="复制">
+        <svg
+          class="icon-doc"
+          viewBox="0 0 24 24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"
+          />
+        </svg>
+        <svg
+          class="icon-check"
+          viewBox="0 0 24 24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+        </svg>
+      </button>
+
+      <button
+        class="icon-btn btn-view"
+        onclick="handleLaunch(this)"
+        title="查看原文"
+      >
+        <svg
+          class="icon-arrow"
+          viewBox="0 0 24 24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path d="M21 3L3 10.53v.98l6.84 2.65L12.48 21h.98L21 3z" />
+        </svg>
+      </button>
+
+      <button
+        class="icon-btn btn-close"
+        onclick="handleClose(this)"
+        title="关闭"
+      >
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path
+            d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
+          />
+        </svg>
+      </button>
+    </div>
+
+    <script>
+      // 1. 复制：成功状态持续 1.5 秒后恢复
+      function handleCopy(btn) {
+        if (btn.classList.contains("is-copied")) return;
+        btn.classList.add("is-copied");
+        setTimeout(() => {
+          btn.classList.remove("is-copied");
+        }, 1500);
+      }
+
+      // 2. 发射：播放动画类 0.6 秒后清理
+      function handleLaunch(btn) {
+        if (btn.classList.contains("is-launching")) return;
+        btn.classList.add("is-launching");
+        setTimeout(() => {
+          btn.classList.remove("is-launching");
+        }, 600);
+      }
+
+      // 3. 关闭：为了演示效果，1.5秒后重新显示（实际开发中按钮直接被销毁即可）
+      function handleClose(btn) {
+        btn.classList.add("is-closing");
+        // 演示用：稍后恢复
+        setTimeout(() => {
+          btn.classList.remove("is-closing");
+        }, 1500);
+      }
+    </script>
+  </body>
+</html>

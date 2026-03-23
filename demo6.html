@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Apple 极简物理居中筛选栏</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+      :root {
+        --card-bg: #ffffff;
+        --inactive-bg: #f2f2f7;
+        --hover-bg: #e5e5ea;
+        --inactive-text: #8e8e93;
+        /* 线性平滑曲线：去除弹跳，保留丝滑 */
+        --curve-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #f6f6f8;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        margin: 0;
+      }
+
+      /* 1. 模拟卡片容器 */
+      .app-card {
+        width: 480px; /* 固定宽度卡片 */
+        background: var(--card-bg);
+        border-radius: 24px;
+        padding: 20px 0;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.05);
+        overflow: hidden;
+      }
+
+      .card-header {
+        padding: 0 20px 15px;
+        font-size: 18px;
+        font-weight: 800;
+      }
+
+      /* 2. 溢出滚动容器 */
+      .filter-scroll-area {
+        display: flex;
+        overflow-x: auto;
+        padding: 4px 20px;
+        gap: 10px;
+        scrollbar-width: none; /* 隐藏滚动条 */
+        scroll-behavior: smooth; /* 🌟 开启全局物理平滑滚动 */
+        position: relative;
+      }
+      .filter-scroll-area::-webkit-scrollbar {
+        display: none;
+      }
+
+      /* 3. 胶囊按钮基础样式 */
+      .filter-chip {
+        display: flex;
+        align-items: center;
+        height: 40px;
+        min-width: 50px; /* 默认宽度：比正圆宽一点的胶囊 */
+        border-radius: 20px;
+        background: var(--inactive-bg);
+        color: var(--inactive-text);
+        cursor: pointer;
+        flex-shrink: 0; /* 🌟 核心：禁止在被挤压时缩小 */
+        transition:
+          background-color 0.3s ease,
+          color 0.3s ease,
+          padding 0.4s var(--curve-smooth),
+          min-width 0.4s var(--curve-smooth);
+        position: relative;
+        overflow: hidden;
+        border: none;
+        user-select: none;
+      }
+
+      /* 悬浮轻微变色 */
+      .filter-chip:hover:not(.active) {
+        background: var(--hover-bg);
+      }
+
+      .chip-icon {
+        width: 18px;
+        height: 18px;
+        flex-shrink: 0;
+        transition: color 0.3s;
+      }
+
+      .chip-text {
+        font-size: 14px;
+        font-weight: 700;
+        color: #ffffff !important; /* 强制白色 */
+        white-space: nowrap;
+        opacity: 0;
+        max-width: 0;
+        transition: all 0.4s var(--curve-smooth);
+      }
+
+      /* 4. 激活状态：平滑展开 */
+      .filter-chip.active {
+        padding: 0 18px;
+        min-width: 100px; /* 自动撑开 */
+      }
+      .filter-chip.active .chip-text {
+        opacity: 1;
+        max-width: 200px;
+        margin-left: 8px;
+      }
+      .filter-chip.active .chip-icon {
+        color: #ffffff !important;
+      }
+
+      /* 5. 三段式物理方向控制 */
+      /* 最左侧：向右生长 */
+      .pos-left {
+        justify-content: flex-start;
+        padding-left: 16px;
+      }
+      /* 中间：向中心双向生长 */
+      .pos-middle {
+        justify-content: center;
+      }
+      /* 最右侧：向左生长 */
+      .pos-right {
+        flex-direction: row-reverse;
+        justify-content: flex-start;
+        padding-right: 16px;
+      }
+      .pos-right .chip-text {
+        margin-left: 0;
+        margin-right: 8px;
+      }
+
+      /* 6. 指定 RGB 配色方案 */
+      .active.source-0 {
+        background: rgb(183, 42, 92);
+      }
+      .active.source-1 {
+        background: rgb(255, 56, 60);
+      }
+      .active.source-2 {
+        background: rgb(255, 141, 40);
+      }
+      .active.source-3 {
+        background: rgb(0, 136, 255);
+      }
+      .active.source-4 {
+        background: rgb(52, 199, 89);
+      }
+      .active.source-5 {
+        background: rgb(52, 199, 89);
+      }
+      .active.source-6 {
+        background: rgb(48, 176, 199);
+      }
+      .active.source-7 {
+        background: rgb(0, 199, 190);
+      }
+      .active.source-8 {
+        background: rgb(255, 141, 40);
+      }
+      .active.source-9 {
+        background: rgb(175, 82, 222);
+      }
+      .active.source-10 {
+        background: rgb(44, 44, 46);
+      }
+      .active.source-11 {
+        background: rgb(162, 132, 94);
+      }
+      .active.source-12 {
+        background: rgb(50, 173, 230);
+      }
+
+      /* 底部内容模拟 */
+      .list-content {
+        padding: 20px;
+        color: #999;
+        text-align: center;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div class="app-card">
+        <div class="card-header">订阅来源</div>
+
+        <div class="filter-scroll-area" ref="scrollContainer">
+          <div
+            v-for="(item, index) in sources"
+            :key="item.name"
+            :ref="el => chipRefs[index] = el"
+            class="filter-chip"
+            :class="[
+          activeSource === item.name ? 'active' : '',
+          'source-' + index,
+          index === 0 ? 'pos-left' : (index === sources.length - 1 ? 'pos-right' : 'pos-middle')
+        ]"
+            @click="selectSource(item.name, index)"
+          >
+            <svg
+              class="chip-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              v-html="item.icon"
+            ></svg>
+            <span class="chip-text">{{ item.name }}</span>
+          </div>
+        </div>
+
+        <div class="list-content">点击上方图标，体验自动居中与平滑展开...</div>
+      </div>
+    </div>
+
+    <script>
+      const { createApp, ref, onMounted, nextTick } = Vue;
+
+      createApp({
+        setup() {
+          const activeSource = ref("公文通");
+          const scrollContainer = ref(null);
+          const chipRefs = ref([]);
+
+          // 🌟 核心：居中吸附算法
+          const selectSource = (name, index) => {
+            activeSource.value = name;
+
+            // 等待 Vue 渲染完成后计算位置
+            nextTick(() => {
+              const container = scrollContainer.value;
+              const chip = chipRefs.value[index];
+              if (!container || !chip) return;
+
+              // 计算公式：胶囊左偏移 - 容器宽度的一半 + 胶囊宽度的一半
+              const targetScroll =
+                chip.offsetLeft -
+                container.offsetWidth / 2 +
+                chip.offsetWidth / 2;
+
+              container.scrollTo({
+                left: targetScroll,
+                behavior: "smooth",
+              });
+            });
+          };
+
+          const sources = [
+            {
+              name: "公文通",
+              icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line>',
+            },
+            {
+              name: "中德学院",
+              icon: '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06"></path>',
+            },
+            {
+              name: "人工智能",
+              icon: '<circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>',
+            },
+            {
+              name: "新材料",
+              icon: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>',
+            },
+            {
+              name: "城市交通",
+              icon: '<rect x="1" y="3" width="15" height="13"></rect><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle>',
+            },
+            {
+              name: "健康环境",
+              icon: '<path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"></path>',
+            },
+            {
+              name: "工程物理",
+              icon: '<circle cx="12" cy="12" r="10"></circle><line x1="14.31" y1="8" x2="20.05" y2="17.94"></line>',
+            },
+            {
+              name: "药学院",
+              icon: '<path d="M9 3v2l-6 11a2 2 0 0 0 1.7 3h14.6a2 2 0 0 0 1.7-3l-6-11V3"></path>',
+            },
+            {
+              name: "集成电路",
+              icon: '<rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="9" y="9" width="6" height="6"></rect>',
+            },
+            {
+              name: "未来技术",
+              icon: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8"></path>',
+            },
+            {
+              name: "创意设计",
+              icon: '<path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2"></path>',
+            },
+            {
+              name: "商学院",
+              icon: '<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>',
+            },
+            {
+              name: "外国语",
+              icon: '<circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line>',
+            },
+          ];
+
+          return {
+            sources,
+            activeSource,
+            selectSource,
+            scrollContainer,
+            chipRefs,
+          };
+        },
+      }).mount("#app");
+    </script>
+  </body>
+</html>

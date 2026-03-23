@@ -490,15 +490,16 @@ const emit = defineEmits([
 .meta-tag-gray {
   background-color: #f3f4f6;
   color: #959aa4;
-  padding: 4px 8px;
+  padding: 0 6px;
+  height: 22px;
   border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  border: 0px solid #e5e7eb;
-  line-height: 1;
-  display: inline-block;
-  vertical-align: middle;
-  max-width: 200px;
+  font-size: 11px;
+  font-weight: 700;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -526,12 +527,15 @@ const emit = defineEmits([
 
 /* 标签样式 */
 .tag {
-  padding: 4px 8px;
+  padding: 0 6px;
+  height: 22px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .tag-blue {
