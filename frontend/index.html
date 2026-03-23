@@ -103,9 +103,11 @@
         flex: 1;
         overflow-y: auto; /* 允许纵向滚动 */
         padding: 12px;
-        padding-bottom: 80px; /* 为底部悬浮功能栏留出空间 */
+        padding-bottom: 42px; /* 为底部悬浮功能栏留出空间 */
         /* 优化：平滑滚动 */
         scroll-behavior: smooth;
+        min-height: 0 !important;
+        -webkit-overflow-scrolling: touch !important;
       }
 
       /* 列表视图滚动条样式 - 与详情视图保持一致 */
@@ -212,6 +214,42 @@
 
       .btn-check.read-only-btn:active {
         transform: scale(0.98);
+      }
+
+      /* ================= 绝杀 3：核心按钮光影流转 ================= */
+      .btn-check:not(:disabled):not(.loading)::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 50%;
+        height: 100%;
+        /* 绘制一道倾斜的柔和高光 */
+        background: linear-gradient(
+          to right,
+          rgba(255, 255, 255, 0) 0%,
+          rgba(255, 255, 255, 0.25) 50%,
+          rgba(255, 255, 255, 0) 100%
+        );
+        transform: skewX(-20deg);
+        /* 每隔 6 秒扫过一次，不要太频繁以免惹人烦 */
+        animation: shimmerSweep 6s infinite cubic-bezier(0.4, 0, 0.2, 1);
+        pointer-events: none;
+      }
+
+      @keyframes shimmerSweep {
+        0%,
+        80% {
+          left: -100%;
+          opacity: 0;
+        }
+        85% {
+          opacity: 1;
+        }
+        100% {
+          left: 200%;
+          opacity: 0;
+        }
       }
 
       /* 点击缩放动画类 */
@@ -391,14 +429,19 @@
           0 8px 16px rgba(0, 0, 0, 0.05);
       }
 
-      /* 按下态：Z轴下压 */
-      .list-card:active {
-        transform: translateY(0) scale(0.98);
-        background-color: #fafafa; /* 按下瞬间给予背景反馈 */
-        box-shadow:
-          0 1px 2px rgba(0, 0, 0, 0.03),
-          0 2px 4px rgba(0, 0, 0, 0.02);
-        transition: transform 0.1s;
+      /* ================= 升级 4：厚重卡片的下压物理学 ================= */
+      .list-card:active,
+      .announcement-card:active {
+        /* 下压得更深一点 */
+        transform: translateY(0) scale(0.96);
+        background-color: #f9fafb;
+        /* 增加全局亮度降低，模拟手指遮挡了光线 */
+        filter: brightness(0.97);
+        /* 按下时也需要一点点阻尼，不能瞬间瞬移 */
+        transition:
+          transform 0.2s cubic-bezier(0.2, 0.9, 0.4, 1.1),
+          filter 0.2s ease,
+          background-color 0.2s ease;
       }
 
       .announcement-card {
@@ -2608,12 +2651,15 @@
         width: 100%;
       }
 
-      /* 进度条内芯 (带平滑动画) */
+      /* ================= 升级 5：渴望感进度条引擎 ================= */
       .progress-fill {
         height: 100%;
         background: var(--accent-color);
         width: 0%;
-        transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        /* 这种曲线会像跑车一样瞬间加速，然后在终点前优雅刹车 */
+        transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+        /* 进度条末端加一点圆角，更精致 */
+        border-radius: 0 2px 2px 0;
       }
 
       /* 🌟 爬虫阶段的不确定进度动画（脉冲效果） */
@@ -2734,36 +2780,49 @@
         font-size: 16px;
       }
 
-      /* iOS 风格 Toggle 开关 */
+      /* ================= 升级 2：iOS 原生 Toggle 挤压引擎 ================= */
       .ios-toggle {
         position: relative;
-        width: 44px;
-        height: 24px;
+        width: 46px; /* 原生稍宽一点 */
+        height: 28px;
         appearance: none;
         -webkit-appearance: none;
-        background: #e5e7eb;
+        background: #e9e9eb;
         border-radius: 24px;
         outline: none;
         cursor: pointer;
-        transition: background 0.3s;
+        /* 背景色过渡要快且平滑 */
+        transition: background 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       }
       .ios-toggle::after {
         content: "";
         position: absolute;
         top: 2px;
         left: 2px;
-        width: 20px;
-        height: 20px;
+        width: 24px;
+        height: 24px;
         background: white;
         border-radius: 50%;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow:
+          0 2px 5px rgba(0, 0, 0, 0.15),
+          0 1px 1px rgba(0, 0, 0, 0.05);
+        /* 给宽度和位移赋予弹簧曲线 */
+        transition:
+          transform 0.4s var(--curve-pop),
+          width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
       }
       .ios-toggle:checked {
-        background: var(--accent-color);
+        background: #34c759; /* Apple 原生高亮绿 */
       }
       .ios-toggle:checked::after {
-        transform: translateX(20px);
+        transform: translateX(18px);
+      }
+      /* 🌟 灵魂注入：按下时的物理挤压变形 */
+      .ios-toggle:active::after {
+        width: 32px; /* 变扁长 */
+      }
+      .ios-toggle:checked:active::after {
+        transform: translateX(10px); /* 往左补偿挤压的宽度 */
       }
 
       /* ================= 新增：iOS 风格行列表 (用于字体选择) ================= */
@@ -2846,21 +2905,21 @@
         border-radius: 20px;
         font-size: 13px;
         font-weight: 600;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15); /* 加深阴影 */
         z-index: 9999;
         pointer-events: none;
         width: max-content; /* 宽度自动根据文字长度撑开 */
         max-width: 90%; /* 保护措施：在极窄窗口下不溢出屏幕 */
-        animation: toastFadeIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+        animation: toastPopUp 0.5s var(--curve-pop) forwards;
       }
-      @keyframes toastFadeIn {
-        from {
+      @keyframes toastPopUp {
+        0% {
           opacity: 0;
-          transform: translate(-50%, 10px);
+          transform: translate(-50%, 30px) scale(0.85); /* 更大的景深起跳 */
         }
-        to {
+        100% {
           opacity: 1;
-          transform: translate(-50%, 0);
+          transform: translate(-50%, 0) scale(1);
         }
       }
 
@@ -3160,6 +3219,55 @@
       .badge-home.is-animating {
         animation: swoop-back-v2 0.5s var(--curve-apple-spring) !important;
         transform: none;
+      }
+      /* ================= 绝杀 2：瀑布流阻尼入场 ================= */
+      @keyframes cardStaggerIn {
+        0% {
+          opacity: 0;
+          transform: translateY(40px) scale(0.96);
+        }
+        100% {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+
+      .list-card,
+      .announcement-card {
+        /* backwards 确保在动画延迟期间，卡片保持在 0% 的透明隐藏状态 */
+        animation: cardStaggerIn 0.65s var(--curve-pop) backwards;
+      }
+
+      /* 利用 CSS 子选择器，为前 10 个卡片自动分配时间差 */
+      .list-card:nth-child(1) {
+        animation-delay: 0s;
+      }
+      .list-card:nth-child(2) {
+        animation-delay: 0.04s;
+      }
+      .list-card:nth-child(3) {
+        animation-delay: 0.08s;
+      }
+      .list-card:nth-child(4) {
+        animation-delay: 0.12s;
+      }
+      .list-card:nth-child(5) {
+        animation-delay: 0.16s;
+      }
+      .list-card:nth-child(6) {
+        animation-delay: 0.2s;
+      }
+      .list-card:nth-child(7) {
+        animation-delay: 0.24s;
+      }
+      .list-card:nth-child(8) {
+        animation-delay: 0.28s;
+      }
+      .list-card:nth-child(9) {
+        animation-delay: 0.32s;
+      }
+      .list-card:nth-child(10) {
+        animation-delay: 0.36s;
       }
     </style>
   </head>
