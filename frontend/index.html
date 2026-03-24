@@ -4366,7 +4366,7 @@
                       d="M8.89277 7.05773C8.89277 7.82296 9.318 8.48433 9.96073 8.81056L9.96073 17.4066C9.96073 18.0165 10.3349 18.439 10.8804 18.439C11.4449 18.439 11.7965 18.0325 11.7965 17.4066L11.7965 8.81056C12.4294 8.48433 12.8613 7.8163 12.8613 7.05773C12.8613 5.95695 11.9812 5.06346 10.8804 5.06346C9.77294 5.06346 8.89277 5.95695 8.89277 7.05773Z"
                     />
                   </svg>
-                  <span class="status-text">正在测试连接...</span>
+                  <span class="status-text">正在测试连接</span>
                 </div>
                 <div
                   v-else-if="connectionStatus === 'success'"
@@ -4884,7 +4884,7 @@
           style="padding-top: 0; min-height: 40px; overflow: hidden"
         >
           <div id="load-more-anchor">
-            <span v-if="isLoadingMore">加载更多中...</span>
+            <span v-if="isLoadingMore">加载更多中</span>
             <span v-else-if="isSearching"
               >找到 {{ processedArticles.filter(a => !a.is_announcement &&
               !a.isHeader).length }} 篇相关条目</span
@@ -4909,7 +4909,7 @@
               <input
                 type="text"
                 class="search-input"
-                placeholder="Search Everything..."
+                placeholder="Search Everything"
                 ref="searchInputRef"
                 v-model="searchQuery"
                 @input="handleSearch"
@@ -5158,7 +5158,7 @@
                   :class="{ 'is-loading': regeneratingIds.has(activeArticle.id) }"
                   @mousedown="playAnim($event, 600)"
                   @click="regenerateSummary(activeArticle)"
-                  :data-tooltip="regeneratingIds.has(activeArticle.id) ? '正在生成中...' : '重新生成'"
+                  :data-tooltip="regeneratingIds.has(activeArticle.id) ? '正在生成中' : '重新生成'"
                 >
                   <svg
                     class="icon-svg"
@@ -6430,7 +6430,7 @@
 
                 // 🌟 如果找不到，自动加载更多数据
                 if (!targetElement) {
-                  console.log("📊 未读文章不在当前页面，开始自动加载...");
+                  console.log("未读文章不在当前页面，开始自动加载");
 
                   // 最多加载 10 页
                   let loadAttempts = 0;
@@ -6780,7 +6780,7 @@
 
             // 保存设置
             const saveSettings = async () => {
-              settingsMsg.value = "正在保存...";
+              settingsMsg.value = "正在保存";
 
               const res = await pywebview.api.save_config(
                 JSON.parse(JSON.stringify(config.value)),
@@ -7435,14 +7435,14 @@
                   togglePin();
                 }
 
-                // 🌟 ESC：关闭搜索/详情/设置/收藏界面
+                // 🌟 ESC：关闭详情/搜索/设置/收藏界面
                 if (e.key === "Escape") {
-                  if (isSearchUIExpanded.value) {
-                    // 优先关闭搜索
-                    closeSearchUI();
-                  } else if (currentView.value === "detail") {
-                    // 关闭详情页
+                  if (currentView.value === "detail") {
+                    // 优先退出详情页（保留搜索状态，方便用户查看其他搜索结果）
                     backToList();
+                  } else if (isSearchUIExpanded.value) {
+                    // 不在详情页时才关闭搜索
+                    closeSearchUI();
                   } else if (
                     isSettingsOpen.value ||
                     activeSource.value === "收藏"
@@ -7675,8 +7675,8 @@
                 total,
                 completed: current,
                 detail:
-                  sourceName === "正在启动..."
-                    ? `正在启动 (共 ${total} 个)...`
+                  sourceName === "正在启动"
+                    ? `正在启动 (共 ${total} 个)`
                     : `正在检索： ${sourceName}`,
               };
             };
@@ -7697,7 +7697,7 @@
               console.log("🔔 收到后台自动执行通知");
               showNotification(
                 "后台巡检",
-                `已自动执行开机后台巡检，${COOLDOWN_SECONDS}秒内无需重复刷新`,
+                `已自动执行开机后台巡检`,
                 "success",
                 5000,
               );
@@ -7728,12 +7728,7 @@
                 isLoading.value = false;
                 updatePhase.value = "idle";
                 hasPendingAiTasks.value = false;
-                showNotification(
-                  "检查完成",
-                  "当前已是最新，无新内容",
-                  "success",
-                  4000,
-                );
+                showNotification("检查完成", "当前已是最新", "success", 4000);
               }
             };
 
@@ -7742,9 +7737,7 @@
               isCancelledFlag.value = true; // 🌟 1. 立刻打上取消标记，拦截一切后续动画
               console.log("【1】前端按钮已点击，准备呼叫后端 cancel_ai_tasks");
               try {
-                console.log(
-                  "【1.1】正在调用 pywebview.api.cancel_ai_tasks()...",
-                );
+                console.log("【1.1】正在调用 pywebview.api.cancel_ai_tasks()");
                 const res = await pywebview.api.cancel_ai_tasks();
                 console.log("【1.2】后端返回结果:", res);
                 if (res.status === "success") {
@@ -7885,7 +7878,7 @@
                   } else {
                     showNotification(
                       "检查更新",
-                      "当前已是最新，无新内容",
+                      "当前已是最新",
                       "success",
                       4000,
                     );
@@ -8497,20 +8490,15 @@
 
               // direct 类型：常规附件，使用后端静默下载
               showNotification(
-                "下载",
-                `正在准备下载 ${name}...`,
+                "下载附件",
+                `正在准备下载 ${name}`,
                 "success",
                 10000,
               );
               try {
                 const res = await pywebview.api.download_attachment(url, name);
                 if (res.status === "success") {
-                  showNotification(
-                    "下载成功",
-                    "附件下载成功！",
-                    "success",
-                    3000,
-                  );
+                  showNotification("下载成功", "", "success", 3000);
                 } else if (res.status === "cancelled") {
                   // 用户取消保存，关闭通知
                   hideNotification();
@@ -8534,12 +8522,7 @@
 
             // 🌟 原 takeSnapshot 的重计算逻辑拆分出来 (截图的主凶)
             const processHeavySnapshotTask = async (item) => {
-              showNotification(
-                "截图",
-                "正在生成高清长截图，请稍候...",
-                "success",
-                30000,
-              );
+              showNotification("保存快照", "正在生成快照", "success", 30000);
 
               const targetView = document.querySelector(".detail-view");
               const scrollContent = document.querySelector(".detail-content");
@@ -8557,7 +8540,7 @@
                 try {
                   showNotification(
                     "截图",
-                    "正在打包字体资源...",
+                    "正在打包字体资源",
                     "success",
                     10000,
                   );
@@ -8655,7 +8638,7 @@
                 );
 
                 if (res && res.status === "success") {
-                  console.log("✅ [Snapshot] 文件保存成功，正在写入剪贴板...");
+                  console.log("✅ [Snapshot] 文件保存成功，正在写入剪贴板");
 
                   // 🌟 核心修改：在保存成功后，追加调用剪贴板 API
                   const copyRes =
@@ -8665,7 +8648,7 @@
 
                   if (copyRes && copyRes.status === "success") {
                     showNotification(
-                      "快照保存成功",
+                      "保存成功",
                       "已复制到剪贴板",
                       "success",
                       3000,
@@ -8782,7 +8765,7 @@
               regeneratingIds.add(articleId);
               showNotification(
                 "正在处理",
-                `重新生成 ${aiBrandName.value} 总结...`,
+                `重新生成 ${aiBrandName.value} 总结`,
                 "info",
                 5000,
               );
