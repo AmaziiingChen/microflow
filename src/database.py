@@ -500,6 +500,28 @@ class DatabaseManager:
             cursor.execute("SELECT DISTINCT source_name FROM articles ORDER BY source_name")
             return [row[0] for row in cursor.fetchall() if row[0]]
 
+    def get_unread_count(self, source_names: Optional[List[str]] = None) -> int:
+        """获取未读文章数量
+
+        Args:
+            source_names: 可选的来源筛选列表（用于订阅模式）
+
+        Returns:
+            未读文章数量
+        """
+        with self._get_read_connection() as conn:
+            cursor = conn.cursor()
+
+            if source_names and len(source_names) > 0:
+                placeholders = ','.join('?' * len(source_names))
+                query = f"SELECT COUNT(*) FROM articles WHERE is_read = 0 AND source_name IN ({placeholders})"
+                cursor.execute(query, tuple(source_names))
+            else:
+                cursor.execute("SELECT COUNT(*) FROM articles WHERE is_read = 0")
+
+            row = cursor.fetchone()
+            return row[0] if row else 0
+
     def get_article_count_by_source(self, source_name: str) -> int:
         """查询指定来源的在库文章数（用于冷启动判断）"""
         with self._get_read_connection() as conn:

@@ -664,6 +664,25 @@ class Api:
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
+    def get_unread_count(self) -> dict:
+        """获取未读文章数量（直接从数据库统计，不依赖前端分页数据）
+
+        Returns:
+            {"status": "success", "count": int}
+        """
+        try:
+            # 获取用户订阅的来源列表
+            subscribed_sources = self.config_service.get('subscribedSources', None)
+            logger.info(f"📊 获取未读数量 - 订阅来源: {subscribed_sources}")
+
+            # 从数据库直接统计未读数量
+            count = db.get_unread_count(source_names=subscribed_sources)
+            logger.info(f"📊 未读数量统计结果: {count}")
+            return {"status": "success", "count": count}
+        except Exception as e:
+            logger.error(f"获取未读数量失败: {e}", exc_info=True)
+            return {"status": "error", "message": str(e), "count": 0}
+
     def regenerate_summary(self, article_id: int) -> Dict[str, Any]:
         """
         重新生成文章的 AI 总结

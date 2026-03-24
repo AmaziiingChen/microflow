@@ -790,7 +790,7 @@
         vertical-align: middle; /* 🌟 物理级垂直对齐 */
       }
 
-      /* 强制 SVG 充满容器，彻底解决快照时尺寸丢失导致的“白框”Bug */
+      /* 强制 SVG 充满容器，彻底解决快照时尺寸丢失导致的"白框"Bug */
       .inline-ai-icon svg {
         width: 100% !important;
         height: 100% !important;
@@ -1226,24 +1226,35 @@
         margin-top: 2px !important;
       }
 
-      /* ================= 新增：AI 原生语义标签高亮 ================= */
-      /* 2. 醒目的日期颜色 (橙色) */
-      date {
+      /* ================= 新增：AI 语义标签高亮（使用 class 选择器更稳定） ================= */
+      /* 日期标签 - 醒目红色 */
+      .md-date {
         color: #e11d48;
         font-weight: 800;
         background: #fff1f2;
+        padding: 0 4px;
+        border-radius: 3px;
       }
 
-      /* 3. 电话号码颜色 (翠绿色) */
-      contact {
+      /* 联系方式标签 - 翠绿色 */
+      .md-contact {
         color: #10b981;
         font-weight: 800;
         font-family: "SF Mono", Consolas, monospace;
         font-size: 15px;
         background: #ecfdf5;
+        padding: 0 4px;
+        border-radius: 3px;
       }
 
-      /* 4. 邮箱与外部链接优化 */
+      /* 地点标签 - 优雅紫 */
+      .md-loc {
+        color: #8b5cf6;
+        font-weight: 800;
+        background: rgba(139, 92, 246, 0.08);
+        padding: 0 4px;
+        border-radius: 4px;
+      }
       .markdown-body a {
         color: #3b82f6; /* 亮蓝色 */
         text-decoration: none;
@@ -1258,19 +1269,6 @@
         white-space: normal; /* 确保没有被上级设置为 nowrap */
       }
 
-      /* 5. 物理方位/地点颜色 (优雅紫，由 AI 直接生成) */
-      loc {
-        color: #8b5cf6;
-        font-weight: 800;
-        background: rgba(
-          139,
-          92,
-          246,
-          0.08
-        ); /* 加一点淡淡的紫色背景显得更立体 */
-        padding: 0 4px;
-        border-radius: 4px;
-      }
       .markdown-body a:hover {
         border-bottom-color: #3b82f6; /* 鼠标悬停时显示下划线 */
       }
@@ -1420,7 +1418,7 @@
       }
       .btn-copy.is-copied .icon-check {
         opacity: 1;
-        transform: scale(1.1) rotate(0deg);
+        transform: scale(1.35) rotate(0deg);
       }
 
       /* 🟡 2. 查看原文按钮动画 */
@@ -1828,7 +1826,7 @@
          ============================================================ */
       :root {
         /* 🌟 核心修复：抛弃死板的浅灰，改用半透明黑。
-           这会在玻璃上“压”出一个清晰的坑，边界瞬间明显，而且极具质感！ */
+           这会在玻璃上"压"出一个清晰的坑，边界瞬间明显，而且极具质感！ */
         --pill-bg: rgba(0, 0, 0, 0.06);
         --pill-hover: rgba(0, 0, 0, 0.1);
         --btn-bg: rgba(0, 0, 0, 0.06);
@@ -1879,7 +1877,7 @@
         /* 🌟 核心修复 1：大幅降低白底浓度！从 0.65 降到 0.25，让背后的内容真正透过来 */
         background: rgba(255, 255, 255, 0.15);
 
-        /* 🌟 核心修复 2：全靠底层的“模糊”和“色彩提纯”来形成遮挡感，而不是靠白漆 */
+        /* 🌟 核心修复 2：全靠底层的"模糊"和"色彩提纯"来形成遮挡感，而不是靠白漆 */
         backdrop-filter: blur(20px) saturate(180%);
         -webkit-backdrop-filter: blur(20px) saturate(180%);
 
@@ -2123,6 +2121,28 @@
           border-radius 0.6s var(--search-curve-expand),
           box-shadow 0.4s ease,
           transform 0.6s var(--search-curve-expand);
+      }
+
+      /* ============================================================
+         🌟 细节补全：搜索按钮的悬浮微交互 (Hover State)
+         ============================================================ */
+
+      /* 1. 容器本体：只有在“未展开”的正圆状态下，才响应悬浮放大 */
+      .search-morph-container:not(.is-active):hover {
+        transform: scale(1.05); /* 与右侧的更新按钮保持完美对称的放大比例 */
+        background: var(--pill-hover); /* 提亮底色 */
+        /* 增加一层极其微弱的悬浮阴影，让它看起来像是稍微浮起了一点 */
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 255, 255, 0.4),
+          0 4px 12px rgba(0, 0, 0, 0.05);
+      }
+
+      /* 2. 点睛之笔：内部的放大镜图标做微小的“探头/招手”动作 */
+      .search-morph-container:not(.is-active):hover .search-icon-wrapper svg {
+        /* 图标跟着微微放大，并潇洒地向左倾斜 5 度，仿佛在向你招手 */
+        transform: scale(1.08) rotate(-5deg);
+        /* 这里的 transition 时间要稍微短一点，显得更敏捷 */
+        transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
       }
 
       /* ============================================================
@@ -3204,7 +3224,7 @@
 
       /* 激活状态 (已置顶)： */
       .badge-pin.is-pinned {
-        /* 从原先的厚重纯色背景解放，改为精致的“白底 + 主题色内容” */
+        /* 从原先的厚重纯色背景解放，改为精致的"白底 + 主题色内容" */
         color: #ff6b78; /* 图标变为品牌主题色，自动适配 DeepSeek 蓝/GPT 绿 */
         background: #f5b7b7; /* 背景保持干净的白色，融入详情页卡片 */
         border-color: #ff6b78; /* 边框使用品牌主题色强调 */
@@ -3485,7 +3505,7 @@
          📸 【彩色虹膜快照】：机械下压与绞合动效 (Colorful Iris Morph)
          ============================================================ */
 
-      /* 🌟 物理模拟 1：内部图标的“Q弹虹膜绞合” */
+      /* 🌟 物理模拟 1：内部图标的"Q弹虹膜绞合" */
       /* 动画核心：旋转 + 收缩 = 物理闭合感 */
       @keyframes colorful-iris-morph {
         0% {
@@ -3509,7 +3529,7 @@
         animation: colorful-iris-morph 0.6s var(--curve-pop);
       }
 
-      /* 🌟 物理模拟 2：按钮本体的“重力下压” */
+      /* 🌟 物理模拟 2：按钮本体的"重力下压" */
       @keyframes hard-press-v3 {
         0% {
           transform: scale(1);
@@ -3528,6 +3548,61 @@
         animation: hard-press-v3 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
         transform: none; /* 强制覆盖悬浮态的放大效果，确保按压清脆 */
         box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); /* 按下时降低阴影，模拟贴近背景 */
+      }
+
+      /* ============================================================
+         🌟 新增：原生 App 级未读角标 (高级立体微光版)
+         ============================================================ */
+      .unread-badge {
+        position: absolute;
+        top: 0px; /* 稍微往上提一点，显得更轻盈 */
+        right: -6px;
+
+        /* 🌟 质感升级 1：废弃死板的纯色，改用极微弱的斜向渐变，模拟球面的立体光泽 */
+        background: linear-gradient(135deg, #ff5a54 0%, #ff3b30 100%);
+        color: #ffffff;
+        font-size: 10px;
+        font-weight: 800;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+
+        /* 🌟 形状升级：让 height 和 min-width 完全相等，这样单个数字时绝对是完美的正圆 */
+        height: 18px;
+        min-width: 18px;
+        padding: 0 5px; /* 当数字变成 99+ 时，两边会自然撑开成优雅的胶囊 */
+        border-radius: 18px;
+        box-sizing: border-box;
+
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+
+        /* 🌟 质感升级 2：彻底砍掉生硬的白边，改为高级的内外光影叠加 */
+        border: none;
+        box-shadow:
+          0 4px 10px rgba(255, 59, 48, 0.4),
+          /* 底部：柔和的红色漫反射光晕（苹果味的核心） */ inset 0 1px 1px
+            rgba(255, 255, 255, 0.35); /* 顶部：一道极细的纯白高光，像玻璃珠的反光 */
+
+        pointer-events: none;
+        z-index: 10;
+
+        /* 使用你项目里的 Q弹 曲线 */
+        animation: badge-pop 0.5s var(--curve-pop);
+      }
+
+      @keyframes badge-pop {
+        0% {
+          transform: scale(0);
+          opacity: 0;
+        }
+        50% {
+          transform: scale(1.15);
+        } /* 稍微收敛一点放大倍数，更精致 */
+        100% {
+          transform: scale(1);
+          opacity: 1;
+        }
       }
     </style>
   </head>
@@ -3810,7 +3885,6 @@
                   color: var(--text-secondary);
                   border: 1px solid #e5e7eb;
                   border-radius: 6px;
-                  /* 👇 保证最小宽度，防止变成“测试中...”时按钮突然变窄发生抽动 */
                   min-width: 110px;
                   height: 34px;
                 "
@@ -4362,6 +4436,12 @@
                     />
                   </g>
                 </svg>
+                <span
+                  v-if="unreadCount > 0 && !isSearchUIExpanded"
+                  class="unread-badge"
+                >
+                  {{ unreadCount > 99 ? '99+' : unreadCount }}
+                </span>
               </button>
 
               <button
@@ -4493,10 +4573,9 @@
                 </span>
 
                 <span
-                  class="badge-snapshot"
+                  class="badge-snapshot custom-iris-btn"
                   id="btn-snapshot-top"
-                  @mousedown="playAnim($event, 1200)"
-                  @click="takeSnapshot(activeArticle)"
+                  @click="triggerSnapshotAction(activeArticle, $event)"
                   data-tooltip="保存快照"
                 >
                   <svg
@@ -4866,7 +4945,7 @@
                     fill="currentColor"
                   ></path>
                 </svg>
-                本文由 AI 简化生成 仅供参考
+                本文由 AI 生成 仅供参考
               </span>
               <span>
                 <svg
@@ -4882,7 +4961,7 @@
                     fill="currentColor"
                   ></path>
                 </svg>
-                具体内容请点击查看原文查看
+                具体内容请查看信息源文
               </span>
             </div>
             <div class="btn-group">
@@ -5810,7 +5889,7 @@
 - **标题层级**：正文一级板块必须使用 \\\`### \\\` (三级标题) 开头，按需可使用 \\\`#### \\\` 作为子板块。
 - **列表化表达**：凡涉及多个并列项（如要求、步骤、材料清单等），一律使用无序列表 \\\`- \\\` 或有序列表 \\\`1. \\\`。
 - **高亮强调**：对关键信息（金额、实体标签等）需进行加粗强调。**注意**：为了确保 Markdown 渲染成功，加粗符号 \\\`**\\\` 与其前后的非加粗文字之间**必须保留一个半角空格**（例如：地点设在 ** <loc>大礼堂</loc> ** 举行）。
-- **信息缺失处理**：若原文未提及时间、地点或截止日期，请忽略该字段或备注“详见原文”，**绝对禁止编造或推理**信息。不必列举发文单位和发文日期。
+- **信息缺失处理**：若原文未提及时间、地点或截止日期，请忽略该字段或备注"详见原文"，**绝对禁止编造或推理**信息。不必列举发文单位和发文日期。
 
 ### 3. 链接强制保留规则：
 - 严禁忽略原文中的关键外部链接（如：报名链接、全文链接、公示名单链接、论文访问地址等）。
@@ -5834,7 +5913,7 @@
 4. 后续标签应涵盖：[受众群体]、[核心动作] 等符合信息传递核心的关键词。
 
 **正文要求**：
-1. 不要套用固定模板，请根据公文的内在逻辑自由创建板块（例如：“报名详情”、“评审流程”、“注意事项”等），目标是让读者一眼抓住核心。
+1. 不要套用固定模板，请根据公文的内在逻辑自由创建板块（例如："报名详情"、"评审流程"、"注意事项"等），目标是让读者一眼抓住核心。
 2. 次要说明、背景信息、附件链接等细节可放在最后的板块中。
 
 ## Input:
@@ -5852,7 +5931,7 @@
               isSettingsOpen.value = true;
               settingsMsg.value = "";
 
-              // 🌟 神奇魔法：自动滚动到顶部，让用户亲眼看到这张卡片顺滑地“挤”出来
+              // 🌟 神奇魔法：自动滚动到顶部，让用户亲眼看到这张卡片顺滑地"挤"出来
               setTimeout(() => {
                 const listView = document.querySelector(".list-view");
                 if (listView) listView.scrollTo({ top: 0, behavior: "smooth" });
@@ -6138,7 +6217,7 @@
             // ================= 🚀 升级后的本地化 AI 图标逻辑 (后端直供版) =================
             const iconLoadError = ref(false);
 
-            // 核心：监听模型名称变化，直接从后端抓取并注入“补全尺寸版”的 SVG 源码
+            // 核心：监听模型名称变化，直接从后端抓取并注入"补全尺寸版"的 SVG 源码
             // 监听模型变化，向 Python 索要图标
             watch(
               () => config.value.modelName,
@@ -6558,6 +6637,9 @@
                     articles.value = res.data;
                     if (res.data.length < 20) noMoreData.value = true;
                   }
+
+                  // 🌟 启动时获取未读数量
+                  fetchUnreadCount();
                 } catch (e) {
                   console.error("API 调用失败:", e);
                 }
@@ -6836,6 +6918,9 @@
                   page.value = 1;
                   noMoreData.value = false;
 
+                  // 🌟 刷新未读数量
+                  fetchUnreadCount();
+
                   const count = res.submitted_count || 0;
                   if (count > 0) {
                     statusMsg.value = `找到 ${count} 篇新内容，正在由 ${aiBrandName.value} 总结...`;
@@ -7048,11 +7133,15 @@
               } else {
                 articles.value.unshift(enrichedItem);
               }
+              // 🌟 刷新未读数量
+              fetchUnreadCount();
             };
 
             // 👇 新增：接收 ArticleProcessor 回调推送的文章数据，唤醒窗口并展示详情
             window.openArticleDetail = (articleData) => {
               console.log("🔔 收到文章处理完成推送:", articleData.title);
+              // 🌟 刷新未读数量
+              fetchUnreadCount();
               // 直接复用已有的 showArticleDetailFromBackend 逻辑
               if (typeof window.showArticleDetailFromBackend === "function") {
                 window.showArticleDetailFromBackend(articleData);
@@ -7079,6 +7168,7 @@
                   pendingReadUrls.value.push(url);
                   pywebview.api
                     .mark_as_read(url)
+                    .then(() => fetchUnreadCount()) // 🌟 刷新未读数量
                     .catch((e) => console.error(e));
                   console.log(
                     "✅ 满足双重阅读条件：卡片已在后台静默标记为已读",
@@ -7160,6 +7250,7 @@
                   pendingReadUrls.value.push(url);
                   pywebview.api
                     .mark_as_read(url)
+                    .then(() => fetchUnreadCount()) // 🌟 刷新未读数量
                     .catch((e) => console.error(e));
                 }
               }
@@ -7222,12 +7313,25 @@
                 if (btn) btn.classList.remove("is-closing");
               }, 300);
             };
-            // --- 替换原有的 renderMarkdown ---
-            // --- 替换原有的 renderMarkdown ---
+            // --- 优化版 renderMarkdown：先解析 Markdown，后处理自定义标签 ---
             const renderMarkdown = (text) => {
               if (!text) return "无总结内容";
-              // 彻底废弃所有正则，直接相信 AI 原生生成的 <date>, <contact>, <loc> 标签
-              return marked.parse(text);
+
+              // 第一步：先用 marked 解析 Markdown（此时 <date> 等标签会被保留为文本）
+              let html = marked.parse(text);
+
+              // 第二步：在渲染后的 HTML 中替换自定义标签为带样式的 span
+              // 使用 [\s\S]*? 匹配任意字符（包括换行），使用非贪婪模式
+              html = html
+                .replace(/&lt;date&gt;([\s\S]*?)&lt;\/date&gt;/gi, '<span class="md-date">$1</span>')
+                .replace(/&lt;loc&gt;([\s\S]*?)&lt;\/loc&gt;/gi, '<span class="md-loc">$1</span>')
+                .replace(/&lt;contact&gt;([\s\S]*?)&lt;\/contact&gt;/gi, '<span class="md-contact">$1</span>')
+                // 兼容未被转义的情况（某些情况下 marked 可能保留原样）
+                .replace(/<date>([\s\S]*?)<\/date>/gi, '<span class="md-date">$1</span>')
+                .replace(/<loc>([\s\S]*?)<\/loc>/gi, '<span class="md-loc">$1</span>')
+                .replace(/<contact>([\s\S]*?)<\/contact>/gi, '<span class="md-contact">$1</span>');
+
+              return html;
             };
 
             // 核心：调用 Python 打开系统浏览器
@@ -7392,9 +7496,12 @@
             };
 
             // ------------------------------------------------------------
-            // 保存长图快照 (Snapshot) - 终极护城河版：彻底解绑 viewport 锁定 & Base64字体穿透
-            // ------------------------------------------------------------
-            const takeSnapshot = async (item) => {
+            // ============================================================
+            // 📸 【快照调度引擎】参考收藏动画设计，处理延迟与卡顿掩盖
+            // ============================================================
+
+            // 🌟 原 takeSnapshot 的重计算逻辑拆分出来 (截图的主凶)
+            const processHeavySnapshotTask = async (item) => {
               const oldMsg = statusMsg.value;
               statusMsg.value = "正在生成高清长截图，请稍候...";
 
@@ -7467,7 +7574,7 @@
               document.body.style.height = "auto";
               document.body.style.overflow = "visible";
 
-              // 🌟 核心修复 3：在解除 fixed 之前，强行把现在的像素宽度“焊死”在行内样式上
+              // 🌟 核心修复 3：在解除 fixed 之前，强行把现在的像素宽度"焊死"在行内样式上
               targetView.style.width = targetView.offsetWidth + "px";
               targetView.style.position = "absolute"; // 👈 挣脱 fixed 定位
               targetView.style.bottom = "auto"; // 👈 解除底部锁定
@@ -7555,6 +7662,39 @@
                 console.log("🔄 [Snapshot] CSS 布局与字体已恢复正常。");
                 setTimeout(() => (statusMsg.value = oldMsg), 3000);
               }
+            };
+
+            // 🌟 新增的包装调度器：处理动画状态与延迟触发截图
+            const triggerSnapshotAction = (item, event) => {
+              if (!item) return;
+              forceMarkRead(); // 🚀 记录实质性交互
+
+              // 自动获取当前点击的按钮主体
+              const btn = event
+                ? event.currentTarget
+                : document.querySelector(".badge-snapshot");
+
+              // 1. 开始动画 (添加 is-animating 类)
+              if (btn) btn.classList.add("is-animating");
+
+              // 2. 更新状态，告知用户正在等待动画完成
+              // statusMsg.value = `正在准备【${item.title}】的快照动画特写...`;
+
+              // 3. 设定 1200ms 后移除类名，确保动画物理复位 (CSS 持续时间为 1.2s)
+              setTimeout(() => {
+                if (btn) btn.classList.remove("is-animating");
+              }, 1200);
+
+              // 🌟 核心修复：延迟 800ms 触发重计算逻辑！
+              // 为什么是 800ms？因为我们在 CSS 中设计的 Q弹光圈 Q 弹回弹是在 360ms 后开始的，
+              // 800ms 左右时光圈正处理优雅回弹的途中，错落感最足。
+              // 延迟 800ms 后，即使界面因为截图静止了，用户已经在视觉上感受到了绝大部分的动画，体验极佳。
+              // 千万不要等到 1200ms 完全复位再静止，那样会导致体验拖沓。
+              setTimeout(() => {
+                console.log("错落调度：延迟触发后端重计算截图:", item.title);
+                // 执行拆分出来的耗时截图逻辑
+                processHeavySnapshotTask(item);
+              }, 800);
             };
 
             // 👇 新增：重新生成 AI 总结
@@ -7811,6 +7951,25 @@
 
               return { start, end, suffix, short: false };
             };
+            // ============================================================
+            // 🌟 优化：全局未读消息统计引擎（直接从数据库获取）
+            // ============================================================
+            const unreadCount = ref(0);
+
+            // 从后端 API 获取未读数量
+            const fetchUnreadCount = async () => {
+              try {
+                const res = await pywebview.api.get_unread_count();
+                console.log("📊 未读数量响应:", res);
+                if (res.status === "success") {
+                  unreadCount.value = res.count;
+                } else {
+                  console.error("获取未读数量失败:", res.message || res);
+                }
+              } catch (e) {
+                console.error("获取未读数量异常:", e);
+              }
+            };
 
             return {
               isSettingsOpen, // 🌟 新增暴露
@@ -7825,6 +7984,8 @@
               isLoading,
               statusMsg,
               isCapturing,
+              unreadCount,
+              fetchUnreadCount,
 
               // 🌟 只读模式
               isReadOnlyMode,
@@ -7860,7 +8021,7 @@
               forceMarkRead,
               downloadFile,
               scrollToAttachments,
-              takeSnapshot,
+              triggerSnapshotAction,
               regenerateSummary,
               cancelAITasks,
 
