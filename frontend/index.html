@@ -2688,13 +2688,18 @@
         letter-spacing: 0.5px;
       }
 
-      /* ================= 新增：来源筛选栏样式 (Apple 极简物理风格) ================= */
-      /* 筛选标签容器 - Apple 极简物理展开 */
+      /* ============================================================
+         🌟 优化：顶部导航栏 (Apple 原生级动态胶囊 Dynamic Pill)
+         ============================================================ */
+
       .filter-scroll-container {
-        --chip-motion-duration: 0.68s;
-        --chip-motion-ease: cubic-bezier(0.32, 0, 0.2, 1);
+        /* 🌟 核心升级 1：换上 iOS 级别的果冻弹簧曲线，时间微调至 0.55s 让回弹更紧凑 */
+        --chip-motion-duration: 0.55s;
+        --chip-motion-ease: var(--curve-pop, cubic-bezier(0.34, 1.56, 0.64, 1));
+
         --chip-compact-width: 52px;
         --chip-expanded-width: 204px;
+
         display: flex;
         overflow-x: auto;
         align-items: center;
@@ -2713,7 +2718,7 @@
         display: none;
       }
 
-      /* 筛选标签 - 无阴影、无外边框 */
+      /* 筛选标签 - 物理实体感 */
       .filter-chip {
         display: inline-flex;
         align-items: center;
@@ -2732,31 +2737,31 @@
         user-select: none;
         flex-shrink: 0;
         overflow: hidden;
+
+        /* 🌟 核心升级 2：将尺寸动画与颜色动画解耦。
+           尺寸用弹簧曲线 (Q弹)，颜色用线性曲线 (丝滑) */
         transition:
           width var(--chip-motion-duration) var(--chip-motion-ease),
-          background-color var(--chip-motion-duration) var(--chip-motion-ease),
-          color var(--chip-motion-duration) var(--chip-motion-ease),
           padding-inline var(--chip-motion-duration) var(--chip-motion-ease),
-          filter 0.28s ease;
+          background-color 0.3s ease,
+          color 0.3s ease,
+          transform 0.4s var(--chip-motion-ease); /* 为下压回弹做准备 */
       }
 
-      .filter-chip.is-first {
-        justify-content: center;
+      /* 🌟 核心升级 3：极其真实的物理下压反馈 (Spatial Crush) */
+      .filter-chip:active {
+        transform: scale(0.92); /* 强烈的肉感下压 */
+        background: #e1e1e8;
+        transition:
+          transform 0.1s ease,
+          background-color 0.1s ease; /* 按下时极其敏捷 */
       }
 
-      .filter-chip.is-first.active {
-        justify-content: center;
-      }
-
-      .filter-chip.is-last {
-        flex-direction: row-reverse;
-        justify-content: center;
-      }
-
-      .filter-chip.is-last.active {
-        justify-content: center;
-      }
-
+      /* 保持你的位置对齐逻辑 */
+      .filter-chip.is-first,
+      .filter-chip.is-first.active,
+      .filter-chip.is-last,
+      .filter-chip.is-last.active,
       .filter-chip.is-middle {
         justify-content: center;
       }
@@ -2773,11 +2778,9 @@
       .filter-chip.active .filter-chip-inner {
         gap: 8px;
       }
-
       .filter-chip.is-middle.active .filter-chip-inner {
         gap: 6px;
       }
-
       .filter-chip.is-last.active .filter-chip-inner {
         gap: 8px;
       }
@@ -2791,9 +2794,9 @@
         justify-content: center;
         color: inherit;
         transition:
-          color var(--chip-motion-duration) var(--chip-motion-ease),
+          color 0.3s ease,
           opacity var(--chip-motion-duration) var(--chip-motion-ease),
-          transform 0.22s cubic-bezier(0.32, 0, 0.2, 1);
+          transform 0.4s var(--chip-motion-ease);
       }
       .filter-chip-icon svg {
         width: 100%;
@@ -2805,35 +2808,29 @@
         width: 20px;
       }
 
+      /* 🌟 核心升级 4：文字的视差滑入 (Parallax Slide) */
       .filter-chip-text {
         display: inline-block;
         overflow: hidden;
         max-width: 0;
         opacity: 0;
-        transform: scaleX(0.94);
-        transform-origin: center center;
+        /* 文字初始状态稍微向左偏移，并在 Y 轴微缩，准备被“拉出” */
+        transform: translateX(-8px) scale(0.95);
         white-space: nowrap;
         will-change: max-width, opacity, transform;
         transition:
           max-width var(--chip-motion-duration) var(--chip-motion-ease),
-          opacity var(--chip-motion-duration) var(--chip-motion-ease),
-          transform var(--chip-motion-duration) var(--chip-motion-ease);
+          opacity 0.3s ease,
+          /* 透明度变化快一点，防止拖泥带水 */ transform
+            var(--chip-motion-duration) var(--chip-motion-ease);
       }
 
-      .filter-chip.is-first .filter-chip-text {
-        transform-origin: left center;
-      }
-
-      .filter-chip.is-first.active .filter-chip-text {
-        transform-origin: center center;
-      }
-
-      .filter-chip.is-last .filter-chip-text {
-        transform-origin: right center;
-      }
-
-      .filter-chip.is-last.active .filter-chip-text {
-        transform-origin: center center;
+      /* 取消原有的 origin 缩放，用位移代替，更加自然 */
+      .filter-chip.active .filter-chip-text {
+        max-width: calc(var(--chip-expanded-width) - 64px);
+        opacity: 1;
+        /* 文字伴随着胶囊拉长，顺滑地滑入中心并放大到正常 */
+        transform: translateX(0) scale(1);
       }
 
       .filter-chip.active {
@@ -2841,18 +2838,12 @@
         background: var(--chip-active-bg, #007aff);
         color: #ffffff;
         padding-inline: 18px;
-        filter: saturate(1.02);
+        /* 去掉 saturate(1.02)，这种极其微小的滤镜极其消耗 GPU，且肉眼不可见 */
       }
 
       .filter-chip.active .filter-chip-icon,
       .filter-chip.active .filter-chip-text {
         color: #ffffff;
-      }
-
-      .filter-chip.active .filter-chip-text {
-        max-width: calc(var(--chip-expanded-width) - 64px);
-        opacity: 1;
-        transform: scaleX(1);
       }
 
       .filter-chip:not(.active) .filter-chip-icon,
@@ -2864,12 +2855,9 @@
         background: #e1e1e8;
       }
 
+      /* 悬浮时图标微动招手 */
       .filter-chip:hover:not(.active) .filter-chip-icon {
-        transform: scale(1.08);
-      }
-
-      .filter-chip:active {
-        filter: brightness(0.99);
+        transform: scale(1.1) rotate(-3deg);
       }
 
       /* 🎯 进度条外框 */
@@ -4196,6 +4184,8 @@
               <div
                 v-else
                 :key="item.id || item.url"
+                :data-url="item.url"
+                :data-id="item.id"
                 :class="['list-card', { 'announcement-card': item.is_announcement, 'read': item.is_read && item.is_announcement }]"
                 @click="item.is_announcement ? handleNoticeClick(item) : openDetail(item)"
               >
@@ -5732,18 +5722,139 @@
               }
             };
 
-            // 【今日】按钮的复合功能
+            // 【今日】按钮的复合功能 - 渐进式未读定位
+            let lastScrolledUrl = null; // 记录上次跳转到的未读文章 URL
+
+            const scrollToNextUnread = async () => {
+              try {
+                // 🌟 核心修复：从后端获取第一个未读文章信息（传递当前部门）
+                const res = await pywebview.api.get_first_unread_url(activeSource.value);
+                console.log("📊 获取未读文章响应:", res, "筛选:", activeSource.value);
+
+                // 🌟 修复：正确判断是否找到文章
+                if (res.status !== "success" || res.found === false) {
+                  console.log("📊 没有找到未读文章");
+                  return "no_unread";
+                }
+
+                const targetUrl = res.url;
+                const targetId = res.id;
+
+                // 在当前 DOM 中查找对应的卡片
+                const listView = document.querySelector(".list-view");
+                if (!listView) {
+                  console.log("📊 未找到 .list-view 容器");
+                  return "no_container";
+                }
+
+                // 🌟 通过 data-url 属性查找
+                let targetElement = listView.querySelector(
+                  `[data-url="${targetUrl}"]`,
+                );
+
+                // 🌟 如果找不到，自动加载更多数据
+                if (!targetElement) {
+                  console.log("📊 未读文章不在当前页面，开始自动加载...");
+
+                  // 最多加载 10 页
+                  let loadAttempts = 0;
+                  const maxAttempts = 10;
+
+                  while (!targetElement && loadAttempts < maxAttempts && !noMoreData.value) {
+                    loadAttempts++;
+                    console.log(`📊 加载第 ${loadAttempts} 页...`);
+
+                    // 等待加载完成
+                    await loadMoreArticles();
+
+                    // 等待 Vue 渲染
+                    await new Promise(resolve => setTimeout(resolve, 300));
+
+                    // 重新查找
+                    targetElement = listView.querySelector(
+                      `[data-url="${targetUrl}"]`,
+                    );
+                  }
+
+                  if (!targetElement) {
+                    console.log("📊 加载后仍未找到目标文章");
+                    return "not_found";
+                  }
+                }
+
+                console.log("📊 找到目标卡片，准备滚动！");
+
+                // 🌟 使用 scrollTop 直接滚动
+                const containerRect = listView.getBoundingClientRect();
+                const targetRect = targetElement.getBoundingClientRect();
+                const currentScrollTop = listView.scrollTop;
+                const targetOffset = targetRect.top - containerRect.top + currentScrollTop;
+
+                // 滚动到目标位置（居中显示）
+                listView.scrollTop = targetOffset - containerRect.height / 2 + targetRect.height / 2;
+
+                // 添加高亮效果
+                targetElement.style.transition = "box-shadow 0.3s ease";
+                targetElement.style.boxShadow =
+                  "0 0 0 3px rgba(0, 122, 255, 0.5)";
+                setTimeout(() => {
+                  targetElement.style.boxShadow = "";
+                }, 2000);
+
+                lastScrolledUrl = targetUrl;
+                console.log("📊 已跳转到未读文章:", targetUrl);
+                return "scrolled";
+              } catch (e) {
+                console.error("📊 跳转未读失败:", e);
+                return "error";
+              }
+            };
+
             const handleTodayClick = async () => {
+              console.log("📊 handleTodayClick 被调用", {
+                isSearchUIExpanded: isSearchUIExpanded.value,
+                isSettingsOpen: isSettingsOpen.value,
+                activeSource: activeSource.value,
+                unreadCount: unreadCount.value,
+              });
+
               if (isSearchUIExpanded.value) {
                 // 搜索展开状态下，它充当关闭/退回键
                 closeSearchUI();
               } else {
-                // 🌟 如果设置面板打开，先自动保存并关闭
-                if (isSettingsOpen.value) {
-                  await closeSettingsWithAutoSave();
+                // 🌟 如果设置面板或收藏界面打开
+                const isInSpecialView =
+                  isSettingsOpen.value || activeSource.value === "收藏";
+
+                if (isInSpecialView) {
+                  // 如果设置面板打开，先自动保存并关闭
+                  if (isSettingsOpen.value) {
+                    await closeSettingsWithAutoSave();
+                  }
+                  // 重置筛选到"全部"并重置未读索引
+                  lastScrolledUrl = null;
+                  filterBySource(allSourceOption);
+                } else if (unreadCount.value > 0) {
+                  // 在主界面且有未读消息 - 尝试跳转到下一个未读
+                  console.log("📊 准备调用 scrollToNextUnread");
+                  const result = await scrollToNextUnread();
+                  console.log("📊 scrollToNextUnread 返回:", result);
+
+                  if (result === "not_found") {
+                    // 加载了多页仍未找到
+                    statusMsg.value = "未读文章较旧，请稍后再试";
+                    setTimeout(() => {
+                      statusMsg.value = "";
+                    }, 2000);
+                  } else if (result === "no_unread") {
+                    // 没有未读了
+                    fetchUnreadCount(); // 刷新未读数
+                  }
+                  // scrolled 和 error 不需要特殊处理
+                } else {
+                  // 没有未读消息，默认行为
+                  filterBySource(allSourceOption);
                 }
-                // 默认状态下，重置筛选到"全部"
-                filterBySource(allSourceOption);
               }
             };
 
@@ -6443,6 +6554,14 @@
               activeSource.value = source.name;
               page.value = 1;
               noMoreData.value = false;
+
+              // 🌟 切换部门后，重新获取该部门的未读数量
+              if (source.name !== "收藏") {
+                fetchUnreadCount(source.name);
+              } else {
+                // 收藏页面不显示未读数量
+                unreadCount.value = 0;
+              }
 
               // 🌟 修复：当点击"全部"且有订阅时，传递订阅来源列表，避免返回未订阅的文章
               let sourceParam = null;
@@ -7323,13 +7442,31 @@
               // 第二步：在渲染后的 HTML 中替换自定义标签为带样式的 span
               // 使用 [\s\S]*? 匹配任意字符（包括换行），使用非贪婪模式
               html = html
-                .replace(/&lt;date&gt;([\s\S]*?)&lt;\/date&gt;/gi, '<span class="md-date">$1</span>')
-                .replace(/&lt;loc&gt;([\s\S]*?)&lt;\/loc&gt;/gi, '<span class="md-loc">$1</span>')
-                .replace(/&lt;contact&gt;([\s\S]*?)&lt;\/contact&gt;/gi, '<span class="md-contact">$1</span>')
+                .replace(
+                  /&lt;date&gt;([\s\S]*?)&lt;\/date&gt;/gi,
+                  '<span class="md-date">$1</span>',
+                )
+                .replace(
+                  /&lt;loc&gt;([\s\S]*?)&lt;\/loc&gt;/gi,
+                  '<span class="md-loc">$1</span>',
+                )
+                .replace(
+                  /&lt;contact&gt;([\s\S]*?)&lt;\/contact&gt;/gi,
+                  '<span class="md-contact">$1</span>',
+                )
                 // 兼容未被转义的情况（某些情况下 marked 可能保留原样）
-                .replace(/<date>([\s\S]*?)<\/date>/gi, '<span class="md-date">$1</span>')
-                .replace(/<loc>([\s\S]*?)<\/loc>/gi, '<span class="md-loc">$1</span>')
-                .replace(/<contact>([\s\S]*?)<\/contact>/gi, '<span class="md-contact">$1</span>');
+                .replace(
+                  /<date>([\s\S]*?)<\/date>/gi,
+                  '<span class="md-date">$1</span>',
+                )
+                .replace(
+                  /<loc>([\s\S]*?)<\/loc>/gi,
+                  '<span class="md-loc">$1</span>',
+                )
+                .replace(
+                  /<contact>([\s\S]*?)<\/contact>/gi,
+                  '<span class="md-contact">$1</span>',
+                );
 
               return html;
             };
@@ -7956,11 +8093,12 @@
             // ============================================================
             const unreadCount = ref(0);
 
-            // 从后端 API 获取未读数量
-            const fetchUnreadCount = async () => {
+            // 从后端 API 获取未读数量（支持按部门筛选）
+            const fetchUnreadCount = async (sourceName = null) => {
               try {
-                const res = await pywebview.api.get_unread_count();
-                console.log("📊 未读数量响应:", res);
+                // 🌟 传递当前选中的部门（null 或 "全部" 表示所有部门）
+                const res = await pywebview.api.get_unread_count(sourceName || activeSource.value);
+                console.log("📊 未读数量响应:", res, "筛选:", sourceName || activeSource.value);
                 if (res.status === "success") {
                   unreadCount.value = res.count;
                 } else {

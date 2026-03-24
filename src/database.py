@@ -522,6 +522,41 @@ class DatabaseManager:
             row = cursor.fetchone()
             return row[0] if row else 0
 
+    def get_first_unread(self, source_names: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+        """获取第一个未读文章（按时间降序，最新的未读优先）
+
+        Args:
+            source_names: 可选的来源筛选列表（用于订阅模式）
+
+        Returns:
+            未读文章字典，如果没有则返回 None
+        """
+        with self._get_read_connection() as conn:
+            cursor = conn.cursor()
+
+            if source_names and len(source_names) > 0:
+                placeholders = ','.join('?' * len(source_names))
+                query = f"""
+                    SELECT * FROM articles
+                    WHERE is_read = 0 AND source_name IN ({placeholders})
+                    ORDER BY exact_time DESC, date DESC
+                    LIMIT 1
+                """
+                cursor.execute(query, tuple(source_names))
+            else:
+                cursor.execute("""
+                    SELECT * FROM articles
+                    WHERE is_read = 0
+                    ORDER BY exact_time DESC, date DESC
+                    LIMIT 1
+                """)
+
+            row = cursor.fetchone()
+            if row:
+                columns = [desc[0] for desc in cursor.description]
+                return dict(zip(columns, row))
+            return None
+
     def get_article_count_by_source(self, source_name: str) -> int:
         """查询指定来源的在库文章数（用于冷启动判断）"""
         with self._get_read_connection() as conn:

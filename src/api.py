@@ -664,8 +664,11 @@ class Api:
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
-    def get_unread_count(self) -> dict:
+    def get_unread_count(self, source_name: str = None) -> dict:
         """获取未读文章数量（直接从数据库统计，不依赖前端分页数据）
+
+        Args:
+            source_name: 可选的部门筛选（单个来源）
 
         Returns:
             {"status": "success", "count": int}
@@ -673,15 +676,56 @@ class Api:
         try:
             # 获取用户订阅的来源列表
             subscribed_sources = self.config_service.get('subscribedSources', None)
-            logger.info(f"📊 获取未读数量 - 订阅来源: {subscribed_sources}")
+
+            # 🌟 如果指定了单个部门，优先使用该部门
+            if source_name and source_name != "全部":
+                filter_sources = [source_name]
+            elif subscribed_sources and len(subscribed_sources) > 0:
+                filter_sources = subscribed_sources
+            else:
+                filter_sources = None
+
+            logger.info(f"📊 获取未读数量 - 筛选来源: {filter_sources}")
 
             # 从数据库直接统计未读数量
-            count = db.get_unread_count(source_names=subscribed_sources)
+            count = db.get_unread_count(source_names=filter_sources)
             logger.info(f"📊 未读数量统计结果: {count}")
             return {"status": "success", "count": count}
         except Exception as e:
             logger.error(f"获取未读数量失败: {e}", exc_info=True)
             return {"status": "error", "message": str(e), "count": 0}
+
+    def get_first_unread_url(self, source_name: str = None) -> dict:
+        """获取第一个未读文章的 URL（用于前端定位滚动）
+
+        Args:
+            source_name: 可选的部门筛选（单个来源）
+
+        Returns:
+            {"status": "success", "url": str, "id": int} 或 {"status": "success", "found": false}
+        """
+        try:
+            subscribed_sources = self.config_service.get('subscribedSources', None)
+
+            # 🌟 如果指定了单个部门，优先使用该部门
+            if source_name and source_name != "全部":
+                filter_sources = [source_name]
+            elif subscribed_sources and len(subscribed_sources) > 0:
+                filter_sources = subscribed_sources
+            else:
+                filter_sources = None
+
+            article = db.get_first_unread(source_names=filter_sources)
+
+            if article:
+                logger.info(f"📊 找到未读文章: {article['title'][:30]}...")
+                return {"status": "success", "url": article['url'], "id": article['id']}
+            else:
+                logger.info("📊 没有找到未读文章")
+                return {"status": "success", "found": False}
+        except Exception as e:
+            logger.error(f"获取未读文章失败: {e}", exc_info=True)
+            return {"status": "error", "message": str(e), "found": False}
 
     def regenerate_summary(self, article_id: int) -> Dict[str, Any]:
         """
