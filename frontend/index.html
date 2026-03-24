@@ -3520,6 +3520,7 @@
         pointer-events: none;
         transition: opacity 0.5s ease;
         overflow: hidden;
+        z-index: 10; /* 置顶显示 */
       }
       /* 彩虹渐变放在伪元素中，可以被 overflow: hidden 裁剪成圆形 */
       .aurora-light::before {
