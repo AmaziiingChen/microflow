@@ -585,7 +585,7 @@ class DatabaseManager:
             return dict(row) if row else None
 
     def search_articles(self, keyword: str, limit: int = 50, source_name: Optional[str] = None, favorites_only: bool = False) -> List[Dict]:
-        """搜索文章"""
+        """搜索文章（支持搜索AI总结标签）"""
         with self._get_read_connection() as conn:
             cursor = conn.cursor()
 
@@ -605,14 +605,17 @@ class DatabaseManager:
                 and_conditions = []
                 for term in and_terms:
                     like_term = f"%{term}%"
-                    # 🌟 核心修改：在 SQL 条件中加入 attachments 字段
-                    # 这样搜索文件名（如 "实验报告"）或后缀（如 ".zip"）都能匹配到
+                    # 🌟 核心修改：添加标签搜索支持
+                    # 标签格式：【标签名】，存储在 summary 字段开头
+                    # 使用 SQLite 的 substr 和 instr 函数提取标签进行匹配
                     term_cond = ("(title LIKE ? OR date LIKE ? OR raw_text LIKE ? OR summary LIKE ? "
                                  "OR department LIKE ? OR category LIKE ? OR source_name LIKE ? "
-                                 "OR attachments LIKE ?)")
+                                 "OR attachments LIKE ? "
+                                 # 🌟 新增：专门搜索标签部分（summary 中【】内的内容）
+                                 f"OR (summary LIKE '%【%{term}%】%' OR summary LIKE '%【{term}%'))")
                     and_conditions.append(term_cond)
 
-                    # 🌟 注意：这里必须改成 * 8，因为括号内现在有 8 个问号
+                    # 🌟 现在有 8 个问号 + 2 个内嵌条件
                     params.extend([like_term] * 8)
 
                 sql_or_conditions.append("(" + " AND ".join(and_conditions) + ")")

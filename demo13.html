@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Apple 级极简聆听环升级 Demo</title>
+    <style>
+      :root {
+        /* 定义 Apple 原生霓虹色系，饱和度极高 */
+        --color-blue: #0a84ff;
+        --color-purple: #bf5af2;
+        --color-orange: #ff9f0a;
+        --color-green: #32d74b;
+
+        --bg-light: #f2f2f7;
+      }
+
+      body {
+        margin: 0;
+        background-color: var(--bg-light);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      }
+
+      /* ============================================================
+       【极简聆听环防抖容器】
+       ============================================================ */
+      .mic-status-wrapper {
+        position: relative;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background-color: #000000;
+        box-sizing: border-box;
+
+        /* 🌟 核心防抖：用伪元素来实现彩色圆环和阴影动画，绝不影响 DOM 布局 */
+      }
+
+      /* ============================================================
+       Option 3: 灵动极光呼吸环 (最推荐，显示最清楚) 🔥
+       ============================================================ */
+      .mic-status-wrapper::after {
+        content: "";
+        position: absolute;
+        /* 🌟 魔法：让伪元素比原来稍微大一点点，形成外圈发光 */
+        inset: -4px;
+        border-radius: 50%;
+        box-sizing: border-box;
+
+        /* 1. 🌟 绝对的彩色多色弧形 (Conic Gradient) */
+        background: conic-gradient(
+          var(--color-blue),
+          var(--color-purple),
+          var(--color-orange),
+          var(--color-green),
+          var(--color-blue)
+        );
+
+        /* 2. 🌟 核心修复：引入弥散柔光阴影，让颜色在白底上"炸"出来 */
+        box-shadow:
+          0 4px 14px color-mix(in srgb, var(--color-blue) 35%, transparent),
+          0 0 10px color-mix(in srgb, var(--color-purple) 25%, transparent);
+
+        /* 3. 极简呼吸动画引擎 */
+        animation: listening-breathe 2s cubic-bezier(0.42, 0, 0.58, 1) infinite;
+      }
+
+      /* 内部黑色核心防护遮罩 (确保中心绝对纯黑) */
+      .mic-inner-core {
+        position: absolute;
+        inset: -1px; /* 挡住彩色环的内沿 */
+        border-radius: 50%;
+        background-color: #000;
+        z-index: 5;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        color: rgba(255, 255, 255, 0.6);
+      }
+
+      /* 图标大小微调 */
+      .icon-mic {
+        width: 22px;
+        height: 22px;
+      }
+
+      /* ============================================================
+       🍎 极简平滑呼吸 Keyframes (無需複雜Siri動畫)
+    */
+      @keyframes listening-breathe {
+        0%,
+        100% {
+          /* 默认大小，阴影收敛 */
+          transform: scale(0.98);
+          opacity: 0.8;
+          box-shadow:
+            0 4px 10px color-mix(in srgb, var(--color-blue) 30%, transparent),
+            0 0 8px color-mix(in srgb, var(--color-purple) 20%, transparent);
+        }
+        50% {
+          /* 稍微放大，阴影向外扩散弥散，形成吸睛的光晕炸开感 */
+          transform: scale(1.1);
+          opacity: 1;
+          box-shadow:
+            0 8px 18px color-mix(in srgb, var(--color-blue) 45%, transparent),
+            0 0 14px color-mix(in srgb, var(--color-purple) 30%, transparent);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="mic-status-wrapper" id="mic-status">
+      <div class="mic-inner-core">
+        <svg
+          class="icon-mic"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+          <line x1="12" y1="19" x2="12" y2="23"></line>
+          <line x1="8" y1="23" x2="16" y2="23"></line>
+        </svg>
+      </div>
+    </div>
+  </body>
+</html>

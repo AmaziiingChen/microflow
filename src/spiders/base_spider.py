@@ -211,12 +211,20 @@ class BaseSpider(ABC):
         content_div = soup.find('div', class_='rich_media_content', id='js_content')
         body_text = ""
         body_html = ""
+        images = []  # 🌟 新增：提取图片链接列表
         if content_div:
             # 保存原始 HTML（用于纯图片检测）
             body_html = str(content_div)
             # 提取纯文本
             for tag in content_div.find_all(['script', 'style']): tag.decompose()
             body_text = content_div.get_text(separator='\n', strip=True)
+
+            # 🌟 提取所有图片链接
+            for img in content_div.find_all('img'):
+                # 微信图片的真实地址在 data-src 属性中
+                img_url = img.get('data-src') or img.get('src')
+                if img_url and img_url.startswith('http'):
+                    images.append(img_url)
 
         # 🌟 核心升级：直接从 JS 变量中提取精确的 Unix 时间戳
         exact_time = ""
@@ -241,6 +249,7 @@ class BaseSpider(ABC):
 
         return {
             'title': title, 'url': url, 'body_text': body_text, 'body_html': body_html,
+            'images': images,  # 🌟 新增：图片链接列表
             'attachments': [], 'source_name': self.SOURCE_NAME, 'exact_time': exact_time
         }
     # --- 附件处理逻辑（保留自你原版） ---

@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="no-referrer" />
     <title>Microflow</title>
     <!-- 🌟 使用本地库文件，避免 CDN 网络问题 -->
     <script src="libs/vue.global.js"></script>
@@ -6410,6 +6411,7 @@
                 let parsedTags = [];
                 let parsedBody = item.summary || "无总结内容";
 
+                // 🌟 优先检测标签格式（后端已将标签写入 summary）
                 if (parsedBody.includes("【")) {
                   const lines = parsedBody.split("\n");
                   const firstLine = lines[0].trim();
@@ -6419,6 +6421,14 @@
                       parsedTags = matches.map((t) => t.replace(/[【】]/g, ""));
                     }
                     parsedBody = lines.slice(1).join("\n").trim();
+                  }
+                }
+
+                // 🌟 向后兼容：如果没提取到标签但有图片内容，使用硬编码标签
+                if (parsedTags.length === 0 && (parsedBody.includes('<img') || parsedBody.includes('<div class="pure-image-content"'))) {
+                  parsedTags = ["图文"];
+                  if (item.url && item.url.includes('mp.weixin.qq.com')) {
+                    parsedTags.push("微信文章");
                   }
                 }
 
@@ -7489,6 +7499,7 @@
               let parsedAttachments = [];
 
               // 1. 提取标签和正文
+              // 🌟 优先检测标签格式（后端已将标签写入 summary）
               if (parsedBody.includes("【")) {
                 const lines = parsedBody.split("\n");
                 const firstLine = lines[0].trim();
@@ -7498,6 +7509,14 @@
                     parsedTags = matches.map((t) => t.replace(/[【】]/g, ""));
                   }
                   parsedBody = lines.slice(1).join("\n").trim();
+                }
+              }
+
+              // 🌟 向后兼容：如果没提取到标签但有图片内容，使用硬编码标签
+              if (parsedTags.length === 0 && (parsedBody.includes('<img') || parsedBody.includes('<div class="pure-image-content"'))) {
+                parsedTags = ["图文"];
+                if (item.url && item.url.includes('mp.weixin.qq.com')) {
+                  parsedTags.push("微信文章");
                 }
               }
 
@@ -7560,7 +7579,18 @@
               let parsedBody = item.summary || "无总结内容";
               let parsedAttachments = [];
 
-              if (parsedBody.includes("【")) {
+              // 🌟 新增：检测纯图片内容（包含 HTML 标签）
+              const isPureImageContent = parsedBody.includes('<img') || parsedBody.includes('<div class="pure-image-content"');
+
+              if (isPureImageContent) {
+                // 纯图片内容：添加标签，直接使用 HTML
+                parsedTags = ["图文"];
+                // 🌟 如果来自微信公众号，额外添加标签
+                if (item.url && item.url.includes('mp.weixin.qq.com')) {
+                  parsedTags.push("微信文章");
+                }
+                // parsedBody 保持原样，包含图片 HTML
+              } else if (parsedBody.includes("【")) {
                 const lines = parsedBody.split("\n");
                 const firstLine = lines[0].trim();
                 if (firstLine.startsWith("【")) {
@@ -7785,6 +7815,11 @@
             // --- 优化版 renderMarkdown：先解析 Markdown，后处理自定义标签 ---
             const renderMarkdown = (text) => {
               if (!text) return "无总结内容";
+
+              // 🌟 新增：检测纯图片内容（包含 <img 标签），直接返回 HTML
+              if (text.includes('<img') || text.includes('<div class="pure-image-content"')) {
+                return text;
+              }
 
               // 第一步：先用 marked 解析 Markdown（此时 <date> 等标签会被保留为文本）
               let html = marked.parse(text);

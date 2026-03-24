@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Apple Classic Siri 动效 Demo</title>
+    <style>
+      :root {
+        /* 定义 Siri 经典的莫兰迪霓虹色系 */
+        --siri-blue: #0a84ff; /* 系统蓝 */
+        --siri-purple: #bf5af2; /* 系统紫 */
+        --siri-pink: #ff375f; /* 系统红/粉 */
+        --siri-cyan: #64d2ff; /* 系统青 */
+
+        --bg-dark: #000000; /* Siri 只有在纯黑底色下才最尊贵 */
+
+        /* 🌟 核心：Q弹爆发的 Apple 物理曲线 */
+        --curve-siri-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+        /* 灵动的呼吸曲线 (先慢后快，平滑循环) */
+        --curve-siri-breathe: cubic-bezier(0.42, 0, 0.58, 1);
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: var(--bg-dark);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      }
+
+      /* ============================================================
+       【交互容器】
+       ============================================================ */
+      .siri-wrapper {
+        position: relative;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 120px;
+        height: 120px;
+      }
+
+      /* ============================================================
+       🍎 核心：Siri 按钮主体 (静默态 -> 激活态)
+       ============================================================ */
+      .siri-btn {
+        position: relative;
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        cursor: pointer;
+        overflow: visible; /* 必须溢出，容纳外扩的波形 */
+
+        /* 🌟 默认状态：极简黑，一圈极其微弱的灰边 */
+        background-color: #000;
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
+
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        /* 硬件加速，确保Q弹动画丝滑 */
+        transition: all 0.5s var(--curve-siri-pop);
+        -webkit-tap-highlight-color: transparent;
+        z-index: 10;
+      }
+
+      /* 内部麦克风图标 (静默态可见) */
+      .siri-btn .icon-mic {
+        width: 24px;
+        height: 24px;
+        color: rgba(255, 255, 255, 0.6);
+        transition: all 0.3s ease;
+      }
+
+      /* ============================================================
+       🌟 封神细节：Siri 激活态 (is-listening)
+       ============================================================ */
+      .siri-wrapper.is-listening .siri-btn {
+        /* 1. 激活瞬间：按钮整体爆发放大，并产生强烈的彩色光晕 */
+        transform: scale(1.15);
+        background-color: rgba(255, 255, 255, 0.15); /* 按钮本身变透明 */
+        box-shadow: 0 0 40px -5px rgba(10, 132, 255, 0.6); /* 增加同色弥散柔光 */
+      }
+
+      /* 激活时，麦克风图标变成白色隐藏（融入波形中） */
+      .siri-wrapper.is-listening .siri-btn .icon-mic {
+        opacity: 0;
+        transform: scale(0.5);
+      }
+
+      /* ============================================================
+       📸 Z轴多层波形引擎 (The Waveform Engine)
+       ============================================================ */
+      /* 所有波形的基础设置 */
+      .siri-waveform {
+        position: absolute;
+        inset: -15px; /* 默认向外扩展 15px */
+        border-radius: 50%;
+        filter: blur(12px); /* 🌟 关键：极高模糊度，让它们看起来像气泡 */
+        opacity: 0; /* 默认隐藏 */
+        transition: opacity 0.4s ease;
+        z-index: 5;
+        pointer-events: none; /* 动画不能影响点击 */
+      }
+
+      /* 🌟 当激活时：显示波形并应用错落的动画 */
+      .siri-wrapper.is-listening .siri-waveform {
+        opacity: 1;
+      }
+
+      /* 定义 4 层各具灵魂的声波层 
+       渐变使用了 conic-gradient，让颜色像转轮一样混合
+    */
+
+      /* 第1层：核心蓝青层 (最底) */
+      .siri-waveform-1 {
+        background: conic-gradient(
+          from 180deg,
+          var(--siri-blue) 0%,
+          var(--siri-cyan) 40%,
+          transparent 60%
+        );
+        mix-blend-mode: screen; /* 屏幕混合，越叠越亮 */
+      }
+
+      /* 第2层：青紫层 */
+      .siri-waveform-2 {
+        background: conic-gradient(
+          from 220deg,
+          var(--siri-cyan) 0%,
+          var(--siri-purple) 50%,
+          transparent 80%
+        );
+        mix-blend-mode: color-dodge; /* 颜色减淡，产生极其强烈的高亮 */
+      }
+
+      /* 第3层：粉蓝层 */
+      .siri-waveform-3 {
+        background: conic-gradient(
+          from 90deg,
+          var(--siri-pink) 0%,
+          var(--siri-blue) 60%,
+          transparent 90%
+        );
+        mix-blend-mode: screen;
+      }
+
+      /* 第4层：核心紫粉层 (最顶) */
+      .siri-waveform-4 {
+        background: conic-gradient(
+          from 10deg,
+          var(--siri-purple) 0%,
+          var(--siri-pink) 30%,
+          transparent 70%
+        );
+        mix-blend-mode: plus-lighter; /* 加色混合，让中心泛白 */
+      }
+
+      /* ============================================================
+       🍎 灵动核心：物理呼吸与形变 Keyframes
+       让这 4 层图标产生错落、Q弹、不规则的律动
+    */
+
+      .siri-wrapper.is-listening .siri-waveform-1 {
+        /* 应用动画：旋转 + 呼吸 + 不规则形变 */
+        animation:
+          siri-spin 2s linear infinite,
+          /* 匀速转圈模拟极光流转 */ siri-breathe-1 1.2s
+            var(--curve-siri-breathe) infinite; /* 灵动呼吸 */
+      }
+
+      .siri-wrapper.is-listening .siri-waveform-2 {
+        animation:
+          siri-spin-rev 1.8s linear infinite,
+          /* 反向旋转，产生错落感 */ siri-breathe-2 1.4s
+            var(--curve-siri-breathe) infinite;
+      }
+
+      .siri-wrapper.is-listening .siri-waveform-3 {
+        animation:
+          siri-spin 2.5s linear infinite,
+          siri-breathe-3 1.1s var(--curve-siri-breathe) infinite;
+      }
+
+      .siri-wrapper.is-listening .siri-waveform-4 {
+        animation:
+          siri-spin-rev 2.2s linear infinite,
+          siri-breathe-4 1.3s var(--curve-siri-breathe) infinite;
+      }
+
+      /* 旋转动画 */
+      @keyframes siri-spin {
+        from {
+          transform: rotate(0deg);
+        }
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @keyframes siri-spin-rev {
+        from {
+          transform: rotate(360deg);
+        }
+        to {
+          transform: rotate(0deg);
+        }
+      }
+
+      /* 🌟 大师细节：每一层的呼吸 Keyframes 都完全不同
+       不仅是 scale（放大倍数）错落，连 border-radius（圆角拟物）都在变化，
+       模拟声音不规则波动时等离子体挤压拉伸的肉感。
+    */
+
+      /* 层 1：蓝青层 - 稳重地上下波动 */
+      @keyframes siri-breathe-1 {
+        0%,
+        100% {
+          transform: scale(0.95) translateY(0px);
+          border-radius: 50% 50% 48% 52%;
+          opacity: 0.8;
+        }
+        50% {
+          transform: scale(1.18) translateY(2px);
+          border-radius: 48% 52% 52% 48%;
+          opacity: 1;
+        }
+      }
+
+      /* 层 2：青紫层 - 剧烈挤压呼吸 */
+      @keyframes siri-breathe-2 {
+        0%,
+        100% {
+          transform: scale(1) translateY(0px);
+          border-radius: 46% 54% 50% 50%;
+          opacity: 0.6;
+        }
+        50% {
+          transform: scale(1.25) translateY(-3px);
+          border-radius: 54% 46% 54% 46%;
+          opacity: 0.9;
+        }
+      }
+
+      /* 层 3：粉蓝层 - 错落飞出 */
+      @keyframes siri-breathe-3 {
+        0%,
+        100% {
+          transform: scale(0.9) translateX(0px);
+          border-radius: 50%;
+          opacity: 0.7;
+        }
+        50% {
+          transform: scale(1.22) translateX(4px);
+          border-radius: 52% 48% 50% 50%;
+          opacity: 1;
+        }
+      }
+
+      /* 层 4：紫粉层 (核心层) - 轻微高频脉冲 */
+      @keyframes siri-breathe-4 {
+        0%,
+        100% {
+          transform: scale(0.85);
+          border-radius: 50% 48% 50% 50%;
+          opacity: 0.9;
+        }
+        50% {
+          transform: scale(1.1) translateY(1px);
+          border-radius: 48% 52% 48% 52%;
+          opacity: 1;
+        }
+      }
+
+      /* 提示文字 */
+      .label {
+        position: absolute;
+        bottom: -40px;
+        font-size: 13px;
+        color: rgba(255, 255, 255, 0.4);
+        font-weight: 500;
+        letter-spacing: 0.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="siri-wrapper" id="siri-app">
+      <div class="siri-btn" id="siri-btn">
+        <svg
+          class="icon-mic"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+          <line x1="12" y1="19" x2="12" y2="23"></line>
+          <line x1="8" y1="23" x2="16" y2="23"></line>
+        </svg>
+      </div>
+
+      <div class="siri-waveform siri-waveform-1"></div>
+      <div class="siri-waveform siri-waveform-2"></div>
+      <div class="siri-waveform siri-waveform-3"></div>
+      <div class="siri-waveform siri-waveform-4"></div>
+
+      <span class="label">召唤 Siri</span>
+    </div>
+
+    <script>
+      const wrapper = document.getElementById("siri-app");
+      const btn = document.getElementById("siri-btn");
+
+      // 🌟 交互逻辑：点击切换激活/静默状态
+      btn.addEventListener("click", () => {
+        // 切换 is-listening 类，CSS 会瞬间爆发动画
+        const isListening = wrapper.classList.toggle("is-listening");
+
+        // 模拟状态反馈
+        console.log(isListening ? "Siri: 正在聆听..." : "Siri: 进入静默。");
+      });
+    </script>
+  </body>
+</html>

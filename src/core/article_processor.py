@@ -93,7 +93,7 @@ class ArticleProcessor:
     AI_FAILURE_PREFIXES = ("❌", "⏳", "⚠️")
 
     # 纯图片内容默认摘要
-    PURE_IMAGE_SUMMARY = '【系统提示】这是一篇纯图片形式的通知，AI 无法提取文字摘要，请直接点击"查看原文"阅读详情。'
+    PURE_IMAGE_SUMMARY = ""
 
     # Worker 配置
     WORKER_COUNT = 1
@@ -275,28 +275,69 @@ class ArticleProcessor:
         # 2. 提取正文
         raw_text = detail.get("body_text", "")
         body_html = detail.get("body_html", "")
+        images = detail.get("images", [])  # 🌟 新增：获取图片链接列表
 
         # 🌟 纯图片内容检测标记
         is_pure_image = False
+        pure_image_html = ""  # 🌟 纯图片内容的 HTML
 
         # 🌟 纯图片内容防御：如果 body_text 为空，检查 HTML 中是否有实际文字
         if not raw_text or len(raw_text.strip()) < 10:
             # 尝试从 HTML 中提取纯文本
             if body_html:
                 from bs4 import BeautifulSoup
+
                 try:
-                    soup = BeautifulSoup(body_html, 'html.parser')
-                    extracted_text = soup.get_text(strip=True, separator=' ')
+                    soup = BeautifulSoup(body_html, "html.parser")
+                    extracted_text = soup.get_text(strip=True, separator=" ")
                     # 检查是否包含图片标签
-                    has_images = bool(soup.find('img'))
+                    has_images = bool(soup.find("img"))
 
                     # 如果 HTML 中提取的文本也不够长
                     if len(extracted_text) < 10:
                         if has_images:
-                            # 纯图片内容：设置标记，使用默认摘要
+                            # 纯图片内容：提取图片链接，生成图片 HTML
                             is_pure_image = True
                             raw_text = "[纯图片内容]"
-                            logger.info(f"检测到纯图片内容，使用默认摘要: {ctx.title}")
+
+                            # 🌟 从 HTML 中提取所有图片链接
+                            if not images:
+                                for img in soup.find_all("img"):
+                                    img_url = img.get("data-src") or img.get("src")
+                                    if img_url and img_url.startswith(  # type:ignore
+                                        "http"
+                                    ):  # type:ignore
+                                        images.append(img_url)
+
+                            # 生成图片 HTML（添加 referrerpolicy 绕过微信防盗链）
+                            if images:
+                                img_tags = "".join(
+                                    [
+                                        f'<img src="{img_url}" referrerpolicy="no-referrer" alt="文章图片" style="max-width: 100%; height: auto; margin: 8px 0; border-radius: 8px;" />'
+                                        for img_url in images
+                                    ]
+                                )
+                                # 🌟 生成带标签的 summary，便于搜索
+                                # 检测是否来自微信公众号
+                                is_wechat = 'mp.weixin.qq.com' in ctx.url
+                                if is_wechat:
+                                    tags_line = "【图文】【微信文章】\n"
+                                else:
+                                    tags_line = "【图文】\n"
+                                pure_image_html = f'{tags_line}<div class="pure-image-content" style="text-align: center;">{img_tags}</div>'
+                                logger.info(
+                                    f"检测到纯图片内容，已提取 {len(images)} 张图片: {ctx.title}"
+                                )
+                            else:
+                                # 无图片，只添加标签
+                                is_wechat = 'mp.weixin.qq.com' in ctx.url
+                                if is_wechat:
+                                    pure_image_html = "【图文】【微信文章】"
+                                else:
+                                    pure_image_html = "【图文】"
+                                logger.info(
+                                    f"检测到纯图片内容（未能提取图片）: {ctx.title}"
+                                )
                         else:
                             logger.info(f"跳过内容过短且无图片的文章: {ctx.title}")
                             return False, "content_too_short", None
@@ -331,10 +372,10 @@ class ArticleProcessor:
             ai_completed = self._stats["ai_completed"]
             ai_total = self._stats["ai_total"]
 
-        # 7. 🌟 纯图片内容：跳过 AI 调用，使用默认摘要
+        # 7. 🌟 纯图片内容：跳过 AI 调用，使用图片 HTML 作为摘要
         if is_pure_image:
-            summary = self.PURE_IMAGE_SUMMARY
-            logger.info(f"[{ctx.source_name}] 纯图片内容，使用默认摘要: {ctx.title}")
+            summary = pure_image_html  # 使用图片 HTML
+            logger.info(f"[{ctx.source_name}] 纯图片内容，已生成图片摘要: {ctx.title}")
             # 纯图片内容也计入完成进度
             with self._stats_lock:
                 self._stats["ai_completed"] += 1
