@@ -3511,7 +3511,7 @@
         /* 🌟 允许彩虹外扩显示 */
         overflow: visible !important;
       }
-      /* 4. 🌈 彩虹极光动画：柔和、旋转 + 中间镂空 */
+      /* 4. 🌈 彩虹极光动画：柔和、旋转 */
       .aurora-light {
         position: absolute;
         inset: -4px;
@@ -3530,21 +3530,6 @@
         opacity: 0;
         pointer-events: none;
         transition: opacity 0.5s ease;
-        /* 🌟 中间镂空：使用径向渐变 mask */
-        -webkit-mask: radial-gradient(
-          circle,
-          transparent 0%,
-          transparent 65%,
-          black 65%,
-          black 100%
-        );
-        mask: radial-gradient(
-          circle,
-          transparent 0%,
-          transparent 65%,
-          black 65%,
-          black 100%
-        );
       }
 
       .btn-check.loading .aurora-light {
