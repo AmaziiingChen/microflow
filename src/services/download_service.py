@@ -1,5 +1,6 @@
 """文件下载服务 - 负责附件下载和快照保存"""
 
+import os
 import re
 import base64
 import logging
@@ -182,6 +183,12 @@ class DownloadService:
             if "," in b64_data:
                 _, encoded = b64_data.split(",", 1)
                 image_data = base64.b64decode(encoded)
+
+                # 🌟 修复：如果文件已存在，先删除再写入（解决替换不生效的问题）
+                if os.path.exists(target_path):
+                    os.remove(target_path)
+                    logger.info(f"已删除旧文件: {target_path}")
+
                 with open(target_path, "wb") as f:
                     f.write(image_data)
                 return {"status": "success", "message": "快照保存成功！"}

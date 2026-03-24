@@ -74,6 +74,7 @@ class Api:
         # 🌟 核心组件：文章处理器（传入回调函数用于唤醒窗口）
         self.article_processor = ArticleProcessor(
             self.llm, db,
+            on_task_complete=self._on_task_complete,  # 🌟 新增：任务完成回调
             on_article_processed=self._on_article_processed,
             on_progress=self._push_ai_progress  # 🌟 新增：AI 进度回调
         )
@@ -153,6 +154,46 @@ class Api:
         except Exception as e:
             logger.warning(f"AI 进度推送失败: {e}")
 
+    def _on_task_complete(self, success: bool, reason: str, article_data: Optional[Dict[str, Any]]):
+        """
+        单个任务完成后的回调（无论成功失败）：检查是否所有任务都已完成
+
+        Args:
+            success: 是否成功入库
+            reason: 结果原因（new, updated, unchanged, detail_failed 等）
+            article_data: 文章数据（如果成功入库）
+        """
+        try:
+            # 获取最新统计
+            stats = self.article_processor.get_stats()
+            processed = stats.get("processed", 0)
+            submitted = stats.get("submitted", 0)
+            ai_total = stats.get("ai_total", 0)
+            ai_completed = stats.get("ai_completed", 0)
+
+            logger.info(f"📋 任务完成回调: success={success}, reason={reason}, processed={processed}/{submitted}, ai={ai_completed}/{ai_total}")
+
+            # 如果所有任务都处理完了
+            if submitted > 0 and processed >= submitted:
+                # 如果没有 AI 任务，或者所有 AI 任务都完成了
+                if ai_total == 0 or ai_completed >= ai_total:
+                    logger.info(f"✅ 所有任务处理完成，准备关闭加载状态: processed={processed}/{submitted}, ai_total={ai_total}")
+                    # 通知前端关闭加载状态
+                    if webview.windows:
+                        js_result = webview.windows[0].evaluate_js("""
+                            if (window.updatePyProgress) {
+                                window.updatePyProgress(0, 0, '');
+                                'success';
+                            } else {
+                                'no_updatePyProgress';
+                            }
+                        """)
+                        logger.info(f"📢 前端 JS 执行结果: {js_result}")
+                    else:
+                        logger.warning("⚠️ webview.windows 为空，无法通知前端")
+        except Exception as e:
+            logger.error(f"❌ 任务完成回调执行失败: {e}")
+
     def _on_article_processed(self, article_data: dict):
         """
         单篇文章处理完成后的回调：根据静音模式决定唤醒窗口或显示托盘红点
@@ -213,6 +254,29 @@ class Api:
                 "cooldown_remaining": 0
             }
 
+        # 🌟 优先检查 API 余额状态（如果配置了 AI）
+        api_key = self.config_service.get('apiKey', '')
+        if api_key:  # 只有配置了 API Key 才检查余额
+            if not self.config_service.get_api_balance_ok():
+                # 余额不足，通知前端显示欠费卡片
+                logger.warning("检测到 API 余额不足，拦截更新请求")
+                try:
+                    if webview.windows:
+                        webview.windows[0].evaluate_js("""
+                            if (window.updateApiBalanceStatus) {
+                                window.updateApiBalanceStatus(false);
+                            }
+                        """)
+                except Exception as e:
+                    logger.debug(f"通知前端显示欠费卡片失败: {e}")
+                return {
+                    "status": "api_balance_error",
+                    "message": "API 余额不足，请充值后重试",
+                    "submitted_count": 0,
+                    "queue_size": 0,
+                    "cooldown_remaining": 0
+                }
+
         # 🌟 安全心跳：每次触发爬虫前，强制校验云端最新配置（触发 304 极速校验）
         try:
             latest_version_data = self.get_version_info(force_refresh=True)
@@ -242,7 +306,7 @@ class Api:
         # 🌟 终极防御：如果前端的锁失效了，后端在这里强行拦截
         if is_manual:
             last_fetch = self.daemon_manager._get_last_fetch_time()
-            remaining = 120 - (time.time() - last_fetch)
+            remaining = DaemonManager.MANUAL_UPDATE_COOLDOWN - (time.time() - last_fetch)
             if remaining > 0:
                 logger.warning(f"拦截高频手动刷新，剩余冷却 {remaining:.1f} 秒")
                 return {
@@ -303,19 +367,13 @@ class Api:
                 "cooldown_remaining": self.daemon_manager.get_cooldown_remaining()
             }
 
-        # 🌟 关键修复：爬虫阶段完成后，通知前端切换状态
+        # 🌟 爬虫阶段完成后，通知前端切换状态
+        # 注意：只有当没有新文章时才在这里调用 onSpiderComplete
+        # 有新文章时，由 _on_task_complete 统一处理完成通知
         submitted_count = result.get("submitted_count", 0)
         try:
             if webview.windows:
-                if submitted_count > 0:
-                    # 有新文章，切换到 AI 阶段
-                    webview.windows[0].evaluate_js("""
-                        if (window.onSpiderComplete) {
-                            window.onSpiderComplete(true);
-                        }
-                    """)
-                    logger.debug(f"爬虫完成，已通知前端切换到 AI 阶段（{submitted_count} 篇新文章）")
-                else:
+                if submitted_count == 0:
                     # 无新文章，直接关闭加载状态
                     webview.windows[0].evaluate_js("""
                         if (window.onSpiderComplete) {
@@ -323,6 +381,7 @@ class Api:
                         }
                     """)
                     logger.debug("爬虫完成，已通知前端关闭加载状态（无新文章）")
+                # else: 有新文章时，由 _on_task_complete 处理完成通知
         except Exception as e:
             logger.debug(f"通知前端爬虫完成失败: {e}")
 
@@ -645,6 +704,13 @@ class Api:
         except Exception as e:
             logger.error(f"清除欠费状态失败: {e}")
             return {"status": "error", "message": str(e)}
+
+    def get_cooldown_config(self) -> dict:
+        """获取冷却时间配置"""
+        return {
+            "status": "success",
+            "cooldown_seconds": DaemonManager.MANUAL_UPDATE_COOLDOWN
+        }
 
     def _set_autostart(self, enabled: bool):
         """设置开机自启"""

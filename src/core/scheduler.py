@@ -127,11 +127,8 @@ class SpiderScheduler:
                 # 使用 setattr 动态添加属性（避免 Pylance 警告）
                 setattr(spider, '_requires_intranet', requires_intranet)
                 self.active_spiders.append(spider)
-                section_info = f" ({section_count} 个板块)" if section_count > 1 else ""
-                network_req = "校园网" if requires_intranet else "公网"
-                logger.info(f"✅ 爬虫已加载: {spider.SOURCE_NAME}{section_info} [{network_req}]")
             except Exception as e:
-                logger.error(f"❌ {spider_cls.__name__} 初始化失败: {e}")
+                logger.error(f"{spider_cls.__name__} 初始化失败: {e}")
 
     def estimate_total_tasks(self) -> int:
         """预估总任务数（用于进度条显示）"""
@@ -200,7 +197,7 @@ class SpiderScheduler:
 
         # 1. 尝试获取锁（防止并发调度）
         if not self._update_lock.acquire(blocking=False):
-            logger.warning("⚠️ 拦截到并发请求：当前已有更新任务在运行")
+            logger.warning("拦截到并发请求：当前已有更新任务在运行")
             if is_manual:
                 return {
                     "status": "error",
@@ -221,7 +218,6 @@ class SpiderScheduler:
             if not skip_network_check:
                 network_status = check_network_status()
                 network_desc = get_network_description(network_status)
-                logger.info(f"🌐 网络环境检测: {network_desc}")
 
                 # 无网络：直接返回错误
                 if network_status == NetworkStatus.NO_NETWORK:
@@ -244,7 +240,6 @@ class SpiderScheduler:
 
             # 3. 重置进度计数器并推送初始进度
             self._current_scanned = 0
-            # 🌟 不再发送预估值，total 设为 0，前端只显示已扫描数量
             self._push_progress(0, 0, "正在扫描数据源...")
 
             # 4. 筛选需要执行的爬虫（智能过滤）
@@ -252,15 +247,12 @@ class SpiderScheduler:
             for spider in self.active_spiders:
                 # 订阅过滤：如果指定了 enabled_sources，且当前爬虫不在列表中，则跳过
                 if enabled_sources is not None and spider.SOURCE_NAME not in enabled_sources:
-                    logger.debug(f"⏭️ [{spider.SOURCE_NAME}] 跳过（未在订阅列表中）")
                     continue
 
                 requires_intranet = getattr(spider, '_requires_intranet', False)
 
                 # 智能路由：公网环境下跳过需要校园网的爬虫
                 if network_status == NetworkStatus.PUBLIC_ONLY and requires_intranet:
-                    skip_msg = f"[{spider.SOURCE_NAME}] 跳过（需要校园网，当前仅公网）"
-                    logger.info(f"⏭️ {skip_msg}")
                     skipped_spiders.append(spider.SOURCE_NAME)
                     continue
 
@@ -270,7 +262,6 @@ class SpiderScheduler:
             total_spiders = len(spiders_to_run)
             if spider_progress_callback and total_spiders > 0:
                 try:
-                    # 发送初始通知：0/total，表示开始
                     spider_progress_callback(0, total_spiders, "正在启动...")
                 except Exception as e:
                     logger.debug(f"爬虫进度回调失败: {e}")
@@ -286,7 +277,7 @@ class SpiderScheduler:
                         today_str=today_str,
                         is_manual=is_manual
                     )
-                    futures[future] = (spider.SOURCE_NAME, idx)  # 🌟 保存索引用于进度更新
+                    futures[future] = (spider.SOURCE_NAME, idx)
 
                 # 使用 as_completed 收集结果，并在每个完成时更新进度
                 completed_count = 0
@@ -294,7 +285,7 @@ class SpiderScheduler:
                     source_name, idx = futures[future]
                     completed_count += 1
 
-                    # 🌟 每个爬虫完成时推送进度
+                    # 每个爬虫完成时推送进度
                     if spider_progress_callback:
                         try:
                             spider_progress_callback(completed_count, total_spiders, source_name)
@@ -308,7 +299,6 @@ class SpiderScheduler:
                             errors.extend(error_list)
                         if count > 0:
                             submitted_sources.append(f"{result_name}({count})")
-                        logger.info(f"📊 [{result_name}] 已提交 {count} 篇文章到处理队列")
                     except Exception as e:
                         error_msg = f"[{source_name}] 爬虫执行崩溃: {e}"
                         logger.error(error_msg, exc_info=True)
@@ -316,7 +306,6 @@ class SpiderScheduler:
 
             # 5. 如果需要等待完成
             if wait_for_completion:
-                logger.info("等待所有任务处理完成...")
                 self.article_processor.wait_completion()
 
             # 6. 获取处理器统计
@@ -337,12 +326,6 @@ class SpiderScheduler:
             if skipped_spiders:
                 result["skipped_spiders"] = skipped_spiders
                 result["skip_reason"] = "需要校园网访问"
-
-            # 来源溯源日志
-            if submitted_sources:
-                logger.info(f"✅ 抓取完毕！提交数量: {submitted_count} (来源: {submitted_sources})")
-            else:
-                logger.info(f"✅ 抓取完毕！提交数量: 0 (无新文章)")
 
             return result
 

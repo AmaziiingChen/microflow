@@ -189,7 +189,7 @@
       .header-action h1 {
         font-size: 20px;
         margin: 0;
-        font-weight: 800;
+        font-weight: 600;
       }
       /* 3. 更新按钮：物理形变 */
       /* 3. 更新按钮：物理收缩 */
@@ -202,7 +202,7 @@
         color: white;
         border: none;
         font-size: 13px;
-        font-weight: 700;
+        font-weight: 600;
         cursor: pointer;
         position: relative;
         flex-shrink: 0;
@@ -330,12 +330,10 @@
         box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
       }
 
-      /* ============================================================
-         🌟 新增：iOS 备忘录风格时间标头
-         ============================================================ */
+      /* iOS 备忘录风格时间标头 */
       .date-group-header {
         font-size: 18px;
-        font-weight: 800;
+        font-weight: 600;
         color: #111827;
         margin: 24px 0 12px 6px;
         letter-spacing: 0.5px;
@@ -416,7 +414,7 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        font-weight: 800;
+        font-weight: 600;
         letter-spacing: 1px;
         color: #ffffff;
         line-height: 1;
@@ -567,7 +565,7 @@
       .list-card.announcement-card .list-card-title {
         font-weight: 700;
         color: #b45309;
-        font-size: 20px; /* 🌟 公告卡片独立字体大小，不继承通用样式 */
+        font-size: 20px;
       }
 
       /* 标题行：从 center 改回 flex-start，应对多行标题 */
@@ -650,7 +648,7 @@
 
       .list-card-title {
         font-size: 15px; /* 字体加大，提升阅读直觉 */
-        font-weight: 700;
+        font-weight: 600;
         margin: 0;
         line-height: 1.5;
         transition: color 0.3s ease;
@@ -664,11 +662,11 @@
       }
       /* 未读标题：醒目的红色 */
       .list-card-title.unread {
-        color: #888b93;
+        color: #636366;
       }
       /* 已读标题：保持黑色，不再变灰 */
       .list-card-title.read {
-        color: #888b93;
+        color: #636366;
       }
 
       /* 元数据行：增加统一的 gap */
@@ -694,11 +692,11 @@
       .meta-tag-gray {
         background-color: #f3f4f6;
         color: #808080;
-        padding: 0 6px; /* 🌟 与左侧 AI 标签保持一致 */
-        height: 22px; /* 🌟 核心：高度死死锁定 22px，与左侧 AI 标签完全一致 */
-        border-radius: 6px; /* 🌟 与左侧 AI 标签保持相同的圆角 */
-        font-size: 11px; /* 🌟 与左侧 AI 标签字号一致 */
-        font-weight: 700; /* 🌟 字重与 AI 标签一致 */
+        padding: 0 6px;
+        height: 22px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 600;
         border: none;
 
         /* 🚀 核心修复：文字截断与居中控制 */
@@ -773,7 +771,7 @@
       .provider-info {
         font-size: 12px;
         color: #9ca3af;
-        font-weight: 700;
+        font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.5px;
         white-space: nowrap;
@@ -809,7 +807,7 @@
         border-radius: 7px;
         border: 1px solid #d6deff;
         font-size: 11px;
-        font-weight: 700;
+        font-weight: 600;
         cursor: pointer;
         position: relative;
         transition:
@@ -835,7 +833,7 @@
         border-radius: 7px;
         border: 1px solid #e0d6ff;
         font-size: 11px;
-        font-weight: 700;
+        font-weight: 600;
         cursor: pointer;
         position: relative;
         transition:
@@ -861,7 +859,7 @@
         border-radius: 7px;
         border: 1px solid #c6e0ff;
         font-size: 11px;
-        font-weight: 700;
+        font-weight: 600;
         cursor: pointer;
         position: relative;
         transition:
@@ -887,7 +885,7 @@
         border-radius: 7px;
         border: 1px solid #fecdd3;
         font-size: 11px;
-        font-weight: 700;
+        font-weight: 600;
         cursor: pointer;
         position: relative;
         transition:
@@ -1177,14 +1175,14 @@
 
       .detail-title {
         font-size: 18px;
-        font-weight: 800;
+        font-weight: 600;
         color: #111;
         margin: 0 0 16px 0;
         line-height: 1.4;
         user-select: text;
         -webkit-user-select: text;
         word-break: break-all;
-        overflow-wrap: anywhere; /* 现代浏览器建议使用 anywhere，比 break-word 更强力 */
+        overflow-wrap: anywhere;
       }
 
       /* 彩色标签容器 - 详情页专用 */
@@ -1198,7 +1196,7 @@
         font-size: 12px;
         padding: 3px 8px;
         border-radius: 6px;
-        font-weight: 700;
+        font-weight: 600;
         border: 1px solid transparent;
         flex-shrink: 0;
       }
@@ -1266,16 +1264,16 @@
         border-color: transparent !important;
       } */
 
-      /* 👇 列表卡片类型标签 - 8种莫兰迪配色 */
+      /* 列表卡片类型标签 - 8种莫兰迪配色 */
       .type-tag {
         display: inline-block;
         font-size: 11px;
-        font-weight: 700;
+        font-weight: 600;
         padding: 2px 6px;
         border-radius: 4px;
         margin-right: 6px;
         flex-shrink: 0;
-        vertical-align: 2px; /* 如果在你的屏幕上觉得还不够高，可以改成 3px 或加一句 transform: translateY(-1px); */
+        vertical-align: 2px;
       }
       /* 莫兰迪配色方案 */
       .type-tag.morandi-0 {
@@ -1324,7 +1322,7 @@
         padding: 4px 10px;
         border-radius: 6px;
         font-size: 12px;
-        font-weight: 700;
+        font-weight: 600;
         border: 1px solid #e5e7eb;
       }
 
@@ -1365,7 +1363,7 @@
       }
       .markdown-body strong {
         color: #000;
-        font-weight: 800;
+        font-weight: 600;
       }
       .markdown-body p {
         margin-top: 0; /* 消除段落顶部间距 */
@@ -1374,7 +1372,7 @@
 
       .markdown-body h3 {
         font-size: 16px;
-        font-weight: 800;
+        font-weight: 600;
         color: #111;
         margin-top: 10px;
         margin-bottom: 10px;
@@ -1410,7 +1408,7 @@
       /* 日期标签 - 醒目红色 */
       .md-date {
         color: #e11d48;
-        font-weight: 800;
+        font-weight: 600;
         background: #fff1f2;
         padding: 0 4px;
         border-radius: 3px;
@@ -1419,7 +1417,7 @@
       /* 联系方式标签 - 翠绿色 */
       .md-contact {
         color: #10b981;
-        font-weight: 800;
+        font-weight: 600;
         font-family: "SF Mono", Consolas, monospace;
         font-size: 15px;
         background: #ecfdf5;
@@ -1430,23 +1428,21 @@
       /* 地点标签 - 优雅紫 */
       .md-loc {
         color: #8b5cf6;
-        font-weight: 800;
+        font-weight: 600;
         background: rgba(139, 92, 246, 0.08);
         padding: 0 4px;
         border-radius: 4px;
       }
       .markdown-body a {
-        color: #3b82f6; /* 亮蓝色 */
+        color: #3b82f6;
         text-decoration: none;
-        font-weight: 700;
+        font-weight: 500;
         border-bottom: 1px solid transparent;
         transition: border-bottom-color 0.2s;
         cursor: pointer;
-        /* 顶部稍微亮一点点，底部深一点点 */
         background: #eff6ff;
-        /* 👇 新增：确保链接本身也具备换行权限 */
         word-break: break-all;
-        white-space: normal; /* 确保没有被上级设置为 nowrap */
+        white-space: normal;
       }
 
       .markdown-body a:hover {
@@ -1468,9 +1464,9 @@
         background: #f1f5f9;
         padding: 8px 12px;
         font-size: 12px;
-        font-weight: 700;
+        font-weight: 600;
         color: #64748b;
-        border-bottom: 1px dashed #cbd5e1; /* 虚线更有原始文档的感觉 */
+        border-bottom: 1px dashed #cbd5e1;
         display: flex;
         align-items: center;
         gap: 6px;
@@ -1494,11 +1490,10 @@
       /* 🌟 荧光笔高亮特效：这会让匹配到的关键词在灰色文字中极其耀眼 */
       .snippet-content strong {
         background-color: #fef08a; /* 荧光黄 */
-        color: #854d0e; /* 深焦糖色文字，保证高对比度 */
+        color: #854d0e;
         padding: 0 4px;
         border-radius: 4px;
-        font-weight: 800;
-        /* border-bottom: 2px solid #FDE047; 底部加粗一条线，增强荧光笔质感 */
+        font-weight: 600;
       }
 
       /* 底部悬浮栏 */
@@ -1562,6 +1557,88 @@
       .action-btn:active {
         transform: scale(0.92);
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+
+      /* ============================================================
+         测试API连接状态样式
+         ============================================================ */
+      .connection-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        font-size: 12px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+      }
+
+      .icon-antenna {
+        width: 16px;
+        height: 16px;
+        transition:
+          color 0.4s cubic-bezier(0.25, 1, 0.5, 1),
+          filter 0.4s ease;
+      }
+
+      .status-text {
+        white-space: nowrap;
+      }
+
+      /* 默认/空闲状态 - 次级灰 */
+      .connection-status.idle {
+        color: #8e8e93;
+      }
+      .connection-status.idle .wave-outer,
+      .connection-status.idle .wave-inner {
+        opacity: 0.3;
+      }
+
+      /* 成功/已连接 - Apple System Green */
+      .connection-status.success {
+        color: #34c759;
+      }
+      .connection-status.success .icon-antenna {
+        filter: drop-shadow(0 2px 6px rgba(52, 199, 89, 0.35));
+      }
+
+      /* 错误/断开 - Apple System Red */
+      .connection-status.error {
+        color: #ff3b30;
+      }
+      .connection-status.error .wave-outer,
+      .connection-status.error .wave-inner {
+        opacity: 0.1;
+      }
+      .connection-status.error .icon-antenna {
+        filter: drop-shadow(0 2px 6px rgba(255, 59, 48, 0.35));
+      }
+
+      /* 测试中状态 - Apple System Blue */
+      .connection-status.testing {
+        color: #007aff;
+      }
+      .connection-status.testing .icon-antenna {
+        filter: drop-shadow(0 2px 8px rgba(0, 122, 255, 0.4));
+      }
+
+      .connection-status.testing .wave-inner {
+        animation: antenna-pulse 1.2s infinite ease-in-out;
+      }
+
+      .connection-status.testing .wave-outer {
+        animation: antenna-pulse 1.2s infinite ease-in-out 0.15s;
+      }
+
+      @keyframes antenna-pulse {
+        0% {
+          opacity: 0.15;
+        }
+        40% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0.15;
+        }
       }
 
       .btn-icon {
@@ -1684,7 +1761,7 @@
       }
       .attachments-title {
         font-size: 14px;
-        font-weight: 800;
+        font-weight: 600;
         color: #111;
         margin-bottom: 8px;
       }
@@ -1760,7 +1837,7 @@
         font-size: 11px;
         color: var(--accent-color);
         margin-top: 4px;
-        font-weight: 700;
+        font-weight: 600;
         opacity: 0.8;
       }
       .attachment-card:hover .att-action {
@@ -1831,12 +1908,9 @@
       .settings-header h2 {
         margin: 0;
         font-size: 20px;
-        font-weight: 800;
-        /* 👇 新增以下属性，利用 Flexbox 实现绝对的垂直居中 */
+        font-weight: 600;
         display: flex;
         align-items: center;
-        /* 可选：如果你觉得齿轮和文字有点挤，可以用 gap 替代 SVG 的 margin-right */
-        /* gap: 8px; */
       }
       .form-group {
         margin-bottom: 20px;
@@ -1844,7 +1918,7 @@
       .form-label {
         display: block;
         font-size: 13px;
-        font-weight: 700;
+        font-weight: 600;
         color: var(--text-sub);
         margin-bottom: 8px;
       }
@@ -2861,7 +2935,7 @@
       /* ================= 新增：收藏模式标题样式 ================= */
       .favorite-title {
         font-size: 22px;
-        font-weight: 700;
+        font-weight: 600;
         color: var(--text-main);
         padding: 0 4px;
         margin-bottom: 14px;
@@ -2909,7 +2983,7 @@
         background: #ebebf0;
         color: #3c3c43;
         font-size: 13px;
-        font-weight: 700;
+        font-weight: 600;
         cursor: pointer;
         white-space: nowrap;
         border: none;
@@ -3128,7 +3202,7 @@
 
       .settings-section-title {
         font-size: 12.5px;
-        font-weight: 700;
+        font-weight: 600;
         color: #6b7280;
         margin: 16px 0 8px 4px;
         text-transform: uppercase;
@@ -3730,7 +3804,7 @@
         background: linear-gradient(135deg, #ff5a54 0%, #ff3b30 100%);
         color: #ffffff;
         font-size: 10px;
-        font-weight: 800;
+        font-weight: 700;
         font-family: -apple-system, BlinkMacSystemFont, sans-serif;
 
         /* 🌟 形状升级：让 height 和 min-width 完全相等，这样单个数字时绝对是完美的正圆 */
@@ -3771,6 +3845,148 @@
           transform: scale(1);
           opacity: 1;
         }
+      }
+      /* ============================================================
+         🌟 新增：Apple 级优雅消息提醒引擎 (基于现有的 #app)
+         ============================================================ */
+
+      /* 入场：Q弹重力下坠 */
+      .toast-enter-active {
+        transition:
+          transform 0.65s cubic-bezier(0.34, 1.56, 0.64, 1),
+          opacity 0.4s ease-out;
+        will-change: transform, opacity;
+      }
+
+      /* 退场：丝滑加速溜走 (绝不能Q弹，否则会抽搐) */
+      .toast-leave-active {
+        position: absolute;
+        transition:
+          transform 0.4s cubic-bezier(0.3, 0, 0.8, 0.15),
+          opacity 0.3s ease-out;
+      }
+
+      /* 入场起点：从上方 40px 处开始 */
+      .toast-enter-from {
+        opacity: 0;
+        transform: translateY(-40px) scale(0.9);
+      }
+
+      /* 退场终点：回到上方消失 */
+      .toast-leave-to {
+        opacity: 0;
+        transform: translateY(-30px) scale(0.95);
+      }
+
+      /* 通知悬浮池：全局遮罩层，挂载在 #app 内部的最顶层 */
+      .notification-pool {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        padding-top: 16px;
+        z-index: 10001; /* 必须大于你详情页的 z-index 100 */
+        pointer-events: none; /* 穿透点击，绝不影响下方公文列表 */
+      }
+
+      /* 横幅本体：继承你现有的高级毛玻璃体系 */
+      .apple-toast {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 20px 10px 12px;
+        border-radius: 100px;
+        pointer-events: auto;
+
+        background: rgba(255, 255, 255, 0.75);
+        backdrop-filter: blur(24px) saturate(200%);
+        -webkit-backdrop-filter: blur(24px) saturate(200%);
+
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 255, 255, 1),
+          0 8px 24px rgba(0, 0, 0, 0.06),
+          0 2px 6px rgba(0, 0, 0, 0.02);
+
+        /* 入场动画的目标状态 */
+        transform: translateY(0) scale(1) rotate(0deg);
+        opacity: 1;
+
+        /* 提前创建合成层，防止过渡闪烁 */
+        will-change: transform, opacity;
+      }
+
+      /* ============================================================
+         🎨 Apple 级 Toast 图标与色彩体系
+         ============================================================ */
+      .toast-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        color: #ffffff; /* 统一内部图标为纯白色 */
+        flex-shrink: 0;
+        transition: all 0.3s ease;
+      }
+
+      /* 统一调整图标尺寸：14px 能让实心图标和线框图标达到视觉重量的平衡 */
+      .toast-icon svg {
+        width: 14px;
+        height: 14px;
+      }
+
+      /* 1. 成功 (Success) - Apple System Green */
+      .toast-icon.success {
+        background: #34c759;
+        box-shadow: 0 4px 10px rgba(52, 199, 89, 0.3); /* 独家秘方：同色系弥散光晕 */
+      }
+
+      /* 2. 警告 (Warning) - Apple System Orange */
+      /* 注意：系统警告在浅色模式下绝对不用黄色，黄色白字看不清，必须用橙色 */
+      .toast-icon.warning {
+        background: #ff9500;
+        box-shadow: 0 4px 10px rgba(255, 149, 0, 0.3);
+      }
+
+      /* 3. 错误 (Error) - Apple System Red */
+      .toast-icon.error {
+        background: #ff3b30;
+        box-shadow: 0 4px 10px rgba(255, 59, 48, 0.3);
+      }
+
+      /* 4. 信息 (Info) - Apple System Blue */
+      .toast-icon.info {
+        background: #007aff;
+        box-shadow: 0 4px 10px rgba(0, 122, 255, 0.3);
+      }
+
+      /* 5. 收藏 (Favorite) - Apple Deep Yellow / Dark Orange */
+      /* 为了保证在白字下的对比度，使用了比纯黄略深的橘黄色 */
+      .toast-icon.favorite {
+        background: #ff9f0a;
+        box-shadow: 0 4px 10px rgba(255, 159, 10, 0.3);
+      }
+
+      .toast-content {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      .toast-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: #1d1d1f;
+        line-height: 1.2;
+      }
+      .toast-message {
+        font-size: 12px;
+        font-weight: 400;
+        color: #86868b;
+        margin-top: 2px;
+        white-space: nowrap;
       }
     </style>
   </head>
@@ -3824,14 +4040,90 @@
     </div>
 
     <div id="app" style="display: flex; flex-direction: column; height: 100%">
+      <div class="notification-pool">
+        <transition name="toast">
+          <div
+            class="apple-toast"
+            v-if="toastState.isVisible"
+            :key="toastState.id"
+          >
+            <div class="toast-icon" :class="toastState.type">
+              <svg
+                v-if="toastState.type === 'success'"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="3"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+
+              <svg
+                v-else-if="toastState.type === 'warning'"
+                viewBox="0 0 22 20"
+                fill="currentColor"
+              >
+                <path
+                  d="M13.2931 1.83479L20.7892 14.9335C21.0706 15.4303 21.1999 15.9685 21.1999 16.4872C21.1999 18.1529 19.9329 19.6111 18.0862 19.6111L3.12112 19.6111C1.26698 19.6111 0 18.1529 0 16.4872C0 15.9685 0.132109 15.4326 0.410702 14.9409L7.90676 1.83479C8.49433 0.7969 9.54484 0.265614 10.6074 0.265614C11.6625 0.265614 12.6883 0.781979 13.2931 1.83479ZM9.07578 14.7099C9.07578 15.5398 9.74027 16.0533 10.6172 16.0533C11.4918 16.0533 12.1413 15.5421 12.1413 14.7099C12.1413 13.8904 11.5015 13.3717 10.6172 13.3717C9.73797 13.3717 9.07578 13.8853 9.07578 14.7099ZM9.15227 7.53167L9.32399 11.173C9.37106 11.9517 9.83332 12.3864 10.6172 12.3864C11.3867 12.3864 11.8415 11.954 11.8885 11.158L12.0649 7.53397C12.1119 6.68066 11.5078 6.10582 10.6074 6.10582C9.70242 6.10582 9.1052 6.67836 9.15227 7.53167Z"
+                />
+              </svg>
+
+              <svg
+                v-else-if="toastState.type === 'error'"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="3"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+
+              <svg
+                v-else-if="toastState.type === 'info'"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+
+              <svg
+                v-else-if="toastState.type === 'favorite'"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+              >
+                <path
+                  d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+                />
+              </svg>
+            </div>
+
+            <div class="toast-content">
+              <span class="toast-title">{{ toastState.title }}</span>
+              <span class="toast-message">{{ toastState.message }}</span>
+            </div>
+          </div>
+        </transition>
+      </div>
       <div
         v-show="currentView === 'list'"
         class="list-view"
         @click="handleListClick"
       >
-        <!-- 🎯 爬虫进度条 -->
+        <!-- 🎯 进度条已禁用 -->
+        <!--
         <div
-          v-if="isLoading && updatePhase === 'spider'"
+          v-if="showSpiderProgress"
           style="margin-bottom: 8px; padding: 0 4px"
         >
           <div
@@ -3850,7 +4142,6 @@
               '正在启动...' : '') }}
             </div>
             <div class="progress-right-stats">
-              <!-- 🌟 爬虫阶段只显示已扫描数量，不显示预估值 -->
               <span v-if="spiderProgress.completed > 0">
                 {{ spiderProgress.completed }}
               </span>
@@ -3861,17 +4152,14 @@
             </div>
           </div>
           <div class="progress-track">
-            <!-- 🌟 爬虫阶段使用脉冲动画，不显示具体百分比 -->
             <div class="progress-fill progress-indeterminate"></div>
           </div>
         </div>
 
-        <!-- 🎯 AI 总结进度条 -->
         <div
-          v-if="isLoading && updatePhase === 'ai'"
+          v-if="showAiProgress"
           style="margin-bottom: 8px; padding: 0 4px"
         >
-          <!-- 🌟 标题行：只显示文章标题，不显示其他文字 -->
           <div
             style="
               font-size: 11px;
@@ -3891,14 +4179,12 @@
               {{ aiProgress.detail || '等待处理...' }}
             </div>
           </div>
-          <!-- 进度条 -->
           <div class="progress-track">
             <div
               class="progress-fill"
               :style="{ width: (aiProgress.total > 0 ? Math.min(aiProgress.completed / aiProgress.total * 100, 100) : 0) + '%' }"
             ></div>
           </div>
-          <!-- 🌟 百分比和数量：放在进度条下方右侧 -->
           <div
             style="
               display: flex;
@@ -3919,6 +4205,7 @@
             </template>
           </div>
         </div>
+        -->
 
         <div v-if="statusMsg" class="status-center">{{ statusMsg }}</div>
 
@@ -3968,7 +4255,7 @@
                 margin-bottom: 10px;
               "
             >
-              <span style="font-size: 22px; font-weight: 700; color: #111"
+              <span style="font-size: 22px; font-weight: 600; color: #111"
                 >设置</span
               >
             </div>
@@ -4006,7 +4293,7 @@
                     cursor: pointer;
                     color: var(--accent-color);
                     font-size: 12px;
-                    font-weight: 700;
+                    font-weight: 600;
                   "
                 >
                   {{ showApiKey ? '隐藏' : '显示' }}
@@ -4045,7 +4332,7 @@
               <button
                 class="action-btn"
                 style="
-                  display: flex; /* 改用 flex 方便文字绝对居中 */
+                  display: flex;
                   margin: 10px auto 0;
                   padding: 6px 14px;
                   font-size: 12px;
@@ -4053,12 +4340,103 @@
                   color: var(--text-secondary);
                   border: 1px solid #e5e7eb;
                   border-radius: 6px;
-                  min-width: 110px;
+                  min-width: 140px;
                   height: 34px;
                 "
                 @click="testConnection"
+                :disabled="isTesting"
               >
-                {{ isTesting ? '测试中...' : '测试 API 连接' }}
+                <!-- 连接状态显示 -->
+                <div v-if="isTesting" class="connection-status testing">
+                  <svg
+                    class="icon-antenna"
+                    viewBox="0 0 23 19"
+                    fill="currentColor"
+                  >
+                    <path
+                      class="wave-outer"
+                      d="M0 7.05773C0 9.60255 0.862072 11.9774 2.46764 13.6824C2.95053 14.1919 3.58435 14.1609 3.94343 13.7281C4.29009 13.3206 4.18312 12.8058 3.7974 12.3712C2.55402 10.9907 1.85886 9.11076 1.85886 7.05773C1.85886 5.00781 2.54781 3.13101 3.7974 1.75046C4.18623 1.31591 4.2963 0.801028 3.94343 0.393568C3.58125-0.0360787 2.94432-0.0764489 2.46764 0.439291C0.905547 2.11636 0 4.52222 0 7.05773ZM17.8045 13.7281C18.1635 14.1609 18.7974 14.1919 19.2803 13.6824C20.8858 11.9774 21.7479 9.60255 21.7479 7.05773C21.7479 4.52222 20.8423 2.11636 19.2803 0.439291C18.8036-0.0764489 18.1666-0.0360787 17.8045 0.393568C17.4516 0.801028 17.5617 1.31591 17.9505 1.75046C19.2001 3.13101 19.889 5.00781 19.889 7.05773C19.889 9.11076 19.1939 10.9907 17.9505 12.3712C17.5648 12.8058 17.4578 13.3206 17.8045 13.7281Z"
+                    />
+                    <path
+                      class="wave-inner"
+                      d="M4.24797 7.05773C4.24797 8.51501 4.7083 9.87775 5.53928 10.861C5.97423 11.3754 6.66265 11.3595 7.01908 10.9201C7.35021 10.5157 7.22947 10.0203 6.89833 9.56937C6.39624 8.93056 6.10683 7.9833 6.10683 7.05773C6.10683 6.13216 6.41622 5.20798 6.89833 4.54608C7.2197 4.08534 7.35021 3.59976 7.01908 3.19851C6.66265 2.7591 5.97423 2.73691 5.53928 3.25445C4.7083 4.23771 4.24797 5.60044 4.24797 7.05773ZM14.7288 10.9201C15.0852 11.3595 15.7737 11.3754 16.2086 10.861C17.0396 9.87775 17.4999 8.51501 17.4999 7.05773C17.4999 5.60044 17.0396 4.23771 16.2086 3.25445C15.7737 2.73691 15.0852 2.7591 14.7288 3.19851C14.3977 3.59976 14.5282 4.08534 14.8496 4.54608C15.3317 5.20798 15.6411 6.13216 15.6411 7.05773C15.6411 7.9833 15.3516 8.93056 14.8496 9.56937C14.5184 10.0203 14.3977 10.5157 14.7288 10.9201Z"
+                    />
+                    <path
+                      class="tower"
+                      d="M8.89277 7.05773C8.89277 7.82296 9.318 8.48433 9.96073 8.81056L9.96073 17.4066C9.96073 18.0165 10.3349 18.439 10.8804 18.439C11.4449 18.439 11.7965 18.0325 11.7965 17.4066L11.7965 8.81056C12.4294 8.48433 12.8613 7.8163 12.8613 7.05773C12.8613 5.95695 11.9812 5.06346 10.8804 5.06346C9.77294 5.06346 8.89277 5.95695 8.89277 7.05773Z"
+                    />
+                  </svg>
+                  <span class="status-text">正在测试连接...</span>
+                </div>
+                <div
+                  v-else-if="connectionStatus === 'success'"
+                  class="connection-status success"
+                >
+                  <svg
+                    class="icon-antenna"
+                    viewBox="0 0 23 19"
+                    fill="currentColor"
+                  >
+                    <path
+                      class="wave-outer"
+                      d="M0 7.05773C0 9.60255 0.862072 11.9774 2.46764 13.6824C2.95053 14.1919 3.58435 14.1609 3.94343 13.7281C4.29009 13.3206 4.18312 12.8058 3.7974 12.3712C2.55402 10.9907 1.85886 9.11076 1.85886 7.05773C1.85886 5.00781 2.54781 3.13101 3.7974 1.75046C4.18623 1.31591 4.2963 0.801028 3.94343 0.393568C3.58125-0.0360787 2.94432-0.0764489 2.46764 0.439291C0.905547 2.11636 0 4.52222 0 7.05773ZM17.8045 13.7281C18.1635 14.1609 18.7974 14.1919 19.2803 13.6824C20.8858 11.9774 21.7479 9.60255 21.7479 7.05773C21.7479 4.52222 20.8423 2.11636 19.2803 0.439291C18.8036-0.0764489 18.1666-0.0360787 17.8045 0.393568C17.4516 0.801028 17.5617 1.31591 17.9505 1.75046C19.2001 3.13101 19.889 5.00781 19.889 7.05773C19.889 9.11076 19.1939 10.9907 17.9505 12.3712C17.5648 12.8058 17.4578 13.3206 17.8045 13.7281Z"
+                    />
+                    <path
+                      class="wave-inner"
+                      d="M4.24797 7.05773C4.24797 8.51501 4.7083 9.87775 5.53928 10.861C5.97423 11.3754 6.66265 11.3595 7.01908 10.9201C7.35021 10.5157 7.22947 10.0203 6.89833 9.56937C6.39624 8.93056 6.10683 7.9833 6.10683 7.05773C6.10683 6.13216 6.41622 5.20798 6.89833 4.54608C7.2197 4.08534 7.35021 3.59976 7.01908 3.19851C6.66265 2.7591 5.97423 2.73691 5.53928 3.25445C4.7083 4.23771 4.24797 5.60044 4.24797 7.05773ZM14.7288 10.9201C15.0852 11.3595 15.7737 11.3754 16.2086 10.861C17.0396 9.87775 17.4999 8.51501 17.4999 7.05773C17.4999 5.60044 17.0396 4.23771 16.2086 3.25445C15.7737 2.73691 15.0852 2.7591 14.7288 3.19851C14.3977 3.59976 14.5282 4.08534 14.8496 4.54608C15.3317 5.20798 15.6411 6.13216 15.6411 7.05773C15.6411 7.9833 15.3516 8.93056 14.8496 9.56937C14.5184 10.0203 14.3977 10.5157 14.7288 10.9201Z"
+                    />
+                    <path
+                      class="tower"
+                      d="M8.89277 7.05773C8.89277 7.82296 9.318 8.48433 9.96073 8.81056L9.96073 17.4066C9.96073 18.0165 10.3349 18.439 10.8804 18.439C11.4449 18.439 11.7965 18.0325 11.7965 17.4066L11.7965 8.81056C12.4294 8.48433 12.8613 7.8163 12.8613 7.05773C12.8613 5.95695 11.9812 5.06346 10.8804 5.06346C9.77294 5.06346 8.89277 5.95695 8.89277 7.05773Z"
+                    />
+                  </svg>
+                  <span class="status-text">连接成功</span>
+                </div>
+                <div
+                  v-else-if="connectionStatus === 'error'"
+                  class="connection-status error"
+                >
+                  <svg
+                    class="icon-antenna"
+                    viewBox="0 0 23 19"
+                    fill="currentColor"
+                  >
+                    <path
+                      class="wave-outer"
+                      d="M0 7.05773C0 9.60255 0.862072 11.9774 2.46764 13.6824C2.95053 14.1919 3.58435 14.1609 3.94343 13.7281C4.29009 13.3206 4.18312 12.8058 3.7974 12.3712C2.55402 10.9907 1.85886 9.11076 1.85886 7.05773C1.85886 5.00781 2.54781 3.13101 3.7974 1.75046C4.18623 1.31591 4.2963 0.801028 3.94343 0.393568C3.58125-0.0360787 2.94432-0.0764489 2.46764 0.439291C0.905547 2.11636 0 4.52222 0 7.05773ZM17.8045 13.7281C18.1635 14.1609 18.7974 14.1919 19.2803 13.6824C20.8858 11.9774 21.7479 9.60255 21.7479 7.05773C21.7479 4.52222 20.8423 2.11636 19.2803 0.439291C18.8036-0.0764489 18.1666-0.0360787 17.8045 0.393568C17.4516 0.801028 17.5617 1.31591 17.9505 1.75046C19.2001 3.13101 19.889 5.00781 19.889 7.05773C19.889 9.11076 19.1939 10.9907 17.9505 12.3712C17.5648 12.8058 17.4578 13.3206 17.8045 13.7281Z"
+                    />
+                    <path
+                      class="wave-inner"
+                      d="M4.24797 7.05773C4.24797 8.51501 4.7083 9.87775 5.53928 10.861C5.97423 11.3754 6.66265 11.3595 7.01908 10.9201C7.35021 10.5157 7.22947 10.0203 6.89833 9.56937C6.39624 8.93056 6.10683 7.9833 6.10683 7.05773C6.10683 6.13216 6.41622 5.20798 6.89833 4.54608C7.2197 4.08534 7.35021 3.59976 7.01908 3.19851C6.66265 2.7591 5.97423 2.73691 5.53928 3.25445C4.7083 4.23771 4.24797 5.60044 4.24797 7.05773ZM14.7288 10.9201C15.0852 11.3595 15.7737 11.3754 16.2086 10.861C17.0396 9.87775 17.4999 8.51501 17.4999 7.05773C17.4999 5.60044 17.0396 4.23771 16.2086 3.25445C15.7737 2.73691 15.0852 2.7591 14.7288 3.19851C14.3977 3.59976 14.5282 4.08534 14.8496 4.54608C15.3317 5.20798 15.6411 6.13216 15.6411 7.05773C15.6411 7.9833 15.3516 8.93056 14.8496 9.56937C14.5184 10.0203 14.3977 10.5157 14.7288 10.9201Z"
+                    />
+                    <path
+                      class="tower"
+                      d="M8.89277 7.05773C8.89277 7.82296 9.318 8.48433 9.96073 8.81056L9.96073 17.4066C9.96073 18.0165 10.3349 18.439 10.8804 18.439C11.4449 18.439 11.7965 18.0325 11.7965 17.4066L11.7965 8.81056C12.4294 8.48433 12.8613 7.8163 12.8613 7.05773C12.8613 5.95695 11.9812 5.06346 10.8804 5.06346C9.77294 5.06346 8.89277 5.95695 8.89277 7.05773Z"
+                    />
+                  </svg>
+                  <span class="status-text">连接失败</span>
+                </div>
+                <div v-else class="connection-status idle">
+                  <svg
+                    class="icon-antenna"
+                    viewBox="0 0 23 19"
+                    fill="currentColor"
+                  >
+                    <path
+                      class="wave-outer"
+                      d="M0 7.05773C0 9.60255 0.862072 11.9774 2.46764 13.6824C2.95053 14.1919 3.58435 14.1609 3.94343 13.7281C4.29009 13.3206 4.18312 12.8058 3.7974 12.3712C2.55402 10.9907 1.85886 9.11076 1.85886 7.05773C1.85886 5.00781 2.54781 3.13101 3.7974 1.75046C4.18623 1.31591 4.2963 0.801028 3.94343 0.393568C3.58125-0.0360787 2.94432-0.0764489 2.46764 0.439291C0.905547 2.11636 0 4.52222 0 7.05773ZM17.8045 13.7281C18.1635 14.1609 18.7974 14.1919 19.2803 13.6824C20.8858 11.9774 21.7479 9.60255 21.7479 7.05773C21.7479 4.52222 20.8423 2.11636 19.2803 0.439291C18.8036-0.0764489 18.1666-0.0360787 17.8045 0.393568C17.4516 0.801028 17.5617 1.31591 17.9505 1.75046C19.2001 3.13101 19.889 5.00781 19.889 7.05773C19.889 9.11076 19.1939 10.9907 17.9505 12.3712C17.5648 12.8058 17.4578 13.3206 17.8045 13.7281Z"
+                    />
+                    <path
+                      class="wave-inner"
+                      d="M4.24797 7.05773C4.24797 8.51501 4.7083 9.87775 5.53928 10.861C5.97423 11.3754 6.66265 11.3595 7.01908 10.9201C7.35021 10.5157 7.22947 10.0203 6.89833 9.56937C6.39624 8.93056 6.10683 7.9833 6.10683 7.05773C6.10683 6.13216 6.41622 5.20798 6.89833 4.54608C7.2197 4.08534 7.35021 3.59976 7.01908 3.19851C6.66265 2.7591 5.97423 2.73691 5.53928 3.25445C4.7083 4.23771 4.24797 5.60044 4.24797 7.05773ZM14.7288 10.9201C15.0852 11.3595 15.7737 11.3754 16.2086 10.861C17.0396 9.87775 17.4999 8.51501 17.4999 7.05773C17.4999 5.60044 17.0396 4.23771 16.2086 3.25445C15.7737 2.73691 15.0852 2.7591 14.7288 3.19851C14.3977 3.59976 14.5282 4.08534 14.8496 4.54608C15.3317 5.20798 15.6411 6.13216 15.6411 7.05773C15.6411 7.9833 15.3516 8.93056 14.8496 9.56937C14.5184 10.0203 14.3977 10.5157 14.7288 10.9201Z"
+                    />
+                    <path
+                      class="tower"
+                      d="M8.89277 7.05773C8.89277 7.82296 9.318 8.48433 9.96073 8.81056L9.96073 17.4066C9.96073 18.0165 10.3349 18.439 10.8804 18.439C11.4449 18.439 11.7965 18.0325 11.7965 17.4066L11.7965 8.81056C12.4294 8.48433 12.8613 7.8163 12.8613 7.05773C12.8613 5.95695 11.9812 5.06346 10.8804 5.06346C9.77294 5.06346 8.89277 5.95695 8.89277 7.05773Z"
+                    />
+                  </svg>
+                  <span class="status-text">测试 API 连接</span>
+                </div>
               </button>
             </div>
 
@@ -4073,7 +4451,7 @@
                   :class="{ active: config.fontFamily === 'sans-serif' }"
                   @click="config.fontFamily = 'sans-serif'"
                 >
-                  <span style="font-weight: 700; font-size: 15px; color: #111"
+                  <span style="font-weight: 600; font-size: 15px; color: #111"
                     >现代黑体</span
                   >
                   <span class="row-check">✓</span>
@@ -4085,7 +4463,7 @@
                 >
                   <span
                     style="
-                      font-weight: 700;
+                      font-weight: 600;
                       font-size: 15px;
                       color: #111;
                       font-family:
@@ -4111,7 +4489,7 @@
                   >
                     <span
                       style="
-                        font-weight: 700;
+                        font-weight: 600;
                         font-size: 15px;
                         color: #111;
                         font-family: &quot;UserCustomFont&quot;, sans-serif;
@@ -4188,7 +4566,7 @@
                 "
               >
                 <div>
-                  <div style="font-weight: 700; font-size: 14px; color: #111">
+                  <div style="font-weight: 600; font-size: 14px; color: #111">
                     后台巡检频率
                   </div>
                   <div style="font-size: 11px; color: #6b7280">
@@ -4198,7 +4576,7 @@
                 <div
                   style="
                     font-size: 14px;
-                    font-weight: 800;
+                    font-weight: 600;
                     color: var(--accent-color);
                   "
                 >
@@ -4241,7 +4619,7 @@
                 border-top: 1px dashed #e5e7eb;
               "
             >
-              <div style="font-weight: 700; font-size: 14px; color: #111">
+              <div style="font-weight: 600; font-size: 14px; color: #111">
                 开机自启动
               </div>
               <input
@@ -4261,7 +4639,7 @@
                 border-top: 1px dashed #e5e7eb;
               "
             >
-              <div style="font-weight: 700; font-size: 14px; color: #111">
+              <div style="font-weight: 600; font-size: 14px; color: #111">
                 勿扰模式
               </div>
               <input
@@ -4366,8 +4744,8 @@
                 :key="item.id || item.url"
                 :data-url="item.url"
                 :data-id="item.id"
-                :class="['list-card', { 'announcement-card': item.is_announcement, 'read': item.is_read && item.is_announcement }]"
-                @click="item.is_announcement ? handleNoticeClick(item) : openDetail(item)"
+                :class="['list-card', { 'announcement-card': item.is_announcement, 'read': item.is_read && item.is_announcement && item.id !== 'balance_warning' }]"
+                @click="item.id === 'balance_warning' ? null : (item.is_announcement ? handleNoticeClick(item) : openDetail(item))"
               >
                 <!-- 🌟 部门图标：显示在左侧 -->
                 <div v-if="!item.is_announcement" class="card-left-column">
@@ -4495,32 +4873,6 @@
                       >{{ item.formattedTime || item.exact_time || item.date
                       }}</span
                     >
-                  </div>
-                  <!-- 🌟 欠费卡片专属按钮区域 -->
-                  <div
-                    v-if="item.id === 'balance_warning'"
-                    style="
-                      margin-top: 10px;
-                      display: flex;
-                      gap: 10px;
-                      justify-content: flex-end;
-                      padding: 0 4px;
-                    "
-                  >
-                    <button
-                      class="action-btn btn-primary"
-                      @click.stop="clearBalanceWarning"
-                      style="padding: 6px 14px; font-size: 12px"
-                    >
-                      {{ item.button_text }}
-                    </button>
-                    <button
-                      class="action-btn btn-secondary"
-                      @click.stop="dismissBalanceWarning"
-                      style="padding: 6px 14px; font-size: 12px"
-                    >
-                      不再提醒
-                    </button>
                   </div>
                 </div>
               </div>
@@ -5455,11 +5807,78 @@
                 '<div style="padding:20px;color:red;">无法加载核心库，请检查网络后重启软件</div>';
               return;
             }
+            // ============================================================
+            // 📸 消息提醒状态舱 (Toast Engine)
+            // ============================================================
+            const toastState = Vue.reactive({
+              isVisible: false,
+              title: "",
+              message: "",
+              type: "success", // 支持: 'success', 'warning', 'error'
+              id: 0, // 用于 Vue Transition 识别并打断旧动画
+            });
+
+            let toastTimeout = null; // 自动退场计时器
+            let toastEnterTimeout = null; // 入场延迟计时器
+            let toastShowStartTime = 0; // 记录当前 toast 开始展示的时间
+            const MIN_DISPLAY_TIME = 800; // 最小展示时间（毫秒），确保动画充分演示
+            const LEAVE_ANIMATION_TIME = 350; // 退场动画时间（需与 CSS .toast-leave-active 匹配）
+
+            const showNotification = (
+              title,
+              message,
+              type = "success",
+              duration = 3000,
+            ) => {
+              // 清除所有待处理的计时器
+              clearTimeout(toastTimeout);
+              clearTimeout(toastEnterTimeout);
+
+              const now = Date.now();
+              const elapsed = toastState.isVisible
+                ? now - toastShowStartTime
+                : 0;
+
+              // 计算需要等待的时间（确保当前 toast 至少展示 MIN_DISPLAY_TIME）
+              let needWait = 0;
+              if (toastState.isVisible && elapsed < MIN_DISPLAY_TIME) {
+                needWait = MIN_DISPLAY_TIME - elapsed + LEAVE_ANIMATION_TIME;
+              } else if (toastState.isVisible) {
+                needWait = LEAVE_ANIMATION_TIME;
+              }
+
+              if (needWait > 0) {
+                // 触发退场
+                toastState.isVisible = false;
+                // 等待退场完成后再入场
+                toastEnterTimeout = setTimeout(() => {
+                  _displayToast(title, message, type, duration);
+                }, needWait);
+              } else {
+                // 直接显示
+                _displayToast(title, message, type, duration);
+              }
+            };
+
+            // 内部函数：立即显示 toast
+            const _displayToast = (title, message, type, duration) => {
+              toastState.title = title;
+              toastState.message = message;
+              toastState.type = type;
+              toastState.id++;
+              toastState.isVisible = true;
+              toastShowStartTime = Date.now();
+
+              // 设置自动退场
+              toastTimeout = setTimeout(() => {
+                toastState.isVisible = false;
+              }, duration);
+            };
+
             const isCancelledFlag = ref(false); // 🌟 新增：用于拦截迟到的回调和请求结果
 
             const showSystemToast = (msg, type = "info") => {
-              statusMsg.value = msg;
-              setTimeout(() => (statusMsg.value = ""), 3000);
+              showNotification("系统提示", msg, type, 3000);
             };
             const previousView = ref("list"); // 记录从哪个页面进入的设置
             const localAiIconSvg = ref(""); // 🌟 粘贴在这里
@@ -5503,10 +5922,12 @@
               );
 
               // 5. 屏幕底部提示
-              statusMsg.value = config.value.isPinned
-                ? "窗口已置顶"
-                : "已取消置顶";
-              setTimeout(() => (statusMsg.value = ""), 2000);
+              showNotification(
+                "窗口状态",
+                config.value.isPinned ? "窗口已置顶" : "已取消置顶",
+                "success",
+                2000,
+              );
             };
             // 新增：详情页快照生成状态
             const isCapturing = ref(false);
@@ -5546,7 +5967,7 @@
             let cooldownTimer = null; // 冷却计时器
 
             // 🎯 冷却倒计时函数（支持持久化恢复）
-            const COOLDOWN_SECONDS = 120; // 冷却时间常量
+            let COOLDOWN_SECONDS = 120; // 冷却时间（从后端获取，默认 120 秒）
             const startCooldown = (remainingSeconds) => {
               // 边界情况：剩余时间 <= 0 时直接重置
               if (!remainingSeconds || remainingSeconds <= 0) {
@@ -5603,6 +6024,8 @@
             const aiProgress = ref({ total: 0, completed: 0, detail: "" });
             // 🌟 标志：是否有待处理的 AI 任务（由 checkUpdates 设置）
             const hasPendingAiTasks = ref(false);
+            // 🌟 新增：任务是否已完成（由 updatePyProgress 设置）
+            const taskCompleted = ref(false);
 
             // 🎯 进度百分比计算属性
             const progressPercent = computed(() =>
@@ -5617,6 +6040,14 @@
               if (updatePhase.value === "ai") return "AI 总结进度";
               return "";
             });
+
+            // 🌟 新增：计算属性控制进度条显示（确保 Vue 响应性）
+            const showSpiderProgress = computed(
+              () => isLoading.value && updatePhase.value === "spider",
+            );
+            const showAiProgress = computed(
+              () => isLoading.value && updatePhase.value === "ai",
+            );
 
             // 在 script 标签的 setup() 中更新
             const tagColors = ["blue", "green", "purple", "rose", "amber"];
@@ -5730,60 +6161,28 @@
             const balanceWarning = ref({
               id: "balance_warning",
               title: "API 余额不足",
-              content:
-                "您的 API 账户余额不足，AI 总结功能已暂停。请充值或更换密钥后点击下方按钮恢复。",
-              button_text: "我已充值",
+              content: "API 账户余额不足，AI 总结功能已暂停。",
               is_announcement: true,
               version: "balance_v1",
             });
             const balanceWarningVisible = ref(false);
-            const isBalanceWarningDismissed = ref(
-              localStorage.getItem("balance_warning_dismissed") === "true",
-            );
 
-            // 🌟 获取余额状态
+            // 获取余额状态
             const checkApiBalance = async () => {
               try {
                 const res = await pywebview.api.get_api_balance_status();
                 if (res.status === "success") {
                   if (!res.balance_ok) {
-                    // 🌟 余额不足：直接显示欠费卡片，忽略"不再提醒"状态
-                    // 因为这是重要的账户状态，应该始终通知用户
+                    // 余额不足：显示欠费卡片
                     balanceWarningVisible.value = true;
-                    // 重置"不再提醒"状态
-                    isBalanceWarningDismissed.value = false;
-                    localStorage.removeItem("balance_warning_dismissed");
                   } else {
-                    // 余额充足，隐藏卡片并重置关闭标志
+                    // 余额充足，隐藏卡片
                     balanceWarningVisible.value = false;
-                    isBalanceWarningDismissed.value = false;
-                    localStorage.removeItem("balance_warning_dismissed");
                   }
                 }
               } catch (e) {
                 console.warn("获取余额状态失败:", e);
               }
-            };
-
-            // 🌟 清除欠费状态
-            const clearBalanceWarning = async () => {
-              try {
-                await pywebview.api.clear_api_balance_status();
-                balanceWarningVisible.value = false;
-                isBalanceWarningDismissed.value = false;
-                localStorage.removeItem("balance_warning_dismissed");
-                statusMsg.value = "已清除欠费状态，AI 功能恢复";
-                setTimeout(() => (statusMsg.value = ""), 3000);
-              } catch (e) {
-                console.warn("清除欠费状态失败:", e);
-              }
-            };
-
-            // 🌟 关闭欠费卡片（仅隐藏，不清除状态）
-            const dismissBalanceWarning = () => {
-              isBalanceWarningDismissed.value = true;
-              balanceWarningVisible.value = false;
-              localStorage.setItem("balance_warning_dismissed", "true");
             };
 
             // 全局时间格式化函数：yyyy年mm月dd日 HH:mm 或 yyyy年mm月dd日
@@ -5920,7 +6319,9 @@
             const showApiKey = ref(false); // 密钥显示/隐藏状态
             const settingsMsg = ref("");
             const isTesting = ref(false);
-            const regeneratingIds = ref(new Set()); // 正在重新生成总结的文章ID集合
+            const connectionStatus = ref("idle"); // idle | testing | success | error
+            // 修复：使用响应式对象追踪 Set 变化
+            const regeneratingIds = Vue.reactive(new Set()); // 正在重新生成总结的文章ID集合
 
             // ... 在现有的 ref 变量（如 statusMsg 等）下方新增：
             const searchQuery = ref("");
@@ -6119,10 +6520,12 @@
 
                   if (result === "not_found") {
                     // 加载了多页仍未找到
-                    statusMsg.value = "未读文章较旧，请稍后再试";
-                    setTimeout(() => {
-                      statusMsg.value = "";
-                    }, 2000);
+                    showNotification(
+                      "未读文章",
+                      "未读文章较旧，请稍后再试",
+                      "warning",
+                      2000,
+                    );
                   } else if (result === "no_unread") {
                     // 没有未读了
                     fetchUnreadCount(); // 刷新未读数
@@ -6387,7 +6790,7 @@
             // 测试连通性
             const testConnection = async () => {
               isTesting.value = true;
-              settingsMsg.value = "正在连接 AI 服务器...";
+              connectionStatus.value = "testing";
 
               const res = await pywebview.api.test_ai_connection(
                 config.value.apiKey,
@@ -6398,9 +6801,16 @@
               isTesting.value = false;
 
               if (res.status === "success") {
-                settingsMsg.value = "连接成功！服务器响应正常。";
+                connectionStatus.value = "success";
+                showNotification("连接成功", "服务器响应正常", "success", 3000);
               } else {
-                settingsMsg.value = "连接失败: " + res.message;
+                connectionStatus.value = "error";
+                showNotification(
+                  "连接失败",
+                  res.message || "未知错误",
+                  "error",
+                  4000,
+                );
               }
             };
 
@@ -6425,9 +6835,13 @@
                 }
 
                 // 🌟 向后兼容：如果没提取到标签但有图片内容，使用硬编码标签
-                if (parsedTags.length === 0 && (parsedBody.includes('<img') || parsedBody.includes('<div class="pure-image-content"'))) {
+                if (
+                  parsedTags.length === 0 &&
+                  (parsedBody.includes("<img") ||
+                    parsedBody.includes('<div class="pure-image-content"'))
+                ) {
                   parsedTags = ["图文"];
-                  if (item.url && item.url.includes('mp.weixin.qq.com')) {
+                  if (item.url && item.url.includes("mp.weixin.qq.com")) {
                     parsedTags.push("微信文章");
                   }
                 }
@@ -6534,8 +6948,11 @@
                 }
               }
 
-              // 🌟 欠费卡片：无论当前页面和搜索状态，始终显示在最顶部
-              if (balanceWarningVisible.value) {
+              // 🌟 欠费卡片：仅在非收藏界面显示
+              if (
+                balanceWarningVisible.value &&
+                activeSource.value !== "收藏"
+              ) {
                 const balanceCard = {
                   ...balanceWarning.value,
                   is_read: 1, // 不标记为未读
@@ -6901,7 +7318,21 @@
               await Promise.all([scrollPromise, switchPromise]);
             };
 
-            onMounted(() => {
+            onMounted(async () => {
+              // 🎯 从后端获取冷却时间配置
+              try {
+                const cooldownRes = await pywebview.api.get_cooldown_config();
+                if (
+                  cooldownRes.status === "success" &&
+                  cooldownRes.cooldown_seconds
+                ) {
+                  COOLDOWN_SECONDS = cooldownRes.cooldown_seconds;
+                  console.log(`✅ 冷却时间配置: ${COOLDOWN_SECONDS} 秒`);
+                }
+              } catch (e) {
+                console.warn("获取冷却时间配置失败，使用默认值 120 秒:", e);
+              }
+
               // 🎯 冷却时间恢复：检查 localStorage 中是否有未完成的冷却
               const lastTime = localStorage.getItem("lastManualUpdateTime");
               if (lastTime) {
@@ -6998,12 +7429,20 @@
                   togglePin();
                 }
 
-                // 🌟 ESC：关闭搜索或关闭详情
+                // 🌟 ESC：关闭搜索/详情/设置/收藏界面
                 if (e.key === "Escape") {
                   if (isSearchUIExpanded.value) {
+                    // 优先关闭搜索
                     closeSearchUI();
                   } else if (currentView.value === "detail") {
+                    // 关闭详情页
                     backToList();
+                  } else if (
+                    isSettingsOpen.value ||
+                    activeSource.value === "收藏"
+                  ) {
+                    // 🌟 关闭设置界面（自动保存）或收藏界面
+                    handleTodayClick();
                   }
                 }
               });
@@ -7077,7 +7516,7 @@
                     if (window._pendingCooldown) {
                       console.log("🔄 处理待处理的冷却通知");
                       window._pendingCooldown = false;
-                      startCooldown(120);
+                      startCooldown(COOLDOWN_SECONDS);
                       return;
                     }
                     // 否则从后端同步
@@ -7181,46 +7620,47 @@
             // completed: 已完成 AI 分析的文章数
             // total: 总共需要 AI 分析的文章数
             // currentTitle: 当前正在调用 AI 分析的文章标题
+            // 🌟 注意：
+            // - 当 total=0 且 currentTitle 有值时，是爬虫扫描进度（预估值未知），不关闭加载状态
+            // - 当 total=0 且 completed=0 且 currentTitle 为空时，是任务完成信号，关闭加载状态
             window.updatePyProgress = (completed, total, currentTitle) => {
-              if (isCancelledFlag.value) return; // 🌟 4. 拦截 AI 总结的诈尸回调
+              if (isCancelledFlag.value) return;
 
-              // 没有文章需要处理，关闭加载
-              if (total === 0 && completed === 0) {
+              console.log(
+                `🔔 updatePyProgress: completed=${completed}, total=${total}, currentTitle=${currentTitle}`,
+              );
+
+              // 🌟 简化版：只更新状态，不显示进度条
+              // 任务完成信号
+              if (
+                (total === 0 && completed === 0 && !currentTitle) ||
+                (completed >= total && total > 0)
+              ) {
+                console.log("✅ 任务完成，关闭加载状态");
                 isLoading.value = false;
                 hasPendingAiTasks.value = false;
+                updatePhase.value = "idle";
+                taskCompleted.value = true;
                 return;
               }
-              // 🌟 所有任务完成：关闭加载状态
-              if (completed >= total && total > 0) {
-                isLoading.value = false;
-                hasPendingAiTasks.value = false;
-                // 🌟 可选：清除取消标志，为下一轮做准备
-                pywebview.api.clear_ai_cancel().catch(() => {});
+
+              // 爬虫扫描进度，不关闭
+              if (total === 0) {
+                return;
               }
+
+              // 有进度但未完成
+              hasPendingAiTasks.value = true;
               updatePhase.value = "ai";
-              aiProgress.value = {
-                total,
-                completed,
-                // 🌟 只显示模型名和标题，不显示其他文字，最大化标题显示
-                detail: currentTitle
-                  ? `${aiBrandName.value}: ${currentTitle}`
-                  : aiBrandName.value,
-              };
-              // 🌟 所有任务完成：processed >= submitted（在 _worker_loop 中处理）
             };
 
-            // 🌟 接收爬虫进度（由后端调用）
-            // current: 已完成的爬虫数量
-            // total: 总爬虫数量
-            // sourceName: 刚完成的爬虫名称（或 "正在启动..."）
+            // 🌟 简化版爬虫进度
             window.updateSpiderProgress = (current, total, sourceName) => {
-              if (isCancelledFlag.value) return; // 🌟 4. 拦截爬虫的诈尸回调
-              // 🌟 没有爬虫可运行，关闭加载
+              if (isCancelledFlag.value) return;
               if (total === 0) {
                 isLoading.value = false;
                 return;
               }
-              // 🌟 后台自动执行时，需要手动开启加载状态
               if (!isLoading.value) {
                 isLoading.value = true;
               }
@@ -7235,31 +7675,26 @@
               };
             };
 
-            // 🌟 开始执行爬虫时立即调用（无论手动还是自动）
+            // 🌟 开始执行爬虫时调用
             window.onStartFetching = () => {
               console.log("🔔 收到开始执行通知");
-              // 立即显示进度条
               isLoading.value = true;
               updatePhase.value = "spider";
-              spiderProgress.value = {
-                total: 0,
-                completed: 0,
-                detail: "正在启动...",
-              };
-              aiProgress.value = { total: 0, completed: 0, detail: "" };
-              // 立即进入 120s 冷却倒计时
+              // 立即进入冷却倒计时
               if (typeof startCooldown === "function") {
-                startCooldown(120);
+                startCooldown(COOLDOWN_SECONDS);
               }
             };
 
             // 🌟 后台自动执行时额外显示提示消息
             window.showAutoFetchNotice = () => {
               console.log("🔔 收到后台自动执行通知");
-              statusMsg.value = "已自动执行开机后台巡检，120s内无需重复刷新";
-              setTimeout(() => {
-                if (statusMsg.value.includes("自动执行")) statusMsg.value = "";
-              }, 5000);
+              showNotification(
+                "后台巡检",
+                `已自动执行开机后台巡检，${COOLDOWN_SECONDS}秒内无需重复刷新`,
+                "success",
+                5000,
+              );
             };
 
             // 🌟 兼容旧版：后台完成通知（现在主要用于确认执行成功）
@@ -7267,33 +7702,32 @@
               console.log("🔔 收到后台执行完成确认");
               // 冷却已经在 onStartFetching 时启动，这里只做确认
               if (typeof startCooldown === "function") {
-                startCooldown(120);
+                startCooldown(COOLDOWN_SECONDS);
               }
             };
 
-            // 🌟 新增：爬虫阶段完成回调
-            // hasNewArticles: 是否有新文章需要 AI 处理
+            // 🌟 简化版：爬虫阶段完成回调
             window.onSpiderComplete = (hasNewArticles) => {
               console.log("🔔 爬虫阶段完成，是否有新文章:", hasNewArticles);
+              // 如果任务已完成，跳过
+              if (!isLoading.value && !hasPendingAiTasks.value) {
+                console.log("⏭️ 跳过 onSpiderComplete，加载状态已关闭");
+                return;
+              }
               if (hasNewArticles) {
                 // 有新文章，切换到 AI 阶段
                 updatePhase.value = "ai";
-                aiProgress.value = {
-                  total: 0,
-                  completed: 0,
-                  detail: "等待 AI 处理...",
-                };
-                hasPendingAiTasks.value = true;
               } else {
-                // 无新文章，直接关闭加载状态
+                // 无新文章，直接关闭
                 isLoading.value = false;
                 updatePhase.value = "idle";
-                spiderProgress.value = { total: 0, completed: 0, detail: "" };
-                aiProgress.value = { total: 0, completed: 0, detail: "" };
                 hasPendingAiTasks.value = false;
-                // 显示提示消息
-                statusMsg.value = "当前已是最新，无新内容";
-                setTimeout(() => (statusMsg.value = ""), 4000);
+                showNotification(
+                  "检查完成",
+                  "当前已是最新，无新内容",
+                  "success",
+                  4000,
+                );
               }
             };
 
@@ -7308,8 +7742,12 @@
                 const res = await pywebview.api.cancel_ai_tasks();
                 console.log("【1.2】后端返回结果:", res);
                 if (res.status === "success") {
-                  statusMsg.value = `已终止 ${aiBrandName.value} 总结`;
-                  setTimeout(() => (statusMsg.value = ""), 3000);
+                  showNotification(
+                    "已终止",
+                    `${aiBrandName.value} 总结已终止`,
+                    "warning",
+                    3000,
+                  );
                   // 重置前端状态
                   isLoading.value = false;
                   updatePhase.value = "idle";
@@ -7317,10 +7755,15 @@
                   spiderProgress.value = { total: 0, completed: 0, detail: "" };
                   hasPendingAiTasks.value = false;
                 } else {
-                  statusMsg.value = "终止失败: " + res.message;
+                  showNotification(
+                    "终止失败",
+                    res.message || "未知错误",
+                    "error",
+                    3000,
+                  );
                 }
               } catch (e) {
-                statusMsg.value = "终止失败，请重试";
+                showNotification("终止失败", "请重试", "error", 3000);
                 console.error("【1.3】取消AI任务失败:", e);
               }
             };
@@ -7335,8 +7778,12 @@
 
               // 如果是只读模式，显示提示
               if (isReadOnlyMode.value) {
-                statusMsg.value = "服务已暂停，当前为只读模式，感谢您的使用！";
-                setTimeout(() => (statusMsg.value = ""), 3000);
+                showNotification(
+                  "只读模式",
+                  "服务已暂停，当前为只读模式",
+                  "warning",
+                  3000,
+                );
                 return;
               }
 
@@ -7349,7 +7796,29 @@
                 return;
               }
 
+              // 优先检查 API 连通性（如果配置了 AI）
+              try {
+                const balanceRes = await pywebview.api.get_api_balance_status();
+                if (balanceRes.status === "success" && !balanceRes.balance_ok) {
+                  // 检测到欠费，显示欠费卡片、停止更新并进入倒计时
+                  balanceWarningVisible.value = true;
+                  showNotification(
+                    "API 余额不足",
+                    "请充值后重试",
+                    "error",
+                    4000,
+                  );
+                  // 进入倒计时状态
+                  startCooldown(COOLDOWN_SECONDS);
+                  return;
+                }
+              } catch (e) {
+                console.warn("检查 API 余额状态失败:", e);
+                // 继续执行更新，不阻塞
+              }
+
               isCancelledFlag.value = false; // 🌟 2. 每次重新开始更新时，重置拦截标记
+              taskCompleted.value = false; // 🌟 重置任务完成标志
 
               // 🌟 清除之前的取消标志，为新任务做准备
               try {
@@ -7358,29 +7827,23 @@
                 // 忽略错误，继续执行
               }
 
-              // 🌟 重置阶段和进度
+              // 🌟 简化版：只设置基本状态
               updatePhase.value = "spider";
-              spiderProgress.value = {
-                total: 0,
-                completed: 0,
-                detail: "正在启动...",
-              };
-              aiProgress.value = { total: 0, completed: 0, detail: "" };
               hasPendingAiTasks.value = false;
-              isLoading.value = true; // 开启加载状态，直到 AI 总结完成才关闭
+              isLoading.value = true;
 
               const btn = document.querySelector(".btn-check");
               animateButtonClick(btn);
 
-              statusMsg.value = "";
-
-              let cooldownRemaining = 120;
+              let cooldownRemaining = COOLDOWN_SECONDS;
 
               try {
+                console.log("📡 开始调用 check_updates API...");
                 const res = await pywebview.api.check_updates(true);
+                console.log("📡 check_updates 响应:", res);
 
-                // 🌟 3. 核心修复：如果在我等待后端的这段时间里，用户点击了取消，直接把结果扔进垃圾桶
                 if (isCancelledFlag.value) {
+                  console.log("⏭️ 已取消，跳过响应处理");
                   isLoading.value = false;
                   return;
                 }
@@ -7402,52 +7865,66 @@
 
                   const count = res.submitted_count || 0;
                   if (count > 0) {
-                    statusMsg.value = `找到 ${count} 篇新内容，正在由 ${aiBrandName.value} 总结...`;
-                    // 🌟 3秒后自动消失
-                    setTimeout(() => {
-                      if (statusMsg.value.includes("正在由"))
-                        statusMsg.value = "";
-                    }, 3000);
-                    // 🌟 有新文章，切换到 AI 阶段，等待 AI 总结完成
-                    hasPendingAiTasks.value = true;
-                    updatePhase.value = "ai";
-                    aiProgress.value = {
-                      total: 0,
-                      completed: 0,
-                      detail: "等待 AI 处理...",
-                    };
+                    showNotification(
+                      "检查更新",
+                      `找到 ${count} 篇新内容`,
+                      "success",
+                      3000,
+                    );
+                    // 如果任务已完成，直接关闭
+                    if (taskCompleted.value) {
+                      console.log("⏭️ 任务已完成，关闭加载状态");
+                      isLoading.value = false;
+                    }
                   } else {
-                    statusMsg.value = "当前已是最新，无新内容";
-                    setTimeout(() => (statusMsg.value = ""), 4000);
-                    // 🌟 无新文章，立即关闭加载状态
+                    showNotification(
+                      "检查更新",
+                      "当前已是最新，无新内容",
+                      "success",
+                      4000,
+                    );
                     isLoading.value = false;
                   }
                   cooldownRemaining =
                     res.cooldown_remaining !== undefined
                       ? res.cooldown_remaining
-                      : 120;
+                      : COOLDOWN_SECONDS;
                 } else if (res.status === "cooldown") {
-                  statusMsg.value = `${res.message}`;
-                  setTimeout(() => (statusMsg.value = ""), 3000);
-                  cooldownRemaining = res.remaining || 120;
-                  // 🌟 冷却状态，没有实际抓取，直接关闭加载
+                  showNotification("冷却中", res.message, "warning", 3000);
+                  cooldownRemaining = res.remaining || COOLDOWN_SECONDS;
                   isLoading.value = false;
                 } else if (res.status === "read_only") {
-                  // 🌟 只读模式：服务已暂停，仅可查看历史数据
-                  statusMsg.value = "⚠️ 服务已暂停，当前为只读模式";
-                  setTimeout(() => (statusMsg.value = ""), 5000);
-                  cooldownRemaining = 0; // 只读模式下不触发冷却
+                  showNotification(
+                    "服务暂停",
+                    "当前为只读模式",
+                    "warning",
+                    5000,
+                  );
+                  cooldownRemaining = 0;
+                  isLoading.value = false;
+                } else if (res.status === "api_balance_error") {
+                  // API 余额不足，显示欠费卡片
+                  balanceWarningVisible.value = true;
+                  showNotification(
+                    "API 余额不足",
+                    "请充值后重试",
+                    "error",
+                    4000,
+                  );
+                  cooldownRemaining = 0;
                   isLoading.value = false;
                 } else {
-                  statusMsg.value = `${res.message || "更新失败"}`;
-                  setTimeout(() => (statusMsg.value = ""), 3000);
+                  showNotification(
+                    "更新失败",
+                    res.message || "更新失败",
+                    "error",
+                    3000,
+                  );
                   cooldownRemaining = res.cooldown_remaining || 60;
-                  // 🌟 错误时关闭加载
                   isLoading.value = false;
                 }
               } catch (e) {
-                statusMsg.value = "连接异常或超时";
-                setTimeout(() => (statusMsg.value = ""), 3000);
+                showNotification("连接异常", "连接异常或超时", "error", 3000);
                 cooldownRemaining = 60;
                 // 🌟 异常时关闭加载
                 isLoading.value = false;
@@ -7513,9 +7990,13 @@
               }
 
               // 🌟 向后兼容：如果没提取到标签但有图片内容，使用硬编码标签
-              if (parsedTags.length === 0 && (parsedBody.includes('<img') || parsedBody.includes('<div class="pure-image-content"'))) {
+              if (
+                parsedTags.length === 0 &&
+                (parsedBody.includes("<img") ||
+                  parsedBody.includes('<div class="pure-image-content"'))
+              ) {
                 parsedTags = ["图文"];
-                if (item.url && item.url.includes('mp.weixin.qq.com')) {
+                if (item.url && item.url.includes("mp.weixin.qq.com")) {
                   parsedTags.push("微信文章");
                 }
               }
@@ -7580,13 +8061,15 @@
               let parsedAttachments = [];
 
               // 🌟 新增：检测纯图片内容（包含 HTML 标签）
-              const isPureImageContent = parsedBody.includes('<img') || parsedBody.includes('<div class="pure-image-content"');
+              const isPureImageContent =
+                parsedBody.includes("<img") ||
+                parsedBody.includes('<div class="pure-image-content"');
 
               if (isPureImageContent) {
                 // 纯图片内容：添加标签，直接使用 HTML
                 parsedTags = ["图文"];
                 // 🌟 如果来自微信公众号，额外添加标签
-                if (item.url && item.url.includes('mp.weixin.qq.com')) {
+                if (item.url && item.url.includes("mp.weixin.qq.com")) {
                   parsedTags.push("微信文章");
                 }
                 // parsedBody 保持原样，包含图片 HTML
@@ -7817,7 +8300,10 @@
               if (!text) return "无总结内容";
 
               // 🌟 新增：检测纯图片内容（包含 <img 标签），直接返回 HTML
-              if (text.includes('<img') || text.includes('<div class="pure-image-content"')) {
+              if (
+                text.includes("<img") ||
+                text.includes('<div class="pure-image-content"')
+              ) {
                 return text;
               }
 
@@ -7903,7 +8389,12 @@
                 })
                 .catch((err) => {
                   console.error("复制失败", err);
-                  statusMsg.value = "复制失败，请检查浏览器权限";
+                  showNotification(
+                    "复制失败",
+                    "请检查浏览器权限",
+                    "error",
+                    3000,
+                  );
                 });
             };
 
@@ -7944,8 +8435,7 @@
                     };
                   }
 
-                  <!-- statusMsg.value = res.is_favorite ? "已收藏" : "已取消收藏"; -->
-                  setTimeout(() => (statusMsg.value = ""), 2000);
+                  // 收藏成功，不需要显示消息（通过动画反馈）
                 } else {
                   // 回滚
                   item.is_favorite = oldStatus;
@@ -7955,7 +8445,7 @@
                       is_favorite: oldStatus,
                     };
                   }
-                  statusMsg.value = "操作失败";
+                  showNotification("操作失败", "请稍后重试", "error", 3000);
                 }
               } catch (e) {
                 // 回滚
@@ -7967,7 +8457,7 @@
                   };
                 }
                 console.error("收藏操作失败:", e);
-                statusMsg.value = "操作失败";
+                showNotification("操作失败", "请稍后重试", "error", 3000);
               }
             };
 
@@ -7996,25 +8486,38 @@
                   // 降级：使用 open_browser 方法
                   openBrowser(url);
                 }
-                setTimeout(() => (statusMsg.value = ""), 3000);
                 return;
               }
 
               // direct 类型：常规附件，使用后端静默下载
-              statusMsg.value = `正在准备下载 ${name}...`;
+              showNotification(
+                "下载",
+                `正在准备下载 ${name}...`,
+                "success",
+                10000,
+              );
               try {
                 const res = await pywebview.api.download_attachment(url, name);
                 if (res.status === "success") {
-                  statusMsg.value = "附件下载成功！";
+                  showNotification(
+                    "下载成功",
+                    "附件下载成功！",
+                    "success",
+                    3000,
+                  );
                 } else if (res.status === "cancelled") {
-                  statusMsg.value = ""; // 用户取消保存，直接清空提示
+                  // 用户取消保存，不显示提示
                 } else {
-                  statusMsg.value = "下载失败: " + res.message;
+                  showNotification(
+                    "下载失败",
+                    res.message || "下载失败",
+                    "error",
+                    3000,
+                  );
                 }
               } catch (e) {
-                statusMsg.value = "调起下载失败";
+                showNotification("下载失败", "调起下载失败", "error", 3000);
               }
-              setTimeout(() => (statusMsg.value = ""), 3000);
             };
 
             // ------------------------------------------------------------
@@ -8024,8 +8527,12 @@
 
             // 🌟 原 takeSnapshot 的重计算逻辑拆分出来 (截图的主凶)
             const processHeavySnapshotTask = async (item) => {
-              const oldMsg = statusMsg.value;
-              statusMsg.value = "正在生成高清长截图，请稍候...";
+              showNotification(
+                "截图",
+                "正在生成高清长截图，请稍候...",
+                "success",
+                30000,
+              );
 
               const targetView = document.querySelector(".detail-view");
               const scrollContent = document.querySelector(".detail-content");
@@ -8041,7 +8548,12 @@
                 config.value.customFontPath
               ) {
                 try {
-                  statusMsg.value = "正在打包字体资源...";
+                  showNotification(
+                    "截图",
+                    "正在打包字体资源...",
+                    "success",
+                    10000,
+                  );
                   const fontUrl = new URL(
                     config.value.customFontPath,
                     window.location.href,
@@ -8074,8 +8586,6 @@
                   console.warn("❌ 字体打包为 Base64 失败:", err);
                 }
               }
-
-              statusMsg.value = "正在生成高清长截图，请稍候...";
 
               // 1. 记录所有原始样式（包括 body 和 position 属性）
               const origBodyHeight = document.body.style.height;
@@ -8147,19 +8657,34 @@
                     );
 
                   if (copyRes && copyRes.status === "success") {
-                    statusMsg.value = "快照保存成功，并已复制到剪贴板！";
+                    showNotification(
+                      "快照保存成功",
+                      "已复制到剪贴板",
+                      "success",
+                      3000,
+                    );
                   } else {
-                    statusMsg.value = "快照已保存 (但复制到剪贴板失败)";
+                    showNotification(
+                      "快照已保存",
+                      "但复制到剪贴板失败",
+                      "warning",
+                      3000,
+                    );
                   }
                 } else if (res && res.status === "cancelled") {
-                  statusMsg.value = "";
+                  // 用户取消，不显示消息
                 } else {
                   console.error("❌ [Snapshot] 后端保存失败:", res);
-                  statusMsg.value = "保存失败: " + (res.message || "未知错误");
+                  showNotification(
+                    "保存失败",
+                    res.message || "未知错误",
+                    "error",
+                    4000,
+                  );
                 }
               } catch (error) {
                 console.error("💥 [Snapshot] 前端捕获失败:", error);
-                statusMsg.value = "截图失败: " + error.message;
+                showNotification("截图失败", error.message, "error", 4000);
               } finally {
                 // 6. 恢复所有原始样式
                 document.body.style.height = origBodyHeight;
@@ -8182,7 +8707,6 @@
                 if (tempBase64Style) tempBase64Style.remove();
 
                 console.log("🔄 [Snapshot] CSS 布局与字体已恢复正常。");
-                setTimeout(() => (statusMsg.value = oldMsg), 3000);
               }
             };
 
@@ -8225,11 +8749,35 @@
               if (!articleId) return;
 
               // 防止重复点击（检查当前文章是否已在重新生成中）
-              if (regeneratingIds.value.has(articleId)) return;
+              if (regeneratingIds.has(articleId)) return;
+
+              // 先检测 API 是否欠费
+              try {
+                const balanceRes = await pywebview.api.get_api_balance_status();
+                if (balanceRes.status === "success" && !balanceRes.balance_ok) {
+                  // 余额不足，显示欠费卡片和消息提醒
+                  balanceWarningVisible.value = true;
+                  showNotification(
+                    "API 余额不足",
+                    "请充值后重试",
+                    "error",
+                    4000,
+                  );
+                  return;
+                }
+              } catch (e) {
+                console.warn("检查 API 余额状态失败:", e);
+                // 继续执行，不阻塞
+              }
 
               // 设置刷新状态
-              regeneratingIds.value.add(articleId);
-              statusMsg.value = `正在重新生成 ${aiBrandName.value} 总结...`;
+              regeneratingIds.add(articleId);
+              showNotification(
+                "正在处理",
+                `重新生成 ${aiBrandName.value} 总结...`,
+                "info",
+                5000,
+              );
 
               try {
                 const res =
@@ -8276,17 +8824,31 @@
                     };
                   }
 
-                  statusMsg.value = `${aiBrandName.value} 总结已重新生成！`;
+                  showNotification(
+                    "生成完成",
+                    `${aiBrandName.value} 总结已重新生成`,
+                    "success",
+                    3000,
+                  );
                 } else {
-                  statusMsg.value = `${res.message || "生成失败"}`;
+                  showNotification(
+                    "生成失败",
+                    res.message || "请稍后重试",
+                    "error",
+                    4000,
+                  );
                 }
               } catch (e) {
                 console.error("重新生成总结失败:", e);
-                statusMsg.value = `${aiBrandName.value} 请求失败，请重试`;
+                showNotification(
+                  "请求失败",
+                  `${aiBrandName.value} 服务暂不可用`,
+                  "error",
+                  4000,
+                );
               } finally {
                 // 清除刷新状态
-                regeneratingIds.value.delete(articleId);
-                setTimeout(() => (statusMsg.value = ""), 3000);
+                regeneratingIds.delete(articleId);
               }
             };
 
@@ -8340,10 +8902,12 @@
 
             // 键盘快捷键（Windows/Mac 通用）
             window.addEventListener("keydown", (e) => {
-              // Esc 键返回列表
-              if (e.key === "Escape" && currentView.value === "detail") {
-                navigateBack();
-                return;
+              // Esc 键处理（与主键盘监听器保持一致）
+              if (e.key === "Escape") {
+                if (currentView.value === "detail") {
+                  navigateBack();
+                  return;
+                }
               }
 
               // Alt + ArrowLeft / Alt + ArrowRight (Windows/Mac 通用)
@@ -8615,6 +9179,8 @@
               closeSearchUI,
               handleListClick,
               handleTodayClick,
+              toastState,
+              showNotification,
 
               // 设置与置顶
               openSettings,
@@ -8625,6 +9191,7 @@
               showApiKey,
               settingsMsg,
               isTesting,
+              connectionStatus,
               regeneratingIds,
               resetPrompt,
               saveSettings,
@@ -8657,13 +9224,10 @@
               formatDateTime,
               getTagColor,
 
-              // 🌟 欠费卡片相关
+              // 欠费卡片相关
               balanceWarningVisible,
-              isBalanceWarningDismissed,
-              clearBalanceWarning,
-              dismissBalanceWarning,
 
-              // 🌟 部门图标
+              // 部门图标
               getDepartmentIcon,
               getDepartmentColor,
               getAITagBgColor,
@@ -8676,31 +9240,21 @@
         // 🌟 保存 Vue 实例到全局，供后端调用
         window.app = app;
 
-        // 🌟 全局函数：后端主动通知前端更新余额状态
+        // 全局函数：后端主动通知前端更新余额状态
         window.updateApiBalanceStatus = function (balanceOk) {
           if (typeof balanceOk === "undefined") return;
-          console.log("🔔 收到余额状态更新:", balanceOk ? "正常" : "欠费");
+          console.log("收到余额状态更新:", balanceOk ? "正常" : "欠费");
           try {
             if (balanceOk) {
-              // 余额恢复：隐藏卡片，重置关闭标志
+              // 余额恢复：隐藏卡片
               if (app.balanceWarningVisible !== undefined) {
                 app.balanceWarningVisible = false;
               }
-              if (app.isBalanceWarningDismissed !== undefined) {
-                app.isBalanceWarningDismissed = false;
-              }
-              localStorage.removeItem("balance_warning_dismissed");
             } else {
-              // 🌟 余额不足：无论用户是否点击过"不再提醒"，都显示欠费卡片
-              // 因为这是重要的账户状态通知，不应该被忽略
+              // 余额不足：显示欠费卡片
               if (app.balanceWarningVisible !== undefined) {
                 app.balanceWarningVisible = true;
               }
-              // 重置"不再提醒"状态，确保下次启动时也能显示
-              if (app.isBalanceWarningDismissed !== undefined) {
-                app.isBalanceWarningDismissed = false;
-              }
-              localStorage.removeItem("balance_warning_dismissed");
             }
           } catch (e) {
             console.warn("更新余额状态失败:", e);

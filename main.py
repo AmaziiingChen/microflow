@@ -97,7 +97,7 @@ def update_tray_status(unread: int = None, sync_time: str = None):  # type:ignor
         if HAS_PYOBJC:
             # 1. 动态刷新菜单栏里的文字
             if hasattr(main_mod, "_unread_item") and main_mod._unread_item:
-                main_mod._unread_item.setTitle_(f"未读消息: {main_mod._unread_count}")
+                main_mod._unread_item.setTitle_(f"未读: {main_mod._unread_count}")
 
             if hasattr(main_mod, "_sync_item") and main_mod._sync_item:
                 sync_text = (
@@ -521,7 +521,7 @@ def create_native_menu(api, window):
 
     # ===== 状态展示层 =====
     unread_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-        f"未读消息: {main_mod._unread_count}", None, ""
+        f"未读: {main_mod._unread_count}", None, ""
     )
     unread_item.setEnabled_(False)  # 保持禁用状态，作为纯文本展示
     menu.addItem_(unread_item)
@@ -639,7 +639,7 @@ def run_native_tray(api, window):
             sync_time = datetime.now().strftime("%H:%M")
             update_tray_status(unread=count, sync_time=sync_time)
             # 更新菜单项文本
-            _unread_item.setTitle_(f"未读消息: {count}")  # type:ignore
+            _unread_item.setTitle_(f"未读: {count}")  # type:ignore
             _sync_item.setTitle_(f"同步: {sync_time}")  # type:ignore
             print(f"📊 托盘初始状态: 未读={count}, 同步={sync_time}")
         except Exception as e:
@@ -704,7 +704,7 @@ if __name__ == "__main__":
             import main as main_mod
 
             count = main_mod._unread_count or 0
-            return f"未读消息: {count}"
+            return f"未读: {count}"
 
         def get_sync_time_text(item):
             import main as main_mod

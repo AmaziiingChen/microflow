@@ -381,11 +381,13 @@ class ArticleProcessor:
                 self._stats["ai_completed"] += 1
                 ai_completed = self._stats["ai_completed"]
                 ai_total = self._stats["ai_total"]
+            logger.info(f"📊 纯图片进度: ai_completed={ai_completed}, ai_total={ai_total}")
             if self.on_progress and ai_total > 0:
                 try:
                     self.on_progress(ai_completed, ai_total, f"[纯图片] {ctx.title}")
-                except Exception:
-                    pass
+                    logger.info(f"✅ 纯图片进度回调已发送")
+                except Exception as e:
+                    logger.warning(f"纯图片进度回调失败: {e}")
         else:
             # 8. 通知前端开始 AI 处理
             if self.on_progress and ai_total > 0:
