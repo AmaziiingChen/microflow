@@ -3508,6 +3508,8 @@
         box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06) !important;
         /* 🌟 确保不会被其他 transform 影响 */
         transform: none !important;
+        /* 🌟 允许彩虹外扩显示 */
+        overflow: visible !important;
       }
       /* 4. 🌈 彩虹极光动画：柔和、旋转 + 中间镂空 */
       .aurora-light {
@@ -3532,15 +3534,15 @@
         -webkit-mask: radial-gradient(
           circle,
           transparent 0%,
-          transparent 55%,
-          black 55%,
+          transparent 65%,
+          black 65%,
           black 100%
         );
         mask: radial-gradient(
           circle,
           transparent 0%,
-          transparent 55%,
-          black 55%,
+          transparent 65%,
+          black 65%,
           black 100%
         );
       }
