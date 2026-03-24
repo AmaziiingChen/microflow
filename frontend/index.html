@@ -5875,6 +5875,12 @@
               }, duration);
             };
 
+            // 主动关闭当前通知
+            const hideNotification = () => {
+              clearTimeout(toastTimeout);
+              toastState.isVisible = false;
+            };
+
             const isCancelledFlag = ref(false); // 🌟 新增：用于拦截迟到的回调和请求结果
 
             const showSystemToast = (msg, type = "info") => {
@@ -8506,7 +8512,8 @@
                     3000,
                   );
                 } else if (res.status === "cancelled") {
-                  // 用户取消保存，不显示提示
+                  // 用户取消保存，关闭通知
+                  hideNotification();
                 } else {
                   showNotification(
                     "下载失败",
@@ -8672,7 +8679,8 @@
                     );
                   }
                 } else if (res && res.status === "cancelled") {
-                  // 用户取消，不显示消息
+                  // 用户取消，关闭正在显示的通知
+                  hideNotification();
                 } else {
                   console.error("❌ [Snapshot] 后端保存失败:", res);
                   showNotification(
