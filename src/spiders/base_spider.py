@@ -201,23 +201,27 @@ class BaseSpider(ABC):
     def _fetch_wechat_detail(self, url: str) -> Optional[ArticleData]:
         response = self._safe_get(url)
         if not response: return None
-        
+
         html_content = response.text
         soup = BeautifulSoup(html_content, 'html.parser')
-        
+
         title_tag = soup.find('h1', class_='rich_media_title')
         title = title_tag.get_text(strip=True) if title_tag else ""
-        
+
         content_div = soup.find('div', class_='rich_media_content', id='js_content')
         body_text = ""
+        body_html = ""
         if content_div:
+            # 保存原始 HTML（用于纯图片检测）
+            body_html = str(content_div)
+            # 提取纯文本
             for tag in content_div.find_all(['script', 'style']): tag.decompose()
             body_text = content_div.get_text(separator='\n', strip=True)
-            
+
         # 🌟 核心升级：直接从 JS 变量中提取精确的 Unix 时间戳
         exact_time = ""
         import datetime # 确保时间戳转换可用
-        
+
         # 优先狙击：var ct = "1689048000";
         ct_match = re.search(r'var\s+ct\s*=\s*"(\d+)";', html_content)
         if ct_match:
@@ -229,14 +233,14 @@ class BaseSpider(ABC):
             pub_match = re.search(r'var\s+publish_time\s*=\s*"([^"]+)"', html_content)
             if pub_match:
                 exact_time = pub_match.group(1)
-                
+
         # 极端兜底（万一微信哪天改了 JS 变量名）
         if not exact_time:
             time_tag = soup.find('em', id='publish_time')
             exact_time = time_tag.get_text(strip=True) if time_tag else ""
-        
+
         return {
-            'title': title, 'url': url, 'body_text': body_text,
+            'title': title, 'url': url, 'body_text': body_text, 'body_html': body_html,
             'attachments': [], 'source_name': self.SOURCE_NAME, 'exact_time': exact_time
         }
     # --- 附件处理逻辑（保留自你原版） ---

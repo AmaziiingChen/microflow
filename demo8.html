@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Apple HIG 功能面板 (浅色版)</title>
+    <style>
+      :root {
+        /* 🌟 核心：Apple 原生系统级色彩 (Light Mode 变体，高亮且清晰) */
+        --apple-blue: #007aff;
+        --apple-teal: #30b0c7; /* 青色，浅色下加深一点点保证对比度 */
+        --apple-yellow: #ffcc00;
+        --apple-orange: #ff9500;
+        --apple-pink: #ff2d55;
+        --apple-green: #34c759;
+
+        --curve-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+        /* 你的全局浅色背景 */
+        --bg-color: #f6f6f8;
+      }
+
+      body {
+        margin: 0;
+        padding: 60px 20px;
+        background-color: var(--bg-color);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+          Arial, sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        box-sizing: border-box;
+      }
+
+      /* ============================================================
+       网格布局容器
+       ============================================================ */
+      .function-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+        max-width: 480px;
+        width: 100%;
+      }
+
+      /* ============================================================
+       基础卡片材质 (浅色模式下的亚克力高透玻璃)
+       ============================================================ */
+      .function-card {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        padding: 24px 16px;
+        border-radius: 24px; /* Apple 标准连续圆角感 */
+        cursor: pointer;
+        overflow: hidden;
+
+        /* 极其干净的半透明白色，透出一点点底色 */
+        background: rgba(255, 255, 255, 0.7);
+        /* 一圈极其微弱的纯白高光内切边，这是 Apple 浅色拟物的灵魂 */
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 255, 255, 1),
+          0 4px 12px rgba(0, 0, 0, 0.02);
+
+        backdrop-filter: blur(20px) saturate(180%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
+
+        transition: all 0.4s var(--curve-pop);
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      /* 悬浮微光与物理上浮 */
+      .function-card:hover {
+        transform: translateY(-4px) scale(1.02);
+        /* 悬浮时变得更白、更不透明 */
+        background: rgba(255, 255, 255, 1);
+        /* 产生高级的浅灰漫反射阴影 */
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 255, 255, 1),
+          0 14px 28px -8px rgba(0, 0, 0, 0.08);
+      }
+
+      /* 按压果冻反馈 */
+      .function-card:active {
+        transform: scale(0.94);
+        background: rgba(242, 242, 247, 0.8); /* 按下时稍微变灰，模拟凹陷 */
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+        transition: all 0.1s ease;
+      }
+
+      /* ============================================================
+       图标微光容器 (Icon Wrapper)
+       ============================================================ */
+      .icon-wrapper {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        /* 背景色提取主题色的 12%，形成淡淡的水彩印记 */
+        background-color: color-mix(
+          in srgb,
+          var(--card-color) 12%,
+          transparent
+        );
+        transition: all 0.4s var(--curve-pop);
+        position: relative;
+      }
+
+      /* 图标本体 */
+      .icon-wrapper svg {
+        width: 24px;
+        height: 24px;
+        color: var(--card-color);
+        transition: all 0.4s var(--curve-pop);
+        filter: drop-shadow(0 0 0 transparent);
+      }
+
+      /* 悬浮时光芒绽放 */
+      .function-card:hover .icon-wrapper {
+        /* 背景色稍微加深 */
+        background-color: color-mix(
+          in srgb,
+          var(--card-color) 18%,
+          transparent
+        );
+        transform: scale(1.1);
+      }
+      .function-card:hover .icon-wrapper svg {
+        /* 浅色模式下，同色发光不要太强，否则会糊掉，改为轻微的光晕 */
+        filter: drop-shadow(
+          0 4px 8px color-mix(in srgb, var(--card-color) 40%, transparent)
+        );
+      }
+
+      /* ============================================================
+       文字样式
+       ============================================================ */
+      .card-title {
+        color: #3c3c43; /* iOS 原生浅色模式次级灰文字 */
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        transition: color 0.3s ease;
+      }
+      /* 悬浮时文字变深，聚焦注意力 */
+      .function-card:hover .card-title {
+        color: #000000;
+      }
+
+      /* ============================================================
+       为 6 个卡片独立注入色彩灵魂
+       ============================================================ */
+      .card-home {
+        --card-color: var(--apple-blue);
+      }
+      .card-document {
+        --card-color: var(--apple-teal);
+      }
+      .card-star {
+        --card-color: var(--apple-yellow);
+      }
+      .card-pin {
+        --card-color: var(--apple-orange);
+      }
+      .card-snapshot {
+        --card-color: var(--apple-pink);
+      }
+      .card-sync {
+        --card-color: var(--apple-green);
+      }
+
+      /* 响应式调整 */
+      @media (max-width: 400px) {
+        .function-grid {
+          gap: 12px;
+        }
+        .function-card {
+          padding: 20px 12px;
+        }
+        .icon-wrapper {
+          width: 40px;
+          height: 40px;
+        }
+        .icon-wrapper svg {
+          width: 20px;
+          height: 20px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="function-grid">
+      <div class="function-card card-home">
+        <div class="icon-wrapper">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M11.2 2.4l-8.8 8.1c-.5.4-.8 1-.8 1.6V20c0 1.1.9 2 2 2h5v-6h6v6h5c1.1 0 2-.9 2-2v-7.9c0-.6-.3-1.2-.8-1.6l-8.8-8.1c-.5-.4-1.1-.4-1.6 0z"
+            />
+          </svg>
+        </div>
+        <span class="card-title">全局总览</span>
+      </div>
+
+      <div class="function-card card-document">
+        <div class="icon-wrapper">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 1.5L18.5 9H13V3.5zM6 20V4h5v6h6v10H6z"
+            />
+          </svg>
+        </div>
+        <span class="card-title">文件归档</span>
+      </div>
+
+      <div class="function-card card-star">
+        <div class="icon-wrapper">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21 12 17.27z"
+            />
+          </svg>
+        </div>
+        <span class="card-title">星标重点</span>
+      </div>
+
+      <div class="function-card card-pin">
+        <div class="icon-wrapper">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M16 11.5V5c0-.83-.67-1.5-1.5-1.5h-5C8.67 3.5 8 4.17 8 5v6.5L6.5 14v1.5h4.5v5.5L12 22l1-1v-5.5h4.5V14L16 11.5z"
+            />
+          </svg>
+        </div>
+        <span class="card-title">置顶标记</span>
+      </div>
+
+      <div class="function-card card-snapshot">
+        <div class="icon-wrapper">
+          <svg viewBox="0 0 20.2832 19.9316" fill="currentColor">
+            <path
+              d="M5.20508 18.418L10.4102 15.4102C11.5039 14.7656 12.5684 14.1016 13.5742 13.3789L13.5742 18.3496L14.8926 18.3496L14.8926 9.96094C14.8926 9.47266 14.834 8.98438 14.7266 8.54492L19.0527 11.0352L19.707 9.87305L14.3848 6.80664C13.3789 6.23047 12.3633 5.68359 11.3281 5.19531L11.1328 5.11719L15.3906 2.66602L14.7168 1.50391L9.49219 4.52148C8.42773 5.13672 7.34375 5.82031 6.35742 6.5332L6.35742 1.57227L5.0293 1.57227L5.0293 9.96094C5.0293 10.4492 5.08789 10.9277 5.19531 11.377L0.878906 8.88672L0.214844 10.0391L5.52734 13.1055C6.44531 13.6328 7.39258 14.1406 8.33984 14.5801L8.78906 14.8047L4.54102 17.2559ZM9.96094 13.5645C7.97852 13.5645 6.35742 11.9434 6.35742 9.96094C6.35742 7.96875 7.97852 6.35742 9.96094 6.35742C11.9434 6.35742 13.5645 7.96875 13.5645 9.96094C13.5645 11.9434 11.9434 13.5645 9.96094 13.5645ZM9.96094 19.9219C15.459 19.9219 19.9219 15.459 19.9219 9.96094C19.9219 4.46289 15.459 0 9.96094 0C4.46289 0 0 4.46289 0 9.96094C0 15.459 4.46289 19.9219 9.96094 19.9219ZM9.96094 18.2617C5.37109 18.2617 1.66016 14.5508 1.66016 9.96094C1.66016 5.37109 5.37109 1.66016 9.96094 1.66016C14.5508 1.66016 18.2617 5.37109 18.2617 9.96094C18.2617 14.5508 14.5508 18.2617 9.96094 18.2617Z"
+            />
+          </svg>
+        </div>
+        <span class="card-title">系统快照</span>
+      </div>
+
+      <div class="function-card card-sync">
+        <div class="icon-wrapper">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9c2.04 0 3.93.68 5.43 1.82L15 8h6V2l-2.09 2.09C16.92 2.19 14.58 1 12 1 5.92 1 1 5.92 1 12s4.92 11 11 11 11-4.92 11-11h-2z"
+            />
+          </svg>
+        </div>
+        <span class="card-title">数据同步</span>
+      </div>
+    </div>
+  </body>
+</html>

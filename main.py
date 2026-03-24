@@ -1,12 +1,41 @@
+# pyright: reportAttributeAccessIssue=false
+# pyright: reportPossiblyUnboundVariable=false
 import webview
 import os
 import sys
-import pystray
 from PIL import Image, ImageDraw
 import requests
 import urllib3
+from datetime import datetime
+import threading
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# 🌟 PyObjC 原生 macOS 状态栏支持
+try:
+    # 加上 type: ignore 屏蔽 Pylance 的动态库静态检查报错
+    from Cocoa import (  # type: ignore
+        NSStatusBar,
+        NSVariableStatusItemLength,
+        NSImage,
+        NSBundle,
+        NSMenu,
+        NSMenuItem,
+        NSAlert,
+        NSImageAlignCenter,
+        NSOnState,
+        NSOffState,
+    )
+    from Foundation import NSObject, NSRunLoop, NSDate  # type: ignore
+    from AppKit import NSApplication, NSApp, NSImageLoadStatusCompleted  # type: ignore
+    from PyObjCTools import AppHelper  # type: ignore
+    import objc  # type: ignore
+
+    HAS_PYOBJC = True
+except ImportError as e:
+    HAS_PYOBJC = False
+    print(f"⚠️ PyObjC 导入失败 ({e})，使用 pystray 作为备选方案")
+    import pystray
 
 # 🌟 初始化全局日志系统（必须在其他模块导入之前）
 from src.logger import setup_logging
@@ -16,68 +45,242 @@ setup_logging()
 # 引入我们的"总调度室"
 from src.api import Api
 
-# ================= 托盘红点管理 =================
-# 全局变量：存储托盘图标实例
-_tray_icon = None
+# ================= 托盘状态管理 =================
+# 全局变量：存储托盘图标实例和状态
+_status_item = None  # NSStatusItem 实例
+_base_image = None  # 原始图标 NSImage
 _has_alert = False
-_base_icon_256 = None  # 存储超清母版，用于后续超采样画红点
+_alert_badge = None  # 红点图层
+_unread_count = 0  # 未读公文数量
+_last_sync_time = None  # 最近同步时间
+_mute_mode = False  # 免打扰模式
+_api_instance = None  # API 实例引用
+_window_instance = None  # 窗口实例引用
+_menu_delegate = None  # 菜单代理
+_unread_item = None  # 未读消息菜单项引用
+_sync_item = None  # 同步时间菜单项引用
+_mute_item = None  # 免打扰菜单项引用
+
+# 🌟 修复 _tray_icon 未绑定报错：在这里补全 Pystray 的全局变量声明
+_tray_icon = None  # pystray 实例
+_base_icon_256 = None  # pystray 基础图像
+
+
+def run_on_main_thread(func):
+    """确保函数在主线程上执行（macOS UI 操作必须在主线程）"""
+    if HAS_PYOBJC:
+        try:
+            import threading
+
+            if threading.current_thread() is threading.main_thread():
+                func()
+            else:
+                # 使用 PyObjCTools.AppHelper.callAfter 调度到主线程
+                AppHelper.callAfter(func)
+        except Exception as e:
+            print(f"❌ 主线程调度失败: {e}")
+            func()
+    else:
+        func()
+
+
+def update_tray_status(unread: int = None, sync_time: str = None):  # type:ignore
+    """更新托盘状态信息（包含红点触发与文本刷新）"""
+    import main as main_mod
+
+    if unread is not None:
+        main_mod._unread_count = unread
+    if sync_time is not None:
+        main_mod._last_sync_time = sync_time
+
+    def do_update():
+        if HAS_PYOBJC:
+            # 1. 动态刷新菜单栏里的文字
+            if hasattr(main_mod, "_unread_item") and main_mod._unread_item:
+                main_mod._unread_item.setTitle_(f"未读消息: {main_mod._unread_count}")
+
+            if hasattr(main_mod, "_sync_item") and main_mod._sync_item:
+                sync_text = (
+                    main_mod._last_sync_time if main_mod._last_sync_time else "--"
+                )
+                main_mod._sync_item.setTitle_(f"同步: {sync_text}")
+
+            # 2. 🌟 核心修复：根据未读数量控制红点显示/隐藏
+            if main_mod._unread_count > 0:
+                set_tray_alert()
+            else:
+                clear_tray_alert()
+
+            print(
+                f"📊 托盘状态已更新: 未读={main_mod._unread_count}, 同步={main_mod._last_sync_time}"
+            )
+
+        else:
+            # pystray 备选方案同步更新
+            if main_mod._tray_icon:
+                main_mod._tray_icon.update_menu()
+
+            if main_mod._unread_count > 0:
+                set_tray_alert()
+            else:
+                clear_tray_alert()
+
+            print(
+                f"📊 托盘状态已更新: 未读={main_mod._unread_count}, 同步={main_mod._last_sync_time}"
+            )
+
+    # 菜单文字更新需要在主线程，红点函数内部也有主线程保护
+    run_on_main_thread(do_update)
 
 
 def set_tray_alert():
-    """在托盘图标上显示红点提醒（超采样抗锯齿版）"""
-    global _has_alert, _tray_icon, _base_icon_256
-    if _tray_icon is None or _base_icon_256 is None:
-        return
+    """在托盘图标上显示红点提醒"""
+    global _has_alert, _status_item, _base_image
 
-    try:
-        # 🌟 修复4：由于 PIL 画圆没有抗锯齿，我们必须在 256x256 的高清母版上画大红点
-        alert_canvas_256 = _base_icon_256.copy()
-        draw = ImageDraw.Draw(alert_canvas_256)
+    def do_set_alert():
+        global _has_alert
+        if HAS_PYOBJC:
+            if _status_item is None:
+                return
+            try:
+                # 创建带红点的图标
+                alert_image = _create_alert_icon()
+                if alert_image:
+                    _status_item.button().setImage_(alert_image)
+                    _has_alert = True
+                    print("🔴 托盘红点已显示")
+            except Exception as e:
+                print(f"❌ 设置托盘红点失败: {e}")
+        else:
+            # pystray 备选方案
+            global _tray_icon, _base_icon_256
+            if _tray_icon is None or _base_icon_256 is None:
+                return
+            try:
+                alert_canvas = _base_icon_256.copy()
+                draw = ImageDraw.Draw(alert_canvas)
+                red_dot_radius = 8
+                canvas_size = alert_canvas.width
+                center_x = canvas_size - red_dot_radius - 3
+                center_y = red_dot_radius + 3
+                draw.ellipse(
+                    [
+                        center_x - red_dot_radius,
+                        center_y - red_dot_radius,
+                        center_x + red_dot_radius,
+                        center_y + red_dot_radius,
+                    ],
+                    fill="#FF3B30",
+                    outline="#C62828",
+                    width=1,
+                )
+                _tray_icon.icon = alert_canvas
+                _has_alert = True
+            except Exception as e:
+                print(f"❌ 设置托盘红点失败: {e}")
 
-        red_dot_radius = 28
-        center_x = 256 - red_dot_radius - 12
-        center_y = red_dot_radius + 12
-
-        draw.ellipse(
-            [
-                center_x - red_dot_radius,
-                center_y - red_dot_radius,
-                center_x + red_dot_radius,
-                center_y + red_dot_radius,
-            ],
-            fill="#FF3B30",
-            outline="#C62828",
-            width=3,
-        )
-
-        # 🌟 超采样缩小：将画满马赛克大红点的 256 画布，使用 LANCZOS 强压到 64x64。
-        # 此时像素级边缘会被完美的子像素抗锯齿算法柔化！
-        final_alert_64 = alert_canvas_256.resize((64, 64), Image.Resampling.LANCZOS)
-
-        _tray_icon.icon = final_alert_64
-        _has_alert = True
-        print("🔴 托盘红点已显示")
-
-    except Exception as e:
-        print(f"❌ 设置托盘红点失败: {e}")
+    run_on_main_thread(do_set_alert)
 
 
 def clear_tray_alert():
-    """
-    清除托盘图标上的红点提醒
-    """
+    """清除托盘图标上的红点提醒"""
     global _has_alert
-    if _tray_icon is None or _base_icon_256 is None:
-        return
+
+    def do_clear_alert():
+        global _has_alert
+        if HAS_PYOBJC:
+            if _status_item is None or _base_image is None:
+                return
+            try:
+                _status_item.button().setImage_(_base_image)
+                _has_alert = False
+                print("⚪ 托盘红点已清除")
+            except Exception as e:
+                print(f"❌ 清除托盘红点失败: {e}")
+        else:
+            global _tray_icon, _base_icon_256
+            if _tray_icon is None or _base_icon_256 is None:
+                return
+            try:
+                _tray_icon.icon = _base_icon_256
+                _has_alert = False
+            except Exception as e:
+                print(f"❌ 清除托盘红点失败: {e}")
+
+    run_on_main_thread(do_clear_alert)
+
+
+def _create_alert_icon():
+    """🌟 终极版：支持自定义尺寸和透明度的原生红点图标 (PyObjC)"""
+    global _base_image
+    if _base_image is None:
+        return None
 
     try:
-        # 从高清母版重新生成干净的 64x64 图标
-        clean_icon_64 = _base_icon_256.resize((64, 64), Image.Resampling.LANCZOS)
-        _tray_icon.icon = clean_icon_64
-        _has_alert = False
-        print("⚪ 托盘红点已清除")
+        from Cocoa import NSImage, NSColor, NSBezierPath  # type: ignore
+        from AppKit import NSCompositingOperationSourceOver  # type: ignore
+
+        # 1. 获取原始图标尺寸
+        size = _base_image.size()
+
+        # 2. 创建用于绘制的新图像 (保持透明背景)
+        new_image = NSImage.alloc().initWithSize_(size)
+        new_image.lockFocus()
+
+        # 3. 先把基础图标画上去
+        from Cocoa import NSZeroRect, NSZeroPoint  # type: ignore
+
+        _base_image.drawAtPoint_fromRect_operation_fraction_(
+            NSZeroPoint, NSZeroRect, NSCompositingOperationSourceOver, 1.0
+        )
+
+        # =========================================================================
+        # 🌟 核心修改区域：在这里调整大小和透明度
+        # =========================================================================
+
+        # 1️⃣
+        # 原来是 7-9，我们在上一步改为 5.0。
+        # 你可以继续增大或减小这个数字（单位是像素）。
+        # 例如：改为 4.0（更小）或 6.0（稍微大点）。
+        dot_diameter = 8.0
+
+        # 2️⃣
+        # 在底部的 NSColor 定义中。
+
+        #
+        # 既然改变了直径，我们需要重新计算 Y 轴坐标以保持顶部对齐。
+        # 如果你改变了直径，请务必更新这里。
+        edge_offset = 0.5  # 离开左/顶边缘的距离
+        final_x = edge_offset
+        final_y = size.height - dot_diameter - edge_offset  # (图标高度 - 直径 - 偏移量)
+
+        # 4. 创建圆点的矩形区域 ((x, y), (width, height))
+        oval_rect = ((final_x, final_y), (dot_diameter, dot_diameter))
+        path = NSBezierPath.bezierPathWithOvalInRect_(oval_rect)
+
+        # 5. 填充颜色并设置透明度
+        # 🌟 参数格式: colorWithRed_green_blue_alpha_(R, G, B, Alpha)
+        # Alpha 的取值范围是 0.0（完全透明）到 1.0（完全不透明）。
+
+        # ：
+        # 将最后的 1.0 改为你需要的透明度。
+        # 例如：
+        # 0.8  - 80% 不透明 (稍微能看到一点背景)
+        # 0.5  - 半透明
+        # 0.3  - 非常透明，很低调
+        NSColor.colorWithRed_green_blue_alpha_(
+            0.75, 0.23, 0.19, 1.0
+        ).set()  # 👈 🌟 核心修改点
+
+        path.fill()
+
+        # 6. 完成绘制并解锁
+        new_image.unlockFocus()
+        return new_image
+
     except Exception as e:
-        print(f"❌ 清除托盘红点失败: {e}")
+        print(f"❌ 绘制原生自定义红点失败: {e}")
+        return _base_image  # 失败时回退到无红点图标
 
 
 def has_tray_alert() -> bool:
@@ -112,44 +315,337 @@ def get_icon_path():
     return os.path.join(base_path, "frontend", "icons", "icon_white.png")
 
 
+def load_tray_icon_native():
+    """
+    使用 PyObjC 原生方式加载状态栏图标
+
+    macOS 状态栏图标标准：
+    - 逻辑尺寸：18x18 点（Retina 自动 @2x）
+    - 支持 PDF 矢量或高分辨率 PNG
+    - 模板模式：系统自动适配深浅色主题
+    """
+    global _base_image
+
+    icon_path = get_icon_path()
+
+    if not os.path.exists(icon_path):
+        print(f"⚠️ 找不到托盘图标文件: {icon_path}")
+        return None
+
+    try:
+        # 使用 NSImage 加载图标，支持 Retina
+        image = NSImage.alloc().initWithContentsOfFile_(icon_path)
+
+        if image is None:
+            print(f"❌ 无法加载图标: {icon_path}")
+            return None
+
+        # 设置逻辑尺寸（macOS 自动处理 Retina）
+        image.setSize_((18, 18))
+
+        # 启用模板模式：系统自动根据深浅模式调整颜色
+        # 白色图标在浅色模式下会变成黑色，深色模式下保持白色
+        image.setTemplate_(True)
+
+        _base_image = image
+        return image
+
+    except Exception as e:
+        print(f"❌ 托盘图标加载失败: {e}")
+        return None
+
+
 def load_tray_icon():
-    """加载并高质量处理状态栏图标（超采样 SSAA 抗锯齿版）"""
+    """加载托盘图标（pystray 备选方案）"""
     global _base_icon_256
 
     icon_path = get_icon_path()
-    target_canvas_size = 256
-    icon_visual_size = 210
+    target_size = 36
 
     if os.path.exists(icon_path):
         try:
             source_img = Image.open(icon_path).convert("RGBA")
-
-            # 🌟 修复1：使用 thumbnail 保持比例，且抗锯齿算法更优
+            intermediate_size = target_size * 4
             source_img.thumbnail(
-                (icon_visual_size, icon_visual_size), Image.Resampling.LANCZOS
+                (intermediate_size, intermediate_size), Image.Resampling.LANCZOS
             )
+            source_img.thumbnail((target_size, target_size), Image.Resampling.LANCZOS)
 
-            canvas_256 = Image.new(
-                "RGBA", (target_canvas_size, target_canvas_size), (0, 0, 0, 0)
-            )
+            white_img = Image.new("RGBA", source_img.size, (0, 0, 0, 0))
+            pixels = source_img.load()
+            white_pixels = white_img.load()
 
-            offset_x = (target_canvas_size - source_img.width) // 2
-            offset_y = (target_canvas_size - source_img.height) // 2
+            if pixels is not None and white_pixels is not None:
+                for y in range(source_img.height):
+                    for x in range(source_img.width):
+                        # 🌟 修复：告诉 Pylance 强制解包没问题
+                        r, g, b, a = pixels[x, y]  # type: ignore
+                        white_pixels[x, y] = (255, 255, 255, a)
 
-            # 🌟 修复2：paste 时必须传入第三个参数 source_img 作为 mask，否则透明边缘会发黑发硬！
-            canvas_256.paste(source_img, (offset_x, offset_y), source_img)
+            _base_icon_256 = white_img.resize((72, 72), Image.Resampling.LANCZOS)
+            return white_img
 
-            # 存储 256x256 高清母版，供后续画红点使用
-            _base_icon_256 = canvas_256
-
-            # 🌟 修复3：超采样抗锯齿 (SSAA) - 将 256 浓缩成完美的 64x64
-            final_icon_64 = canvas_256.resize((64, 64), Image.Resampling.LANCZOS)
-
-            return final_icon_64
         except Exception as e:
             print(f"❌ 托盘图标处理失败: {e}")
     else:
         print(f"⚠️ 找不到托盘图标文件: {icon_path}")
+
+
+# ================= PyObjC 菜单代理类 =================
+if HAS_PYOBJC:
+    # 避免重复定义 Objective-C 类（当模块被重新导入时）
+    try:
+        TrayMenuDelegate = objc.lookUpClass("TrayMenuDelegate")
+    except objc.error:
+
+        class TrayMenuDelegate(NSObject):
+            """菜单代理，处理菜单项状态"""
+
+            def menuNeedsUpdate_(self, menu):
+                pass
+
+            # 🌟 修复：严格保证只有 (self, sender) 两个参数
+            def onShowWindow_(self, sender):
+                import main as main_mod
+                import threading
+
+                def do_show():
+                    try:
+                        if main_mod._window_instance:
+                            main_mod._window_instance.show()
+                            main_mod._window_instance.restore()
+                            main_mod._window_instance.on_top = True
+                            main_mod._window_instance.on_top = False
+                            main_mod._window_instance.evaluate_js(
+                                "if(window.handleTodayClick) window.handleTodayClick();"
+                            )
+                            main_mod.clear_tray_alert()
+                    except Exception as e:
+                        print(f"❌ 打开主界面失败: {e}")
+
+                threading.Thread(target=do_show, daemon=True).start()
+
+            def onForceCheck_(self, sender):
+                import main as main_mod
+                import threading
+                from datetime import datetime
+
+                def do_check():
+                    if main_mod._api_instance:
+                        try:
+                            result = main_mod._api_instance.check_updates(
+                                is_manual=True
+                            )
+                            print(f"🔄 手动触发检查更新: {result}")
+                            main_mod._last_sync_time = datetime.now().strftime("%H:%M")
+                            main_mod.update_tray_status()
+                        except Exception as e:
+                            print(f"❌ 触发检查更新失败: {e}")
+
+                threading.Thread(target=do_check, daemon=True).start()
+
+            def onToggleMute_(self, sender):
+                import main as main_mod
+                import threading
+                from Cocoa import NSOnState, NSOffState  # type: ignore
+
+                main_mod._mute_mode = not main_mod._mute_mode
+
+                if main_mod._api_instance:
+                    try:
+                        config_dict = main_mod._api_instance.config_service.to_dict()
+                        config_dict["muteMode"] = main_mod._mute_mode
+                        main_mod._api_instance.config_service.save(config_dict)
+                        print(
+                            f"免打扰模式: {'开启' if main_mod._mute_mode else '关闭'}"
+                        )
+                    except Exception as e:
+                        print(f"❌ 保存免打扰设置失败: {e}")
+
+                main_mod.update_tray_status()
+                # 利用传进来的 sender 直接修改菜单的打钩状态
+                sender.setState_(NSOnState if main_mod._mute_mode else NSOffState)
+
+                def notify_frontend():
+                    try:
+                        if main_mod._window_instance:
+                            main_mod._window_instance.evaluate_js(
+                                "if(window.refreshConfigFromBackend) window.refreshConfigFromBackend();"
+                            )
+                    except Exception:
+                        pass
+
+                threading.Thread(target=notify_frontend, daemon=True).start()
+
+            def onOpenSettings_(self, sender):
+                import main as main_mod
+                import threading
+
+                def do_open():
+                    try:
+                        if main_mod._window_instance:
+                            main_mod._window_instance.show()
+                            main_mod._window_instance.restore()
+                            main_mod._window_instance.on_top = True
+                            main_mod._window_instance.on_top = False
+                            main_mod._window_instance.evaluate_js(
+                                "if(window.openSettingsFromTray) window.openSettingsFromTray();"
+                            )
+                    except Exception as e:
+                        print(f"❌ 打开设置失败: {e}")
+
+                threading.Thread(target=do_open, daemon=True).start()
+
+            def onQuitApp_(self, sender):
+                import main as main_mod
+                import os
+
+                if main_mod._api_instance:
+                    main_mod._api_instance.is_running = False
+                    main_mod._api_instance.force_quit()
+                os._exit(0)
+
+
+def create_native_menu(api, window):
+    """创建原生 macOS 菜单"""
+    if not HAS_PYOBJC:
+        return None, None, None, None, None
+
+    import main as main_mod
+
+    # 创建菜单代理
+    delegate = TrayMenuDelegate.alloc().init()
+
+    menu = NSMenu.alloc().init()
+    menu.setDelegate_(delegate)
+
+    # ===== 状态展示层 =====
+    unread_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+        f"未读消息: {main_mod._unread_count}", None, ""
+    )
+    unread_item.setEnabled_(False)  # 保持禁用状态，作为纯文本展示
+    menu.addItem_(unread_item)
+
+    sync_text = main_mod._last_sync_time if main_mod._last_sync_time else "--"
+    sync_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+        f"同步: {sync_text}", None, ""
+    )
+    sync_item.setEnabled_(False)
+    menu.addItem_(sync_item)
+
+    # 分隔线
+    menu.addItem_(NSMenuItem.separatorItem())
+
+    # ===== 核心操作层 =====
+    # 🌟 修复：字符串也对应改为只带一个冒号的驼峰写法
+    home_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+        "打开主页", "onShowWindow:", ""
+    )
+    home_item.setTarget_(delegate)
+    menu.addItem_(home_item)
+
+    update_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+        "检查更新", "onForceCheck:", ""
+    )
+    update_item.setTarget_(delegate)
+    menu.addItem_(update_item)
+
+    menu.addItem_(NSMenuItem.separatorItem())
+
+    # ===== 快捷开关层 =====
+    mute_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+        "勿扰模式", "onToggleMute:", ""
+    )
+    mute_item.setTarget_(delegate)
+    from Cocoa import NSOnState, NSOffState  # type: ignore
+
+    if main_mod._mute_mode:
+        mute_item.setState_(NSOnState)
+    menu.addItem_(mute_item)
+
+    settings_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+        "偏好设置", "onOpenSettings:", ""
+    )
+    settings_item.setTarget_(delegate)
+    menu.addItem_(settings_item)
+
+    menu.addItem_(NSMenuItem.separatorItem())
+
+    # ===== 退出 =====
+    quit_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+        "退出应用", "onQuitApp:", ""
+    )
+    quit_item.setTarget_(delegate)
+    menu.addItem_(quit_item)
+
+    return menu, delegate, unread_item, sync_item, mute_item
+
+
+def run_native_tray(api, window):
+    """运行原生 macOS 状态栏"""
+    global _status_item, _menu_delegate, _unread_item, _sync_item, _mute_item
+
+    import main as main_mod
+
+    # 确保 NSApplication 存在
+    app = NSApplication.sharedApplication()
+
+    # 创建状态栏项
+    status_bar = NSStatusBar.systemStatusBar()
+    _status_item = status_bar.statusItemWithLength_(-1)  # NSVariableStatusItemLength
+
+    # 设置图标
+    icon = load_tray_icon_native()
+    if icon:
+        _status_item.button().setImage_(icon)
+
+    # 创建菜单
+    menu, delegate, unread_item, sync_item, mute_item = create_native_menu(api, window)
+    _menu_delegate = delegate
+    _unread_item = unread_item
+    _sync_item = sync_item
+    _mute_item = mute_item
+    _status_item.setMenu_(menu)
+
+    # 保存全局引用
+    main_mod._api_instance = api
+    main_mod._window_instance = window
+    main_mod._mute_mode = api.config_service.get("muteMode", False)
+
+    # 初始化未读数量
+    try:
+        subscribed_sources = api.config_service.get("subscribedSources", None)
+        from src.database import db
+
+        main_mod._unread_count = db.get_unread_count(source_names=subscribed_sources)
+    except Exception as e:
+        print(f"初始化未读数量失败: {e}")
+
+    print("✅ PyObjC 原生状态栏已启动")
+
+    # 开启后台轮询
+    api.start_daemon()
+
+    # 延迟刷新状态
+    def init_status():
+        import time
+
+        time.sleep(1)
+        try:
+            subscribed_sources = api.config_service.get("subscribedSources", None)
+            from src.database import db
+
+            count = db.get_unread_count(source_names=subscribed_sources)
+            sync_time = datetime.now().strftime("%H:%M")
+            update_tray_status(unread=count, sync_time=sync_time)
+            # 更新菜单项文本
+            _unread_item.setTitle_(f"未读消息: {count}")  # type:ignore
+            _sync_item.setTitle_(f"同步: {sync_time}")  # type:ignore
+            print(f"📊 托盘初始状态: 未读={count}, 同步={sync_time}")
+        except Exception as e:
+            print(f"初始化托盘状态失败: {e}")
+
+    threading.Thread(target=init_status, daemon=True).start()
 
 
 if __name__ == "__main__":
@@ -157,97 +653,217 @@ if __name__ == "__main__":
     api = Api()
 
     # 获取前端页面路径
-    # 移除 file:// 协议，让 pywebview 启用本地 HTTP 服务器，彻底绕过字体跨域拦截
     html_url = get_html_path()
 
     # 🌟 检测启动参数：如果是开机自启（带了 --minimized 参数），则初始隐藏
     start_minimized = "--minimized" in sys.argv
 
-    # 创建原生窗口 (保留了你设置的 450x750 尺寸和相关属性)
+    # 创建原生窗口
     window = webview.create_window(
         title="Microflow",
         url=html_url,
         js_api=api,
         width=475,
         height=750,
-        min_size=(470, 750),  # 限制最小宽高
-        frameless=False,  # 使用原生系统边框
+        min_size=(470, 750),
+        frameless=False,
         easy_drag=False,
-        transparent=False,  # 关闭透明，让原生窗口更加稳定
+        transparent=False,
         background_color="#FFFFFF",
-        hidden=start_minimized,  # 👈 核心：如果是自启则初始隐藏
+        hidden=start_minimized,
     )
 
     api.window = window
 
-    # ================= 以下为新增的"系统托盘与生命周期"逻辑 =================
-
-    # 1. 拦截原生红点关闭事件
-    def on_closing():
-        """当用户点击系统原生的红色关闭按钮时触发"""
-        if window is not None:  # 👈 新增安全判断，消除 Pylance 警告
-            window.hide()  # 隐藏窗口到后台
-        return False  # 返回 False 告诉系统：拦截销毁操作，不要关掉进程！
-
-    # 绑定关闭事件
-    if window is not None:  # 👈 新增安全判断，消除 Pylance 警告
-        window.events.closing += on_closing
-
-    # 2. 系统托盘交互逻辑
-    def on_show_window(icon, item):
-        """点击菜单：显示窗口"""
-        if window is not None:
-            window.show()
-            window.restore()
-
-            # 🚀 核心黑科技：在 macOS 上强行抢夺应用焦点
-            window.on_top = True
-            window.on_top = False
-
-            # 用户主动唤醒窗口时，清除托盘红点
-            clear_tray_alert()
-
-    def on_quit_app(icon, item):
-        """点击菜单：彻底退出"""
-        api.is_running = False  # 停止后台线程的死循环
-        api.force_quit()
-        icon.stop()  # 销毁右上角的托盘图标
-        os._exit(0)  # 彻底杀掉 Python 进程
-
-    # 构建托盘右键菜单
-    # 构建托盘右键菜单
-    tray_menu = pystray.Menu(
-        pystray.MenuItem("　详 情　", on_show_window),
-        pystray.Menu.SEPARATOR,
-        pystray.MenuItem("　退 出　", on_quit_app),
-    )
-
-    # 实例化托盘图标
-    icon_image = load_tray_icon()
-    tray_icon = pystray.Icon("TongwenMonitor", icon_image, "公文通监控中", tray_menu)
-
-    # 🌟 保存到全局变量，供 api.py 调用
+    # 保存全局引用
     import main as main_module
 
-    main_module._tray_icon = tray_icon
-    # _base_icon_256 已在 load_tray_icon() 中设置
+    main_module._api_instance = api
+    main_module._window_instance = window
 
-    # 3. 在 Webview 启动前，启动后台守护线程与托盘
-    # run_detached() 会在独立的线程中跑托盘图标，不阻塞主 UI 线程
-    tray_icon.run_detached()
+    # 拦截关闭事件
+    def on_closing():
+        if window is not None:
+            window.hide()
+        return False
 
-    # 🌟 开启后台轮询抓取（间隔由配置文件动态决定，支持热重载）
-    api.start_daemon()
-    # ====================================================================
+    if window is not None:
+        window.events.closing += on_closing
+
+    # ================= 根据平台选择托盘方案 =================
+    if HAS_PYOBJC:
+        # 使用 PyObjC 原生方案
+        print("🚀 使用 PyObjC 原生状态栏")
+        run_native_tray(api, window)
+    else:
+        # 使用 pystray 备选方案
+        print("🚀 使用 pystray 状态栏")
+
+        # pystray 菜单回调函数
+        def get_unread_text(item):
+            import main as main_mod
+
+            count = main_mod._unread_count or 0
+            return f"未读消息: {count}"
+
+        def get_sync_time_text(item):
+            import main as main_mod
+
+            sync_time = main_mod._last_sync_time
+            return f"同步: {sync_time}" if sync_time else "同步: --"
+
+        def mute_checked(item):
+            import main as main_mod
+
+            return main_mod._mute_mode or False
+
+        def on_show_window(icon, item):
+            import main as main_mod
+
+            def do_show():
+                try:
+                    if main_mod._window_instance:
+                        main_mod._window_instance.show()
+                        main_mod._window_instance.restore()
+                        main_mod._window_instance.on_top = True
+                        main_mod._window_instance.on_top = False
+                        main_mod._window_instance.evaluate_js(
+                            "if(window.handleTodayClick) window.handleTodayClick();"
+                        )
+                        clear_tray_alert()
+                except Exception as e:
+                    print(f"❌ 打开主界面失败: {e}")
+
+            threading.Thread(target=do_show, daemon=True).start()
+
+        def on_force_check(icon, item):
+            import main as main_mod
+            import threading
+
+            def do_check():
+                if main_mod._api_instance:
+                    try:
+                        result = main_mod._api_instance.check_updates(is_manual=True)
+                        print(f"🔄 手动触发检查更新: {result}")
+                        main_mod._last_sync_time = datetime.now().strftime("%H:%M")
+                        update_tray_status()
+                    except Exception as e:
+                        print(f"❌ 触发检查更新失败: {e}")
+
+            threading.Thread(target=do_check, daemon=True).start()
+
+        def on_toggle_mute(icon, item):
+            import main as main_mod
+
+            main_mod._mute_mode = not main_mod._mute_mode
+            if main_mod._api_instance:
+                try:
+                    config_dict = main_mod._api_instance.config_service.to_dict()
+                    config_dict["muteMode"] = main_mod._mute_mode
+                    main_mod._api_instance.config_service.save(config_dict)
+                    print(f"勿扰模式: {'开启' if main_mod._mute_mode else '关闭'}")
+                except Exception as e:
+                    print(f"❌ 保存勿扰设置失败: {e}")
+            update_tray_status()
+
+            def notify_frontend():
+                try:
+                    if main_mod._window_instance:
+                        main_mod._window_instance.evaluate_js(
+                            "if(window.refreshConfigFromBackend) window.refreshConfigFromBackend();"
+                        )
+                except Exception:
+                    pass
+
+            threading.Thread(target=notify_frontend, daemon=True).start()
+
+        def on_open_settings(icon, item):
+            import main as main_mod
+
+            def do_open():
+                try:
+                    if main_mod._window_instance:
+                        main_mod._window_instance.show()
+                        main_mod._window_instance.restore()
+                        main_mod._window_instance.on_top = True
+                        main_mod._window_instance.on_top = False
+                        main_mod._window_instance.evaluate_js(
+                            "if(window.openSettingsFromTray) window.openSettingsFromTray();"
+                        )
+                except Exception as e:
+                    print(f"❌ 打开设置失败: {e}")
+
+            threading.Thread(target=do_open, daemon=True).start()
+
+        def on_quit_app(icon, item):
+            api.is_running = False
+            api.force_quit()
+            icon.stop()
+            os._exit(0)
+
+        # 创建 pystray 菜单
+        def create_tray_menu():
+            return pystray.Menu(
+                pystray.MenuItem(
+                    get_unread_text, lambda icon, item: None, enabled=False
+                ),
+                pystray.MenuItem(
+                    get_sync_time_text, lambda icon, item: None, enabled=False
+                ),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem("打开主页", on_show_window),
+                pystray.MenuItem("检查更新", on_force_check),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem("勿扰模式", on_toggle_mute, checked=mute_checked),
+                pystray.MenuItem("偏好设置", on_open_settings),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem("退出应用", on_quit_app),
+            )
+
+        # 初始化 pystray 托盘
+        icon_image = load_tray_icon()
+        tray_icon = pystray.Icon(
+            "MicroFlow", icon_image, "MicroFlow 监控中", create_tray_menu()
+        )
+
+        main_module._tray_icon = tray_icon
+        main_module._mute_mode = api.config_service.get("muteMode", False)
+
+        try:
+            subscribed_sources = api.config_service.get("subscribedSources", None)
+            from src.database import db
+
+            main_module._unread_count = db.get_unread_count(
+                source_names=subscribed_sources
+            )
+        except Exception as e:
+            print(f"初始化未读数量失败: {e}")
+
+        tray_icon.run_detached()
+        api.start_daemon()
+
+        def init_tray_status():
+            import time
+
+            time.sleep(1)
+            try:
+                subscribed_sources = api.config_service.get("subscribedSources", None)
+                from src.database import db
+
+                count = db.get_unread_count(source_names=subscribed_sources)
+                sync_time = datetime.now().strftime("%H:%M")
+                update_tray_status(unread=count, sync_time=sync_time)
+                print(f"📊 托盘初始状态: 未读={count}, 同步={sync_time}")
+            except Exception as e:
+                print(f"初始化托盘状态失败: {e}")
+
+        threading.Thread(target=init_tray_status, daemon=True).start()
 
     # 启动应用
-    # 👇 新增：强制获取焦点的启动回调函数
     def on_app_start():
-        # 如果不是开机静默自启，则强制向 macOS 索要窗口焦点和鼠标点击权限
         if not start_minimized:
-            if window is not None:  # 👈 加上这一行安全护盾，满足 Pylance 的类型检查
+            if window is not None:
                 window.restore()
                 window.show()
 
-    # 启动应用，并将回调函数注入进去，强制开启 HTTP 服务
     webview.start(func=on_app_start, debug=True, http_server=True)

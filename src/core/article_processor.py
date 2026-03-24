@@ -92,6 +92,9 @@ class ArticleProcessor:
     # AI 失败标识
     AI_FAILURE_PREFIXES = ("❌", "⏳", "⚠️")
 
+    # 纯图片内容默认摘要
+    PURE_IMAGE_SUMMARY = '【系统提示】这是一篇纯图片形式的通知，AI 无法提取文字摘要，请直接点击"查看原文"阅读详情。'
+
     # Worker 配置
     WORKER_COUNT = 1
 
@@ -271,12 +274,44 @@ class ArticleProcessor:
 
         # 2. 提取正文
         raw_text = detail.get("body_text", "")
-        if not raw_text:
-            raw_text = detail.get("body_html", "")
+        body_html = detail.get("body_html", "")
+
+        # 🌟 纯图片内容检测标记
+        is_pure_image = False
+
+        # 🌟 纯图片内容防御：如果 body_text 为空，检查 HTML 中是否有实际文字
+        if not raw_text or len(raw_text.strip()) < 10:
+            # 尝试从 HTML 中提取纯文本
+            if body_html:
+                from bs4 import BeautifulSoup
+                try:
+                    soup = BeautifulSoup(body_html, 'html.parser')
+                    extracted_text = soup.get_text(strip=True, separator=' ')
+                    # 检查是否包含图片标签
+                    has_images = bool(soup.find('img'))
+
+                    # 如果 HTML 中提取的文本也不够长
+                    if len(extracted_text) < 10:
+                        if has_images:
+                            # 纯图片内容：设置标记，使用默认摘要
+                            is_pure_image = True
+                            raw_text = "[纯图片内容]"
+                            logger.info(f"检测到纯图片内容，使用默认摘要: {ctx.title}")
+                        else:
+                            logger.info(f"跳过内容过短且无图片的文章: {ctx.title}")
+                            return False, "content_too_short", None
+                    else:
+                        raw_text = extracted_text
+                except Exception as e:
+                    logger.warning(f"HTML 解析失败 ({ctx.title}): {e}")
+                    return False, "parse_error", None
+            else:
+                return False, "content_too_short", None
+
         ctx.raw_text = raw_text
 
-        # 3. 内容长度校验
-        if not self.validate_content_length(raw_text):
+        # 3. 内容长度校验（纯图片内容跳过此校验）
+        if not is_pure_image and not self.validate_content_length(raw_text):
             logger.debug(f"跳过疑似噪音内容（长度不足）: {ctx.title}")
             return False, "content_too_short", None
 
@@ -290,25 +325,53 @@ class ArticleProcessor:
             logger.info(f"[{ctx.source_name}] 任务已取消，跳过 AI 调用: {ctx.title}")
             return False, "cancelled", None
 
-        # 6. 🌟 统计真正调用 AI 的任务，并通知前端进度
+        # 6. 🌟 统计任务总数（包括纯图片内容），并通知前端进度
         with self._stats_lock:
             self._stats["ai_total"] += 1
             ai_completed = self._stats["ai_completed"]
             ai_total = self._stats["ai_total"]
 
-        if self.on_progress and ai_total > 0:
-            try:
-                # 回调参数：(已完成AI调用数量, 真实AI任务总数, 当前正在调用AI的标题)
-                self.on_progress(ai_completed, ai_total, ctx.title)
-            except Exception as e:
-                logger.warning(f"进度回调执行失败: {e}")
+        # 7. 🌟 纯图片内容：跳过 AI 调用，使用默认摘要
+        if is_pure_image:
+            summary = self.PURE_IMAGE_SUMMARY
+            logger.info(f"[{ctx.source_name}] 纯图片内容，使用默认摘要: {ctx.title}")
+            # 纯图片内容也计入完成进度
+            with self._stats_lock:
+                self._stats["ai_completed"] += 1
+                ai_completed = self._stats["ai_completed"]
+                ai_total = self._stats["ai_total"]
+            if self.on_progress and ai_total > 0:
+                try:
+                    self.on_progress(ai_completed, ai_total, f"[纯图片] {ctx.title}")
+                except Exception:
+                    pass
+        else:
+            # 8. 通知前端开始 AI 处理
+            if self.on_progress and ai_total > 0:
+                try:
+                    # 回调参数：(已完成AI调用数量, 真实AI任务总数, 当前正在调用AI的标题)
+                    self.on_progress(ai_completed, ai_total, ctx.title)
+                except Exception as e:
+                    logger.warning(f"进度回调执行失败: {e}")
 
-        # 7. AI 生成摘要（此处已有指数退避重试）
-        logger.info(f"[{ctx.source_name}] 发现变动 ({reason}) -> {ctx.title}")
-        try:
-            summary = self.llm.summarize_article(ctx.title, raw_text)
-        except Exception as e:
-            logger.warning(f"AI 摘要生成异常 ({ctx.title}): {e}")
+            # 9. AI 生成摘要（此处已有指数退避重试）
+            logger.info(f"[{ctx.source_name}] 发现变动 ({reason}) -> {ctx.title}")
+            try:
+                summary = self.llm.summarize_article(ctx.title, raw_text)
+            except Exception as e:
+                logger.warning(f"AI 摘要生成异常 ({ctx.title}): {e}")
+                with self._stats_lock:
+                    self._stats["ai_completed"] += 1
+                    ai_completed = self._stats["ai_completed"]
+                    ai_total = self._stats["ai_total"]
+                if self.on_progress and ai_total > 0:
+                    try:
+                        self.on_progress(ai_completed, ai_total, ctx.title)
+                    except Exception:
+                        pass
+                return False, "ai_error", None
+
+            # 🌟 AI 调用完成，推送最新进度（含完成信号）
             with self._stats_lock:
                 self._stats["ai_completed"] += 1
                 ai_completed = self._stats["ai_completed"]
@@ -318,23 +381,11 @@ class ArticleProcessor:
                     self.on_progress(ai_completed, ai_total, ctx.title)
                 except Exception:
                     pass
-            return False, "ai_error", None
 
-        # 🌟 AI 调用完成，推送最新进度（含完成信号）
-        with self._stats_lock:
-            self._stats["ai_completed"] += 1
-            ai_completed = self._stats["ai_completed"]
-            ai_total = self._stats["ai_total"]
-        if self.on_progress and ai_total > 0:
-            try:
-                self.on_progress(ai_completed, ai_total, ctx.title)
-            except Exception:
-                pass
-
-        # 7. 核心防线：拦截 AI 失败的情况
-        if summary.startswith(self.AI_FAILURE_PREFIXES):
-            logger.warning(f"AI 分析失败，本次不入库: {ctx.title}")
-            return False, "ai_failed", None
+            # 10. 核心防线：拦截 AI 失败的情况
+            if summary.startswith(self.AI_FAILURE_PREFIXES):
+                logger.warning(f"AI 分析失败，本次不入库: {ctx.title}")
+                return False, "ai_failed", None
 
         # 7. 添加时间戳（已禁用）
         # timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')

@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Apple 级 Pin Toggling (专属图标版)</title>
+    <style>
+      :root {
+        /* 🌟 核心：iPhone 系统级弹性弹簧曲线 */
+        --curve-apple-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+        --curve-apple-collapse: cubic-bezier(0.25, 1, 0.5, 1);
+
+        --color-accent: #ff9f0a; /* Apple 经典标记橙 */
+        --color-gray: #8e8e93; /* iOS 原生次级灰 */
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #1c1c1e;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      }
+
+      /* ============================================================
+       【交互容器】pin-btn
+       ============================================================ */
+      .pin-btn {
+        position: relative;
+        width: 44px;
+        height: 44px;
+        border-radius: 22px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: rgba(255, 255, 255, 0.05);
+        cursor: pointer;
+        overflow: hidden;
+        transition: all 0.45s var(--curve-apple-spring);
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      /* 确保两个图标绝对对齐堆叠 */
+      .pin-icon {
+        position: absolute;
+        width: 22px; /* 控制你的专属图标大小 */
+        height: 22px;
+        transition: all 0.6s var(--curve-apple-spring);
+        will-change: transform, opacity, color;
+      }
+
+      .pin-icon svg {
+        width: 100%;
+        height: 100%;
+        display: block; /* 消除 SVG 底部默认间距 */
+      }
+
+      /* ============================================================
+       🍎 状态 1：默认态 (未固定 is-unpinned)
+       ============================================================ */
+      .pin-btn.is-unpinned {
+        transform: scale(1);
+      }
+
+      /* 你的实心 Pin 图标：溶解退出 */
+      .pin-btn.is-unpinned .pin-fill {
+        opacity: 0;
+        transform: translateY(8px) rotate(-15deg) scale(0.6);
+        color: var(--color-gray);
+      }
+
+      /* 你的斜线 Pin 图标：滑入中心 */
+      .pin-btn.is-unpinned .pin-slash {
+        opacity: 1;
+        transform: translateY(0) rotate(-15deg) scale(1);
+        color: var(--color-gray);
+      }
+
+      /* ============================================================
+       🍎 状态 2：激活态 (已固定 is-pinned)
+       ============================================================ */
+      .pin-btn.is-pinned {
+        background-color: rgba(255, 255, 255, 0.08);
+        transform: scale(0.985);
+      }
+
+      /* 你的实心 Pin 图标：Q弹直立并点亮 */
+      .pin-btn.is-pinned .pin-fill {
+        opacity: 1;
+        transform: translateY(0) rotate(0deg) scale(1);
+        color: var(--color-accent);
+        filter: drop-shadow(0 0 6px var(--color-accent)); /* 点亮同色柔光 */
+      }
+
+      /* 你的斜线 Pin 图标：解体飞出 */
+      .pin-btn.is-pinned .pin-slash {
+        opacity: 0;
+        transform: translateY(-8px) rotate(10deg) scale(0.8);
+        color: var(--color-accent);
+      }
+
+      /* 物理阻尼拟物 */
+      .pin-btn.is-pinned:active {
+        transition: all 0.1s ease;
+        transform: scale(0.95);
+      }
+
+      .label {
+        position: absolute;
+        bottom: -32px;
+        font-size: 12px;
+        color: #ebebf5;
+        font-weight: 500;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="pin-btn is-unpinned" id="btn-pin">
+      <span class="pin-icon pin-fill">
+        <svg viewBox="0 0 15.5273 23.3691" xmlns="http://www.w3.org/2000/svg">
+          <path
+            d="M0 14.6973C0 15.5273 0.556641 16.0742 1.43555 16.0742L6.71875 16.0742L6.71875 20.6348C6.71875 22.1289 7.34375 23.3691 7.58789 23.3691C7.82227 23.3691 8.44727 22.1289 8.44727 20.6348L8.44727 16.0742L13.7305 16.0742C14.6094 16.0742 15.166 15.5273 15.166 14.6973C15.166 12.6367 13.5156 10.459 10.7715 9.46289L10.4492 4.98047C11.875 4.16992 13.0469 3.25195 13.5547 2.59766C13.8086 2.26562 13.9355 1.93359 13.9355 1.64062C13.9355 1.04492 13.4766 0.605469 12.793 0.605469L2.38281 0.605469C1.68945 0.605469 1.24023 1.04492 1.24023 1.64062C1.24023 1.93359 1.35742 2.26562 1.61133 2.59766C2.11914 3.25195 3.29102 4.16992 4.7168 4.98047L4.39453 9.46289C1.65039 10.459 0 12.6367 0 14.6973Z"
+            fill="currentColor"
+          />
+        </svg>
+      </span>
+
+      <span class="pin-icon pin-slash">
+        <svg viewBox="0 0 23.1153 23.9343" xmlns="http://www.w3.org/2000/svg">
+          <path
+            d="M12.7374 16.5028L12.4133 16.5028L12.4133 21.1565C12.4133 22.4457 11.6677 23.9343 11.377 23.9343C11.0862 23.9343 10.3406 22.4457 10.3406 21.1565L10.3406 16.5028L5.1563 16.5028C4.19355 16.5028 3.56238 15.8876 3.56238 14.9612C3.56238 13.2366 4.67316 11.4921 6.57313 10.3452ZM17.9513 1.63131C17.9513 1.96154 17.8155 2.33394 17.5363 2.68461C17.0347 3.32338 15.8939 4.23203 14.4122 5.07363L14.7314 9.64921C17.4972 10.6795 19.1818 12.8355 19.1818 14.9612C19.1818 15.61 18.8737 16.1062 18.3575 16.3443L8.25492 6.24723L8.33507 5.07363C6.8534 4.23203 5.71257 3.32338 5.21763 2.68461C4.93843 2.33394 4.80261 1.96154 4.80261 1.63131C4.80261 0.948654 5.32326 0.450199 6.09115 0.450199L16.6628 0.450199C17.424 0.450199 17.9513 0.948654 17.9513 1.63131Z"
+            fill="currentColor"
+          />
+          <path
+            d="M1.47515 3.49021L19.4854 21.4809C19.8068 21.7925 20.3164 21.7832 20.612 21.4809C20.9267 21.1662 20.9271 20.6691 20.612 20.3606L2.61458 2.37297C2.29988 2.05826 1.78365 2.0516 1.47515 2.36365C1.17642 2.66549 1.17953 3.18793 1.47515 3.49021Z"
+            fill="currentColor"
+          />
+        </svg>
+      </span>
+
+      <span class="label">点我试试</span>
+    </div>
+
+    <script>
+      const btn = document.getElementById("btn-pin");
+      btn.addEventListener("click", () => {
+        const isPinned = btn.classList.contains("is-pinned");
+
+        if (isPinned) {
+          btn.classList.add("is-unpinning-decisive");
+          setTimeout(() => btn.classList.remove("is-unpinning-decisive"), 100);
+        }
+
+        btn.classList.toggle("is-pinned");
+        btn.classList.toggle("is-unpinned");
+      });
+    </script>
+  </body>
+</html>

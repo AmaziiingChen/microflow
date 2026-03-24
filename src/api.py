@@ -336,6 +336,15 @@ class Api:
         # 🌟 获取冷却剩余时间
         cooldown_remaining = self.daemon_manager.get_cooldown_remaining()
 
+        # 🌟 更新托盘同步时间
+        try:
+            import main
+            from datetime import datetime
+            sync_time = datetime.now().strftime("%H:%M")
+            main.update_tray_status(sync_time=sync_time)
+        except Exception as e:
+            logger.debug(f"更新托盘同步时间失败: {e}")
+
         return {
             "status": "success",
             "submitted_count": result.get("submitted_count", 0),
@@ -391,6 +400,12 @@ class Api:
         """标记文章为已读"""
         try:
             db.mark_as_read(url)
+            # 🌟 异步刷新托盘未读数量（不阻塞当前请求）
+            try:
+                import threading
+                threading.Thread(target=self._refresh_tray_status, daemon=True).start()
+            except Exception:
+                pass
             return {"status": "success"}
         except Exception as e:
             return {"status": "error", "message": str(e)}
@@ -460,10 +475,10 @@ class Api:
         debug_mode = debug_seconds is not None
 
         def on_new_articles(count: int, result: dict):
-            """发现新文章时的回调（已废弃系统通知，由 ArticleProcessor 回调处理弹窗）"""
-            # 单篇文章处理完成后会自动通过 _on_article_processed 回调唤醒窗口
-            # 这里只做日志记录
+            """发现新文章时的回调"""
             logger.info(f"守护进程检测到 {count} 篇新文章，正在后台处理...")
+            # 🌟 更新托盘未读数量
+            self._refresh_tray_status()
 
         # 🌟 热重载 Getter：动态读取配置，带安全边界（最小 15 分钟）
         def get_interval_seconds() -> int:
@@ -477,6 +492,22 @@ class Api:
             on_new_articles=on_new_articles,
             debug_mode=debug_mode
         )
+
+    def _refresh_tray_status(self):
+        """刷新托盘状态（未读数量和同步时间）"""
+        try:
+            import main
+            from datetime import datetime
+            # 获取未读数量
+            subscribed_sources = self.config_service.get('subscribedSources', None)
+            count = db.get_unread_count(source_names=subscribed_sources)
+            # 获取当前时间
+            sync_time = datetime.now().strftime("%H:%M")
+            # 更新托盘
+            main.update_tray_status(unread=count, sync_time=sync_time)
+            logger.debug(f"📊 托盘状态已更新: 未读 {count}, 同步 {sync_time}")
+        except Exception as e:
+            logger.warning(f"刷新托盘状态失败: {e}")
 
     def download_attachment(self, url: str, filename: str) -> dict:
         """下载附件（支持后缀智能补全）"""
@@ -726,6 +757,38 @@ class Api:
         except Exception as e:
             logger.error(f"获取未读文章失败: {e}", exc_info=True)
             return {"status": "error", "message": str(e), "found": False}
+
+    def update_tray_status(self, unread: int = None, sync_time: str = None) -> dict:
+        """更新托盘菜单的状态信息（未读数量、同步时间）
+
+        Args:
+            unread: 未读数量
+            sync_time: 同步时间字符串
+
+        Returns:
+            {"status": "success"}
+        """
+        try:
+            import main
+            main.update_tray_status(unread=unread, sync_time=sync_time)
+            return {"status": "success"}
+        except Exception as e:
+            logger.warning(f"更新托盘状态失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def get_tray_unread_count(self) -> dict:
+        """获取托盘菜单需要的未读数量（用于后台轮询更新）
+
+        Returns:
+            {"status": "success", "count": int}
+        """
+        try:
+            subscribed_sources = self.config_service.get('subscribedSources', None)
+            count = db.get_unread_count(source_names=subscribed_sources)
+            return {"status": "success", "count": count}
+        except Exception as e:
+            logger.error(f"获取托盘未读数量失败: {e}")
+            return {"status": "error", "count": 0}
 
     def regenerate_summary(self, article_id: int) -> Dict[str, Any]:
         """
