@@ -8,7 +8,11 @@ import random
 import datetime
 from typing import Callable, Optional, Dict, Any
 
-from src.core.network_utils import check_network_status, NetworkStatus, get_network_description
+from src.core.network_utils import (
+    check_network_status,
+    NetworkStatus,
+    get_network_description,
+)
 from src.core.paths import LAST_FETCH_TIME_PATH, ensure_data_dir_exists
 
 logger = logging.getLogger(__name__)
@@ -65,7 +69,7 @@ class DaemonManager:
         try:
             # 确保目录存在（paths 模块已处理，这里双重保险）
             LAST_FETCH_TIME_PATH.parent.mkdir(parents=True, exist_ok=True)
-            LAST_FETCH_TIME_PATH.write_text(str(time.time()), encoding='utf-8')
+            LAST_FETCH_TIME_PATH.write_text(str(time.time()), encoding="utf-8")
             logger.debug(f"💾 已保存抓取时间戳")
         except Exception as e:
             logger.warning(f"保存抓取时间戳失败: {e}")
@@ -74,7 +78,7 @@ class DaemonManager:
         """从文件读取上次抓取时间戳，失败返回 0.0"""
         try:
             if LAST_FETCH_TIME_PATH.exists():
-                return float(LAST_FETCH_TIME_PATH.read_text(encoding='utf-8').strip())
+                return float(LAST_FETCH_TIME_PATH.read_text(encoding="utf-8").strip())
         except Exception as e:
             logger.debug(f"读取抓取时间戳失败: {e}")
         return 0.0
@@ -106,7 +110,7 @@ class DaemonManager:
         interval_getter: Callable[[], int] = lambda: 900,
         initial_wait: int = 10,
         on_new_articles: Optional[Callable[[int, Dict[str, Any]], None]] = None,
-        debug_mode: bool = False
+        debug_mode: bool = False,
     ) -> None:
         """
         启动守护线程
@@ -127,7 +131,9 @@ class DaemonManager:
 
         # 🌟 从持久化文件恢复上次抓取时间
         persisted_last_fetch_time = self._get_last_fetch_time()
-        self._last_successful_run = persisted_last_fetch_time if persisted_last_fetch_time > 0 else time.time()
+        self._last_successful_run = (
+            persisted_last_fetch_time if persisted_last_fetch_time > 0 else time.time()
+        )
 
         def worker():
             # 🌟 首次获取间隔
@@ -181,12 +187,20 @@ class DaemonManager:
                 # 早8点抖动区间 (8:00-8:30)
                 if 8.0 <= hour_float < 8.5 and not morning_ran and morning_target == 0:
                     morning_target = current_time + random.randint(0, 1800)
-                    logger.info(f"🌅 早间抖动目标已设定: {datetime.datetime.fromtimestamp(morning_target).strftime('%H:%M:%S')}")
+                    logger.info(
+                        f"🌅 早间抖动目标已设定: {datetime.datetime.fromtimestamp(morning_target).strftime('%H:%M:%S')}"
+                    )
 
                 # 晚8点抖动区间 (19:30-20:00)
-                if 19.5 <= hour_float < 20.0 and not evening_ran and evening_target == 0:
+                if (
+                    19.5 <= hour_float < 20.0
+                    and not evening_ran
+                    and evening_target == 0
+                ):
                     evening_target = current_time + random.randint(0, 1800)
-                    logger.info(f"🌆 晚间抖动目标已设定: {datetime.datetime.fromtimestamp(evening_target).strftime('%H:%M:%S')}")
+                    logger.info(
+                        f"🌆 晚间抖动目标已设定: {datetime.datetime.fromtimestamp(evening_target).strftime('%H:%M:%S')}"
+                    )
 
                 # 🌟 执行判断逻辑（互斥 if-elif）
                 should_run = False
@@ -196,9 +210,15 @@ class DaemonManager:
                     time_since_last_fetch = current_time - last_run_time
                     if time_since_last_fetch < self.MANUAL_UPDATE_COOLDOWN:
                         # 刚刚抓取过，跳过首抓
-                        remaining_cooldown = int(self.MANUAL_UPDATE_COOLDOWN - time_since_last_fetch)
-                        logger.info(f"⏳ 检测到近期已抓取（{int(time_since_last_fetch)}秒前），跳过首抓，剩余冷却: {remaining_cooldown}秒")
-                        print(f"⏳ [Debug] 跳过首抓（剩余冷却: {remaining_cooldown}秒）")
+                        remaining_cooldown = int(
+                            self.MANUAL_UPDATE_COOLDOWN - time_since_last_fetch
+                        )
+                        logger.info(
+                            f"⏳ 检测到近期已抓取（{int(time_since_last_fetch)}秒前），跳过首抓，剩余冷却: {remaining_cooldown}秒"
+                        )
+                        print(
+                            f"⏳ [Debug] 跳过首抓（剩余冷却: {remaining_cooldown}秒）"
+                        )
                     else:
                         # 冷却已过，正常执行首抓
                         should_run = True
@@ -209,13 +229,21 @@ class DaemonManager:
                     # 深夜阶段：非首抓则绝对静默
                     pass
 
-                elif 8.0 <= hour_float < 8.5 and not morning_ran and current_time >= morning_target:
+                elif (
+                    8.0 <= hour_float < 8.5
+                    and not morning_ran
+                    and current_time >= morning_target
+                ):
                     # 早间抖动触发
                     if current_time >= last_run_time + self.MIN_RUN_INTERVAL:
                         should_run = True
                         logger.info(f"🌅 早间抖动触发 (目标时间已到)")
 
-                elif 19.5 <= hour_float < 20.0 and not evening_ran and current_time >= evening_target:
+                elif (
+                    19.5 <= hour_float < 20.0
+                    and not evening_ran
+                    and current_time >= evening_target
+                ):
                     # 晚间抖动触发
                     if current_time >= last_run_time + self.MIN_RUN_INTERVAL:
                         should_run = True
@@ -223,10 +251,14 @@ class DaemonManager:
 
                 elif 8.0 <= hour_float < 20.0:
                     # 白天正常轮询
-                    if (current_time >= last_run_time + current_interval and
-                        current_time >= last_run_time + self.MIN_RUN_INTERVAL):
+                    if (
+                        current_time >= last_run_time + current_interval
+                        and current_time >= last_run_time + self.MIN_RUN_INTERVAL
+                    ):
                         should_run = True
-                        logger.debug(f"☀️ 白天定时轮询触发 (当前间隔: {current_interval}秒)")
+                        logger.debug(
+                            f"☀️ 白天定时轮询触发 (当前间隔: {current_interval}秒)"
+                        )
 
                 # 🌟 执行任务
                 if should_run:
@@ -239,15 +271,21 @@ class DaemonManager:
                     should_compensate = False
                     if previous_network_status == NetworkStatus.NO_NETWORK:
                         if current_network_status != NetworkStatus.NO_NETWORK:
-                            time_since_last_success = current_time - self._last_successful_run
+                            time_since_last_success = (
+                                current_time - self._last_successful_run
+                            )
                             if time_since_last_success >= self.COMPENSATION_THRESHOLD:
-                                logger.info(f"🔄 网络恢复！触发补偿抓取（距上次成功: {int(time_since_last_success)}秒）")
+                                logger.info(
+                                    f"🔄 网络恢复！触发补偿抓取（距上次成功: {int(time_since_last_success)}秒）"
+                                )
                                 should_compensate = True
 
                     # 断网跳过
                     if current_network_status == NetworkStatus.NO_NETWORK:
                         logger.debug(f"💤 无网络连接，跳过本轮检测")
-                        current_wait_interval = min(current_wait_interval * 2, self.MAX_BACKOFF_INTERVAL)
+                        current_wait_interval = min(
+                            current_wait_interval * 2, self.MAX_BACKOFF_INTERVAL
+                        )
                         last_run_time = current_time
                         continue
 
@@ -259,7 +297,9 @@ class DaemonManager:
 
                     try:
                         result = task_callback()
-                        print(f"✅ [Debug] 抓取执行完毕！状态: {result.get('status')}, 提交数量: {result.get('submitted_count')}")
+                        print(
+                            f"✅ [Debug] 抓取执行完毕！状态: {result.get('status')}, 提交数量: {result.get('submitted_count')}"
+                        )
 
                         if result and isinstance(result, dict):
                             if result.get("status") == "success":
@@ -272,17 +312,24 @@ class DaemonManager:
                                 if new_count > 0 and on_new_articles:
                                     on_new_articles(new_count, result)
                                 elif submitted_count > 0:
-                                    logger.info(f"📊 已提交 {submitted_count} 篇文章到处理队列")
+                                    logger.info(
+                                        f"📊 已提交 {submitted_count} 篇文章到处理队列"
+                                    )
                             elif result.get("status") == "read_only":
                                 logger.debug("💤 后台轮询被静默拦截：当前处于只读模式")
                             elif result.get("status") == "cooldown":
                                 logger.debug(f"⏳ 触发被拦截：{result.get('message')}")
                             else:
-                                logger.debug(f"⚠️ 任务返回异常状态: {result.get('status', 'unknown')}")
+                                logger.debug(
+                                    f"⚠️ 任务返回异常状态: {result.get('status', 'unknown')}"
+                                )
 
                     except Exception as e:
-                        print(f"❌ [Debug] 守护线程发生致命错误 (已被拦截，线程继续存活): {e}")
+                        print(
+                            f"❌ [Debug] 守护线程发生致命错误 (已被拦截，线程继续存活): {e}"
+                        )
                         import traceback
+
                         traceback.print_exc()
 
                     finally:
