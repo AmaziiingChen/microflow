@@ -2196,6 +2196,10 @@
         justify-content: flex-end;
         z-index: 2; /* 🌟 高于中间按钮组，让折叠动画从下方滑过 */
       }
+      /* 🌟 加载状态时允许彩虹圆外扩显示 */
+      .header-side.right.is-loading {
+        overflow: visible !important;
+      }
 
       .header-center {
         flex: 0 0 auto;
@@ -5019,7 +5023,7 @@
             </div>
           </div>
 
-          <div class="header-side right">
+          <div class="header-side right" :class="{ 'is-loading': isLoading }">
             <div class="right-actions">
               <button
                 class="btn-check"
