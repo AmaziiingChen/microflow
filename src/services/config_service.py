@@ -34,6 +34,13 @@ class AppConfig:
     config_sign: str = ""  # HMAC-SHA256 签名
     last_cloud_sync_time: float = 0.0  # 最后一次成功获取云端授权的时间戳
     device_id: str = ""  # 设备唯一标识（基于 MAC 地址）
+    # 📧 邮件推送配置
+    email_notify_enabled: bool = False  # 是否启用邮件通知
+    smtp_host: str = ""  # SMTP 服务器地址
+    smtp_port: int = 465  # SMTP 服务器端口
+    smtp_user: str = ""  # SMTP 用户名
+    smtp_password: str = ""  # SMTP 密码/授权码
+    subscriber_list: list = field(default_factory=list)  # 订阅者邮箱列表
 
 
 class ConfigService:
@@ -174,6 +181,13 @@ class ConfigService:
                 config_sign=data.get('configSign', ''),
                 last_cloud_sync_time=data.get('lastCloudSyncTime', 0.0),
                 device_id=data.get('deviceId', ''),
+                # 📧 邮件推送配置
+                email_notify_enabled=data.get('emailNotifyEnabled', False),
+                smtp_host=data.get('smtpHost', ''),
+                smtp_port=data.get('smtpPort', 465),
+                smtp_user=data.get('smtpUser', ''),
+                smtp_password=data.get('smtpPassword', ''),
+                subscriber_list=data.get('subscriberList', []),
             )
             return self._config
 
@@ -216,6 +230,12 @@ class ConfigService:
 
             logger.debug(f"🔐 已生成配置签名: {signature[:16]}... (设备: {device_id})")
 
+            # 📧 邮件配置日志
+            logger.debug(f"📧 邮件配置保存: emailNotifyEnabled={config_dict.get('emailNotifyEnabled', False)}")
+            logger.debug(f"📧 邮件配置保存: smtpHost={config_dict.get('smtpHost', '')}")
+            logger.debug(f"📧 邮件配置保存: smtpUser={config_dict.get('smtpUser', '')}")
+            logger.debug(f"📧 邮件配置保存: subscriberList={config_dict.get('subscriberList', [])}")
+
             # 写入文件
             with open(self.config_path, 'w', encoding='utf-8') as f:
                 json.dump(config_dict, f, ensure_ascii=False, indent=4)
@@ -240,6 +260,13 @@ class ConfigService:
                 config_sign=signature,
                 last_cloud_sync_time=config_dict.get('lastCloudSyncTime', 0.0),
                 device_id=device_id,
+                # 📧 邮件推送配置
+                email_notify_enabled=config_dict.get('emailNotifyEnabled', False),
+                smtp_host=config_dict.get('smtpHost', ''),
+                smtp_port=config_dict.get('smtpPort', 465),
+                smtp_user=config_dict.get('smtpUser', ''),
+                smtp_password=config_dict.get('smtpPassword', ''),
+                subscriber_list=config_dict.get('subscriberList', []),
             )
 
             logger.info("配置已成功保存")
@@ -283,6 +310,13 @@ class ConfigService:
             "configSign": config.config_sign,
             "lastCloudSyncTime": config.last_cloud_sync_time,
             "deviceId": config.device_id,
+            # 📧 邮件推送配置
+            "emailNotifyEnabled": config.email_notify_enabled,
+            "smtpHost": config.smtp_host,
+            "smtpPort": config.smtp_port,
+            "smtpUser": config.smtp_user,
+            "smtpPassword": config.smtp_password,
+            "subscriberList": config.subscriber_list,
         }
 
     def get(self, key: str, default: Any = None) -> Any:
@@ -327,6 +361,13 @@ class ConfigService:
             'configSign': 'config_sign',
             'lastCloudSyncTime': 'last_cloud_sync_time',
             'deviceId': 'device_id',
+            # 📧 邮件推送配置
+            'emailNotifyEnabled': 'email_notify_enabled',
+            'smtpHost': 'smtp_host',
+            'smtpPort': 'smtp_port',
+            'smtpUser': 'smtp_user',
+            'smtpPassword': 'smtp_password',
+            'subscriberList': 'subscriber_list',
         }
 
         # 转换键名

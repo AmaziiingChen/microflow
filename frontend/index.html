@@ -4719,6 +4719,205 @@
               </label>
             </div>
 
+            <!-- 📧 邮件推送配置 -->
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-top: 24px;
+                margin-bottom: 12px;
+                padding-top: 24px;
+                border-top: 1px solid rgba(0, 0, 0, 0.05);
+              "
+            >
+              <div class="settings-section-title" style="margin: 0 0 0 4px">
+                邮件推送
+              </div>
+            </div>
+
+            <!-- 邮件推送总开关 -->
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 16px;
+              "
+            >
+              <div>
+                <div style="font-weight: 600; font-size: 14px; color: #111">
+                  启用邮件推送
+                </div>
+                <div style="font-size: 11px; color: #6b7280">
+                  新公文入库后自动发送邮件通知
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                class="ios-toggle"
+                v-model="config.emailNotifyEnabled"
+              />
+            </div>
+
+            <!-- SMTP 配置 -->
+            <div v-if="config.emailNotifyEnabled" style="margin-bottom: 16px">
+              <div class="form-group">
+                <label class="form-label">SMTP 服务器</label>
+                <input
+                  type="text"
+                  v-model="config.smtpHost"
+                  class="form-input"
+                  placeholder="例如：smtp.qq.com"
+                />
+              </div>
+              <div class="form-group">
+                <label class="form-label">端口</label>
+                <input
+                  type="number"
+                  v-model.number="config.smtpPort"
+                  class="form-input"
+                  placeholder="465"
+                />
+              </div>
+              <div class="form-group">
+                <label class="form-label">邮箱账号</label>
+                <input
+                  type="text"
+                  v-model="config.smtpUser"
+                  class="form-input"
+                  placeholder="your@email.com"
+                />
+              </div>
+              <div class="form-group">
+                <label class="form-label">授权码/密码</label>
+                <input
+                  type="password"
+                  v-model="config.smtpPassword"
+                  class="form-input"
+                  placeholder="SMTP 授权码"
+                />
+              </div>
+
+              <!-- 订阅者列表 -->
+              <div class="form-group">
+                <label class="form-label">订阅者邮箱</label>
+                <div style="display: flex; gap: 8px; margin-bottom: 8px">
+                  <input
+                    type="email"
+                    v-model="newSubscriberEmail"
+                    class="form-input"
+                    placeholder="输入邮箱地址"
+                    @keyup.enter="addSubscriber"
+                    style="flex: 1"
+                  />
+                  <button
+                    class="badge-attachment no-tooltip"
+                    @click="addSubscriber"
+                    style="white-space: nowrap"
+                  >
+                    添加
+                  </button>
+                </div>
+                <div
+                  v-if="config.subscriberList && config.subscriberList.length > 0"
+                  style="display: flex; flex-wrap: wrap; gap: 8px"
+                >
+                  <span
+                    v-for="(email, index) in config.subscriberList"
+                    :key="index"
+                    style="
+                      display: inline-flex;
+                      align-items: center;
+                      gap: 6px;
+                      padding: 4px 10px;
+                      background: #f3f4f6;
+                      border-radius: 6px;
+                      font-size: 12px;
+                    "
+                  >
+                    {{ email }}
+                    <span
+                      @click="removeSubscriber(index)"
+                      style="cursor: pointer; color: #9ca3af; font-weight: bold"
+                      >×</span
+                    >
+                  </span>
+                </div>
+              </div>
+
+              <!-- 测试邮件按钮 -->
+              <button
+                class="action-btn"
+                style="
+                  display: flex;
+                  margin: 16px auto 0;
+                  padding: 8px 16px;
+                  font-size: 13px;
+                  background: #f3f4f6;
+                  color: var(--text-secondary);
+                  border: 1px solid #e5e7eb;
+                  border-radius: 8px;
+                "
+                @click="sendTestEmail"
+                :disabled="isSendingTestEmail"
+              >
+                {{ isSendingTestEmail ? '发送中...' : '发送测试邮件' }}
+              </button>
+
+              <!-- 诊断按钮 -->
+              <button
+                class="action-btn"
+                style="
+                  display: flex;
+                  margin: 8px auto 0;
+                  padding: 6px 12px;
+                  font-size: 12px;
+                  background: transparent;
+                  color: #6b7280;
+                  border: 1px dashed #d1d5db;
+                  border-radius: 6px;
+                "
+                @click="diagnoseEmailPush"
+              >
+                🔍 诊断配置
+              </button>
+
+              <!-- 测试推送按钮 -->
+              <button
+                class="action-btn"
+                style="
+                  display: flex;
+                  margin: 8px auto 0;
+                  padding: 6px 12px;
+                  font-size: 12px;
+                  background: transparent;
+                  color: #408ff7;
+                  border: 1px solid #408ff7;
+                  border-radius: 6px;
+                "
+                @click="testEmailPushWithArticle"
+                :disabled="isTestingPush"
+              >
+                {{ isTestingPush ? '推送中...' : '📤 测试推送最新文章' }}
+              </button>
+
+              <button
+                style="
+                  padding: 8px 12px;
+                  font-size: 12px;
+                  font-weight: 600;
+                  background: #fff;
+                  color: #8b5cf6;
+                  border: 1px solid #8b5cf6;
+                  border-radius: 6px;
+                "
+                @click="refreshSnapshotBrowser"
+              >
+                🔄 刷新截图样式
+              </button>
+            </div>
+
             <div v-if="settingsMsg" class="floating-toast">
               {{ settingsMsg }}
             </div>
@@ -5641,11 +5840,20 @@
     <script>
       // 全局错误捕获
       window.onerror = function (msg, url, line, col, error) {
+        // 忽略 ResizeObserver 良性错误
+        if (msg && msg.includes("ResizeObserver")) {
+          return true;
+        }
         console.error("JS错误:", msg, "行:", line);
         return false;
       };
 
       window.addEventListener("unhandledrejection", function (event) {
+        // 忽略 ResizeObserver 良性错误
+        if (event.reason && event.reason.message && event.reason.message.includes("ResizeObserver")) {
+          event.preventDefault();
+          return;
+        }
         console.error("Promise错误:", event.reason);
       });
 
@@ -6237,7 +6445,19 @@
               pollingInterval: 60, // 🌟 新增：后台巡检频率（分钟），默认 1 小时
               isPinned: false, // 🌟 新增：默认不置顶
               readNoticeTime: "", // 🌟 新增：已读公告的发布时间（用于判断是否有新公告）
+              // 📧 邮件推送配置
+              emailNotifyEnabled: false,
+              smtpHost: "",
+              smtpPort: 465,
+              smtpUser: "",
+              smtpPassword: "",
+              subscriberList: [],
             });
+
+            // 📧 邮件推送相关状态
+            const newSubscriberEmail = ref("");
+            const isSendingTestEmail = ref(false);
+            const isTestingPush = ref(false);
 
             // 获取 AI 品牌名称（用于状态提示）
             const aiBrandName = computed(() => {
@@ -6603,6 +6823,101 @@
             };
             const deselectAllSources = () => {
               config.value.subscribedSources = [];
+            };
+
+            // 📧 邮件推送相关方法
+            const addSubscriber = () => {
+              const email = newSubscriberEmail.value.trim();
+              if (!email) return;
+
+              // 简单的邮箱格式验证
+              const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+              if (!emailRegex.test(email)) {
+                showNotification("添加失败", "请输入有效的邮箱地址", "warning");
+                return;
+              }
+
+              // 检查是否已存在
+              if (config.value.subscriberList.includes(email)) {
+                showNotification("添加失败", "该邮箱已在订阅列表中", "warning");
+                return;
+              }
+
+              config.value.subscriberList.push(email);
+              newSubscriberEmail.value = "";
+            };
+
+            const removeSubscriber = (index) => {
+              config.value.subscriberList.splice(index, 1);
+            };
+
+            const sendTestEmail = async () => {
+              if (!config.value.smtpHost || !config.value.smtpUser || !config.value.smtpPassword) {
+                showNotification("发送失败", "请先配置 SMTP 服务器信息", "warning");
+                return;
+              }
+
+              isSendingTestEmail.value = true;
+              try {
+                const res = await pywebview.api.send_test_email(config.value.smtpUser);
+                if (res.status === "success") {
+                  showNotification("发送成功", res.message, "success");
+                } else {
+                  showNotification("发送失败", res.message, "error");
+                }
+              } catch (e) {
+                showNotification("发送失败", "网络请求失败", "error");
+              } finally {
+                isSendingTestEmail.value = false;
+              }
+            };
+
+            const diagnoseEmailPush = async () => {
+              try {
+                const res = await pywebview.api.diagnose_email_push();
+                if (res.status === "success") {
+                  if (res.canSend) {
+                    showNotification("诊断结果", "邮件推送配置正常，可以发送", "success");
+                  } else {
+                    showNotification("诊断结果", res.message, "warning");
+                  }
+                  console.log("📧 邮件推送诊断结果:", res);
+                } else {
+                  showNotification("诊断失败", res.message, "error");
+                }
+              } catch (e) {
+                showNotification("诊断失败", "网络请求失败", "error");
+              }
+            };
+
+            const testEmailPushWithArticle = async () => {
+              isTestingPush.value = true;
+              try {
+                const res = await pywebview.api.test_email_push_with_latest_article();
+                if (res.status === "success") {
+                  showNotification("推送测试", res.message, "success");
+                } else {
+                  showNotification("推送测试", res.message, "error");
+                }
+              } catch (e) {
+                showNotification("推送测试", "网络请求失败", "error");
+              } finally {
+                isTestingPush.value = false;
+              }
+            };
+
+            // 刷新截图浏览器样式
+            const refreshSnapshotBrowser = async () => {
+              try {
+                const res = await pywebview.api.refresh_snapshot_browser();
+                if (res.status === "success") {
+                  showNotification("刷新成功", res.message, "success");
+                } else {
+                  showNotification("刷新失败", res.message, "error");
+                }
+              } catch (e) {
+                showNotification("刷新失败", "网络请求失败", "error");
+              }
             };
 
             // 新增：处理搜索（带 300ms 防抖机制）
@@ -9201,6 +9516,17 @@
               getSourceIcon,
               selectAllSources,
               deselectAllSources,
+
+              // 📧 邮件推送
+              newSubscriberEmail,
+              isSendingTestEmail,
+              isTestingPush,
+              addSubscriber,
+              removeSubscriber,
+              sendTestEmail,
+              diagnoseEmailPush,
+              testEmailPushWithArticle,
+              refreshSnapshotBrowser,
 
               // 附件与工具
               truncateMiddle,

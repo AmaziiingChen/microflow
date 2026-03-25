@@ -15,5 +15,11 @@
     "apiBalanceOk": true,
     "configSign": "51b3c867ac69b40dad480a8c2fe53ce91aea2eeda56bd22e585d6cdc3b5dd713",
     "lastCloudSyncTime": 0.0,
-    "deviceId": "device_5a8d70e3c4da"
+    "deviceId": "device_5a8d70e3c4da",
+    "emailNotifyEnabled": false,
+    "smtpHost": "",
+    "smtpPort": 465,
+    "smtpUser": "",
+    "smtpPassword": "",
+    "subscriberList": []
 }

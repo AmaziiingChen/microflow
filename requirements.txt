@@ -8,6 +8,7 @@
 pywebview>=4.0              # 跨平台桌面 GUI
 pystray>=0.19               # 系统托盘图标
 pillow>=10.0                # 图像处理 (托盘图标/截图)
+playwright>=1.40.0          # 无头浏览器截图 (邮件推送)
 
 # === 网络请求 ===
 requests>=2.28              # HTTP 请求库
@@ -20,6 +21,7 @@ lxml>=5.0                   # XML 解析后端 (beautifulsoup4 加速)
 openai>=1.0                 # OpenAI 兼容 API 客户端
 
 # === 工具库 ===
+mistune>=3.0                 # Markdown 渲染 (邮件快照)
 python-dotenv>=1.0          # 环境变量加载
 plyer>=2.1                  # 跨平台桌面通知
 

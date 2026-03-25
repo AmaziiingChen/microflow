@@ -107,6 +107,7 @@ class ArticleProcessor:
         on_progress: Optional[
             Callable[[int, int, str], None]
         ] = None,  # 🌟 新增：AI 进度回调
+        config_service=None,  # 📧 邮件推送配置服务
     ):
         """
         初始化文章处理器
@@ -117,12 +118,14 @@ class ArticleProcessor:
             on_task_complete: 任务完成回调 (success, reason, article_data)
             on_article_processed: 单篇文章处理成功回调 (title, summary_preview, source_name)
             on_progress: AI 进度回调 (completed, total, current_title)
+            config_service: 配置服务实例（用于邮件推送）
         """
         self.llm = llm_service
         self.db = database
         self.on_task_complete = on_task_complete
         self.on_article_processed = on_article_processed
         self.on_progress = on_progress  # 🌟 新增
+        self.config_service = config_service  # 📧 邮件推送配置服务
 
         # 任务队列（线程安全）
         self._task_queue: queue.Queue[Optional[ProcessingTask]] = queue.Queue()
@@ -471,7 +474,9 @@ class ArticleProcessor:
             "summary": summary,
             "raw_content": raw_text,
             "is_read": 0,
+            "model_name": self.config_service.get('modelName', 'AI'),  # 🌟 传递模型名称用于快照
         }
+        logger.info(f"📸 article_data.model_name = {article_data.get('model_name')}")
 
         if self.on_article_processed:
             try:
@@ -479,7 +484,16 @@ class ArticleProcessor:
             except Exception as e:
                 logger.warning(f"文章处理回调执行失败: {e}")
 
-        # 11. 返回成功信息
+        # 11. 📧 邮件推送（异步，不阻塞主流程）
+        if self._should_send_email():
+            import threading
+            threading.Thread(
+                target=self._send_email_notification,
+                args=(article_data,),
+                daemon=True
+            ).start()
+
+        # 12. 返回成功信息
         return True, reason, article_data
 
     def submit(
@@ -632,6 +646,121 @@ class ArticleProcessor:
             return True
         except Exception:
             return False
+
+    # ==================== 📧 邮件推送功能 ====================
+
+    def _should_send_email(self) -> bool:
+        """
+        检查是否应该发送邮件通知
+
+        Returns:
+            是否启用邮件推送
+        """
+        if not self.config_service:
+            logger.info("📧 邮件检查: config_service 为空，跳过")
+            return False
+
+        try:
+            # 检查是否启用邮件通知
+            enabled = self.config_service.get('emailNotifyEnabled', False)
+            logger.info(f"📧 邮件检查: emailNotifyEnabled = {enabled}")
+            if not enabled:
+                logger.info("📧 邮件检查: 邮件通知未启用，跳过")
+                return False
+
+            # 检查是否有订阅者
+            subscriber_list = self.config_service.get('subscriberList', [])
+            logger.info(f"📧 邮件检查: subscriberList = {subscriber_list}")
+            if not subscriber_list or len(subscriber_list) == 0:
+                logger.info("📧 邮件检查: 订阅者列表为空，跳过")
+                return False
+
+            # 检查 SMTP 配置是否完整
+            smtp_host = self.config_service.get('smtpHost', '')
+            smtp_user = self.config_service.get('smtpUser', '')
+            smtp_password = self.config_service.get('smtpPassword', '')
+
+            logger.info(f"📧 邮件检查: smtpHost={smtp_host}, smtpUser={smtp_user}, hasPassword={bool(smtp_password)}")
+
+            if not smtp_host or not smtp_user or not smtp_password:
+                logger.info("📧 邮件检查: SMTP 配置不完整，跳过")
+                return False
+
+            logger.info("📧 邮件检查: 所有条件满足，将发送邮件通知")
+            return True
+
+        except Exception as e:
+            logger.warning(f"📧 检查邮件配置失败: {e}")
+            return False
+
+    def _send_email_notification(self, article_data: Dict[str, Any]) -> None:
+        """
+        发送邮件通知（后台线程执行）
+
+        Args:
+            article_data: 文章数据
+        """
+        import tempfile
+        import os
+
+        logger.info(f"📧 开始发送邮件通知: {article_data.get('title', '')[:30]}...")
+
+        try:
+            from src.services.snapshot_service import render_article_snapshot
+            from src.services.email_service import EmailService
+
+            # 1. 生成快照图片
+            logger.info(f"📧 步骤1: 正在生成快照图片...")
+            snapshot_path = render_article_snapshot(article_data)
+
+            if not snapshot_path:
+                logger.error("📧 快照生成失败，跳过邮件发送")
+                return
+
+            logger.info(f"📧 快照生成成功: {snapshot_path}")
+
+            # 2. 获取邮件配置
+            logger.info(f"📧 步骤2: 获取邮件配置...")
+            smtp_host = self.config_service.get('smtpHost', '')
+            smtp_port = self.config_service.get('smtpPort', 465)
+            smtp_user = self.config_service.get('smtpUser', '')
+            smtp_password = self.config_service.get('smtpPassword', '')
+            subscriber_list = self.config_service.get('subscriberList', [])
+
+            logger.info(f"📧 配置: host={smtp_host}, port={smtp_port}, user={smtp_user}, subscribers={subscriber_list}")
+
+            # 3. 创建邮件服务并发送
+            logger.info(f"📧 步骤3: 发送邮件...")
+            email_service = EmailService(
+                smtp_host=smtp_host,
+                smtp_port=smtp_port,
+                smtp_user=smtp_user,
+                smtp_password=smtp_password
+            )
+
+            result = email_service.send_article_notification(
+                to_addrs=subscriber_list,
+                article_data=article_data,
+                image_path=snapshot_path
+            )
+
+            # 4. 清理临时文件
+            try:
+                if snapshot_path and os.path.exists(snapshot_path):
+                    os.remove(snapshot_path)
+                    logger.info(f"📧 已清理临时文件: {snapshot_path}")
+            except Exception as e:
+                logger.warning(f"📧 清理临时文件失败: {e}")
+
+            if result.get('success'):
+                logger.info(f"📧 ✅ 邮件推送成功: {result.get('sent_count', 0)} 封")
+            else:
+                logger.error(f"📧 ❌ 邮件推送失败: {result.get('message', '未知错误')}")
+
+        except ImportError as e:
+            logger.error(f"📧 邮件服务模块导入失败: {e}")
+        except Exception as e:
+            logger.error(f"📧 邮件发送异常: {e}", exc_info=True)
 
     def shutdown(self, wait: bool = True):
         """

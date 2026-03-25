@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Apple 灵动课程表 Demo</title>
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+
+    <style>
+      /* ============================================================
+       1. 基础重置与全局字体栈 (抗锯齿优化)
+       ============================================================ */
+      :root {
+        --bg-light: #f2f2f7;
+        --card-bg: #ffffff;
+        --text-main: #1d1d1f;
+        --text-sub: #8e8e93;
+        --curve-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+
+      body {
+        margin: 0;
+        padding: 40px 20px;
+        background-color: var(--bg-light);
+        font-family:
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "PingFang SC",
+          "Hiragino Sans GB",
+          "Segoe UI",
+          "Microsoft YaHei UI",
+          Roboto,
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+        display: flex;
+        justify-content: center;
+      }
+
+      /* ============================================================
+       2. 📅 灵动课程表容器
+       ============================================================ */
+      .schedule-widget {
+        background: var(--card-bg);
+        border-radius: 28px;
+        padding: 24px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.05);
+        width: 100%;
+        max-width: 460px;
+      }
+
+      /* 顶部标题栏 */
+      .widget-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        padding: 0 4px;
+      }
+      .widget-title {
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--text-main);
+        letter-spacing: 0.02em;
+      }
+      .widget-action {
+        font-size: 14px;
+        font-weight: 600;
+        color: #007aff;
+        cursor: pointer;
+      }
+
+      /* ============================================================
+       3. iOS 胶囊分段控制器 (星期选择)
+       ============================================================ */
+      .ios-segmented-control {
+        display: flex;
+        background: rgba(118, 118, 128, 0.08);
+        border-radius: 12px;
+        padding: 4px;
+        margin-bottom: 24px;
+      }
+
+      .segment-btn {
+        flex: 1;
+        text-align: center;
+        padding: 8px 0;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-sub);
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.4s var(--curve-spring);
+        user-select: none;
+        position: relative;
+        z-index: 1;
+      }
+
+      .segment-btn.is-active {
+        background: #ffffff;
+        color: var(--text-main);
+        box-shadow:
+          0 3px 8px rgba(0, 0, 0, 0.06),
+          0 1px 1px rgba(0, 0, 0, 0.04);
+        transform: scale(1.02);
+        z-index: 2;
+      }
+
+      /* ============================================================
+       4. 课程卡片列表
+       ============================================================ */
+      .schedule-list-container {
+        position: relative;
+        min-height: 200px; /* 保证空状态有足够高度 */
+      }
+
+      .schedule-list {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .schedule-card {
+        display: flex;
+        border-radius: 20px;
+        padding: 18px 20px;
+        gap: 16px;
+        transition:
+          transform 0.3s ease,
+          box-shadow 0.3s ease;
+        cursor: pointer;
+      }
+
+      .schedule-card:hover {
+        transform: translateY(-2px);
+      }
+
+      /* ⏱ 左侧等宽时间轴 */
+      .time-col {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        min-width: 48px;
+        font-variant-numeric: tabular-nums; /* 核心防抖 */
+      }
+
+      .time-start {
+        font-size: 15px;
+        font-weight: 700;
+        line-height: 1.1;
+      }
+
+      .time-end {
+        font-size: 12px;
+        font-weight: 600;
+        opacity: 0.5;
+        margin-top: 6px;
+      }
+
+      /* ℹ️ 右侧课程信息 */
+      .info-col {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+
+      .course-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+      }
+
+      .course-name {
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+      }
+
+      .course-type {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 3px 8px;
+        border-radius: 100px;
+        background: rgba(255, 255, 255, 0.6);
+        backdrop-filter: blur(4px);
+      }
+
+      .course-details {
+        display: flex;
+        gap: 16px;
+        font-size: 12px;
+        font-weight: 600;
+        opacity: 0.7;
+      }
+
+      .detail-item {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .detail-item svg {
+        width: 14px;
+        height: 14px;
+      }
+
+      /* ============================================================
+       5. 🎨 极致色彩引擎 (Apple Pastel Colors)
+       ============================================================ */
+      .theme-blue {
+        background: #e5f0ff;
+        color: #0066cc;
+      }
+      .theme-blue:hover {
+        box-shadow: 0 8px 20px rgba(0, 102, 204, 0.12);
+      }
+
+      .theme-purple {
+        background: #f3e8ff;
+        color: #7e22ce;
+      }
+      .theme-purple:hover {
+        box-shadow: 0 8px 20px rgba(126, 34, 206, 0.12);
+      }
+
+      .theme-orange {
+        background: #fff0d4;
+        color: #d97706;
+      }
+      .theme-orange:hover {
+        box-shadow: 0 8px 20px rgba(217, 119, 6, 0.12);
+      }
+
+      .theme-green {
+        background: #e6f4ea;
+        color: #1e8e3e;
+      }
+      .theme-green:hover {
+        box-shadow: 0 8px 20px rgba(30, 142, 62, 0.12);
+      }
+
+      /* ============================================================
+       6. 🦋 丝滑列表动画引擎
+       ============================================================ */
+      /* 进出场过程曲线 */
+      .schedule-list-enter-active,
+      .schedule-list-leave-active {
+        transition: all 0.5s var(--curve-spring);
+      }
+
+      /* 起止点状态 (微缩+下沉) */
+      .schedule-list-enter-from,
+      .schedule-list-leave-to {
+        opacity: 0;
+        transform: translateY(15px) scale(0.95);
+      }
+
+      /* 解决 Vue Transition Group 元素离场时占据物理空间导致的跳动 */
+      .schedule-list-leave-active {
+        position: absolute;
+        width: 100%;
+      }
+
+      /* 空状态提示 */
+      .empty-state {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        color: var(--text-sub);
+        font-size: 14px;
+        font-weight: 500;
+        gap: 12px;
+        width: 100%;
+        transition: all 0.4s ease;
+      }
+      .empty-state svg {
+        width: 48px;
+        height: 48px;
+        opacity: 0.4;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app" style="width: 100%; display: flex; justify-content: center">
+      <div class="schedule-widget">
+        <div class="widget-header">
+          <span class="widget-title">日程安排</span>
+          <span class="widget-action">本周</span>
+        </div>
+
+        <div class="ios-segmented-control">
+          <div
+            class="segment-btn"
+            v-for="(day, index) in weekDays"
+            :key="index"
+            :class="{ 'is-active': activeDay === index }"
+            @click="activeDay = index"
+          >
+            {{ day }}
+          </div>
+        </div>
+
+        <div class="schedule-list-container">
+          <transition-group
+            name="schedule-list"
+            tag="div"
+            class="schedule-list"
+          >
+            <div
+              v-if="currentDayClasses.length === 0"
+              class="empty-state"
+              key="empty"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+              <span>今日自由，尽情探索吧</span>
+            </div>
+
+            <div
+              class="schedule-card"
+              v-for="item in currentDayClasses"
+              :key="item.id"
+              :class="`theme-${item.color}`"
+            >
+              <div class="time-col">
+                <span class="time-start">{{ item.startTime }}</span>
+                <span class="time-end">{{ item.endTime }}</span>
+              </div>
+
+              <div class="info-col">
+                <div class="course-header">
+                  <span class="course-name">{{ item.name }}</span>
+                  <span class="course-type" v-if="item.type"
+                    >{{ item.type }}</span
+                  >
+                </div>
+                <div class="course-details">
+                  <div class="detail-item">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path
+                        d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"
+                      ></path>
+                      <circle cx="12" cy="10" r="3"></circle>
+                    </svg>
+                    {{ item.location }}
+                  </div>
+                  <div class="detail-item" v-if="item.teacher">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path
+                        d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"
+                      ></path>
+                      <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                    {{ item.teacher }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </transition-group>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const { createApp, ref, computed } = Vue;
+
+      createApp({
+        setup() {
+          const weekDays = ["一", "二", "三", "四", "五", "六", "日"];
+
+          // 默认选中今天 (0代表周一)
+          const currentDay = new Date().getDay();
+          const todayIndex = currentDay === 0 ? 6 : currentDay - 1;
+          const activeDay = ref(todayIndex);
+
+          // 核心数据源 (极致莫兰迪色分类：blue-理论, purple-实验, orange-备考, green-开发/兴趣)
+          const allScheduleData = {
+            0: [
+              // 周一
+              {
+                id: 1,
+                name: "工程热力学",
+                startTime: "08:00",
+                endTime: "09:40",
+                location: "教学楼1-101",
+                teacher: "王教授",
+                color: "blue",
+                type: "必修",
+              },
+              {
+                id: 2,
+                name: "芯片级电子器件散热",
+                startTime: "10:00",
+                endTime: "11:40",
+                location: "教学楼2-305",
+                teacher: "陈教授",
+                color: "blue",
+                type: "专业课",
+              },
+              {
+                id: 3,
+                name: "微通道散热实验",
+                startTime: "14:00",
+                endTime: "16:00",
+                location: "热物理实-204",
+                teacher: "李导",
+                color: "purple",
+                type: "实验",
+              },
+            ],
+            1: [
+              // 周二
+              {
+                id: 4,
+                name: "考研数学一专攻",
+                startTime: "08:30",
+                endTime: "11:30",
+                location: "图书馆 3F",
+                teacher: "浙大目标",
+                color: "orange",
+                type: "自习",
+              },
+              {
+                id: 5,
+                name: "大学英语 (六)",
+                startTime: "14:00",
+                endTime: "15:40",
+                location: "文科楼-402",
+                teacher: "张老师",
+                color: "blue",
+                type: "公共课",
+              },
+            ],
+            2: [
+              // 周三
+              {
+                id: 6,
+                name: "FastAPI与Streamlit开发",
+                startTime: "14:00",
+                endTime: "16:00",
+                location: "机房-501",
+                teacher: "全栈实践",
+                color: "green",
+                type: "兴趣/项目",
+              },
+              {
+                id: 7,
+                name: "考研数学一专攻",
+                startTime: "19:00",
+                endTime: "22:00",
+                location: "图书馆 3F",
+                teacher: "高数强化",
+                color: "orange",
+                type: "自习",
+              },
+            ],
+            3: [
+              // 周四
+              {
+                id: 8,
+                name: "Final Cut Pro 进阶",
+                startTime: "10:00",
+                endTime: "12:00",
+                location: "数字媒体中心",
+                teacher: "视频流",
+                color: "green",
+                type: "技能",
+              },
+            ],
+            4: [
+              // 周五
+              {
+                id: 9,
+                name: "传热学",
+                startTime: "08:00",
+                endTime: "09:40",
+                location: "教学楼1-105",
+                teacher: "刘教授",
+                color: "blue",
+                type: "专业课",
+              },
+            ],
+            5: [], // 周六空闲，测试 Empty State
+            6: [
+              // 周日
+              {
+                id: 10,
+                name: "考研数学一专攻",
+                startTime: "09:00",
+                endTime: "17:00",
+                location: "图书馆 3F",
+                teacher: "模拟测验",
+                color: "orange",
+                type: "冲刺",
+              },
+            ],
+          };
+
+          const currentDayClasses = computed(() => {
+            return allScheduleData[activeDay.value] || [];
+          });
+
+          return {
+            weekDays,
+            activeDay,
+            currentDayClasses,
+          };
+        },
+      }).mount("#app");
+    </script>
+  </body>
+</html>

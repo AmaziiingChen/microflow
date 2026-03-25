@@ -76,7 +76,8 @@ class Api:
             self.llm, db,
             on_task_complete=self._on_task_complete,  # 🌟 新增：任务完成回调
             on_article_processed=self._on_article_processed,
-            on_progress=self._push_ai_progress  # 🌟 新增：AI 进度回调
+            on_progress=self._push_ai_progress,  # 🌟 新增：AI 进度回调
+            config_service=self.config_service  # 📧 邮件推送配置服务
         )
         self.scheduler = SpiderScheduler(
             article_processor=self.article_processor,
@@ -711,6 +712,185 @@ class Api:
             "status": "success",
             "cooldown_seconds": DaemonManager.MANUAL_UPDATE_COOLDOWN
         }
+
+    # ==================== 📧 邮件推送 API ====================
+
+    def send_test_email(self, test_email: str = None) -> dict:
+        """
+        发送测试邮件
+
+        Args:
+            test_email: 测试收件人邮箱（可选，默认使用 SMTP 用户名）
+
+        Returns:
+            {"status": "success/error", "message": str}
+        """
+        try:
+            # 获取邮件配置
+            smtp_host = self.config_service.get('smtpHost', '')
+            smtp_port = self.config_service.get('smtpPort', 465)
+            smtp_user = self.config_service.get('smtpUser', '')
+            smtp_password = self.config_service.get('smtpPassword', '')
+
+            if not smtp_host or not smtp_user or not smtp_password:
+                return {
+                    "status": "error",
+                    "message": "请先配置 SMTP 服务器信息"
+                }
+
+            # 如果未指定测试邮箱，使用 SMTP 用户名
+            to_addr = test_email or smtp_user
+            if not to_addr:
+                return {
+                    "status": "error",
+                    "message": "请提供测试邮箱地址"
+                }
+
+            # 导入邮件服务
+            from src.services.email_service import EmailService
+
+            email_service = EmailService(
+                smtp_host=smtp_host,
+                smtp_port=smtp_port,
+                smtp_user=smtp_user,
+                smtp_password=smtp_password
+            )
+
+            result = email_service.send_test_email(to_addr)
+
+            if result.get('success'):
+                return {"status": "success", "message": f"测试邮件已发送至 {to_addr}"}
+            else:
+                return {"status": "error", "message": result.get('message', '发送失败')}
+
+        except ImportError as e:
+            logger.error(f"邮件服务模块导入失败: {e}")
+            return {"status": "error", "message": "邮件服务模块未安装"}
+        except Exception as e:
+            logger.error(f"发送测试邮件失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def get_email_config(self) -> dict:
+        """获取邮件配置状态"""
+        try:
+            return {
+                "status": "success",
+                "emailNotifyEnabled": self.config_service.get('emailNotifyEnabled', False),
+                "smtpHost": self.config_service.get('smtpHost', ''),
+                "smtpPort": self.config_service.get('smtpPort', 465),
+                "smtpUser": self.config_service.get('smtpUser', ''),
+                "hasPassword": bool(self.config_service.get('smtpPassword', '')),
+                "subscriberList": self.config_service.get('subscriberList', []),
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    def diagnose_email_push(self) -> dict:
+        """诊断邮件推送配置"""
+        try:
+            # 检查配置服务
+            if not self.article_processor.config_service:
+                return {
+                    "status": "error",
+                    "message": "ArticleProcessor 缺少 config_service",
+                    "canSend": False
+                }
+
+            # 获取各项配置
+            enabled = self.config_service.get('emailNotifyEnabled', False)
+            subscriber_list = self.config_service.get('subscriberList', [])
+            smtp_host = self.config_service.get('smtpHost', '')
+            smtp_user = self.config_service.get('smtpUser', '')
+            smtp_password = self.config_service.get('smtpPassword', '')
+
+            # 刣找问题
+            issues = []
+            if not enabled:
+                issues.append("邮件通知未启用 (emailNotifyEnabled=False)")
+            if len(subscriber_list) == 0:
+                issues.append("订阅者列表为空 (subscriberList=[])"  )
+            if not smtp_host:
+                issues.append("SMTP 服务器未配置 (smtpHost='')"  )
+            if not smtp_user:
+                issues.append("SMTP 用户未配置 (smtpUser='')"  )
+            if not smtp_password:
+                issues.append("SMTP 密码未配置 (smtpPassword='')"  )
+
+            # 判断是否可以发送
+            can_send = all([
+                enabled,
+                len(subscriber_list) > 0,
+                smtp_host,
+                smtp_user,
+                smtp_password
+            ])
+
+            logger.info(f"📧 邮件推送诊断: enabled={enabled}, subscribers={len(subscriber_list)}, host={smtp_host}, user={smtp_user}, hasPassword={bool(smtp_password)}")
+
+            return {
+                "status": "success",
+                "canSend": can_send,
+                "checks": {
+                    "emailNotifyEnabled": enabled,
+                    "subscriberList": subscriber_list,
+                    "smtpHost": smtp_host,
+                    "smtpUser": smtp_user,
+                    "hasPassword": bool(smtp_password),
+                },
+                "issues": issues,
+                "message": "邮件推送配置正常" if can_send else f"问题: {', '.join(issues)}"
+            }
+
+        except Exception as e:
+            logger.error(f"诊断邮件推送失败: {e}")
+            return {"status": "error", "message": str(e), "canSend": False}
+
+    def test_email_push_with_latest_article(self) -> dict:
+        """
+        使用最新一篇文章测试邮件推送流程
+
+        Returns:
+            {"status": "success/error", "message": str}
+        """
+        try:
+            # 获取最新一篇文章
+            articles = db.get_articles_paged(limit=1, offset=0)
+            if not articles or len(articles) == 0:
+                return {"status": "error", "message": "数据库中没有文章"}
+
+            article = articles[0]
+            logger.info(f"📧 测试邮件推送：使用文章 [{article.get('title', '')[:30]}]")
+
+            # 检查配置
+            enabled = self.config_service.get('emailNotifyEnabled', False)
+            subscriber_list = self.config_service.get('subscriberList', [])
+
+            if not enabled:
+                return {"status": "error", "message": "邮件通知未启用"}
+            if not subscriber_list:
+                return {"status": "error", "message": "订阅者列表为空"}
+
+            # 🌟 添加 model_name 字段（从配置获取当前模型名称）
+            article["model_name"] = self.config_service.get('modelName', 'AI')
+
+            # 直接调用 ArticleProcessor 的邮件发送方法
+            self.article_processor._send_email_notification(article)
+
+            return {"status": "success", "message": f"已触发邮件推送，请检查邮箱：{subscriber_list}"}
+
+        except Exception as e:
+            logger.error(f"测试邮件推送失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def refresh_snapshot_browser(self) -> dict:
+        """
+        刷新快照样式（每次截图都会创建新的浏览器实例，无需手动刷新）
+
+        Returns:
+            {"status": "success", "message": str}
+        """
+        # 新实现每次截图都创建新的浏览器实例，样式自动生效
+        return {"status": "success", "message": "样式已自动生效，下次截图将使用最新样式"}
 
     def _set_autostart(self, enabled: bool):
         """设置开机自启"""
