@@ -3365,41 +3365,6 @@
           0 1px 2px rgba(0, 0, 0, 0.04);
       }
 
-      /* ================= 新增：独立悬浮的 Toast 提示语 ================= */
-      .floating-toast {
-        position: fixed;
-        bottom: 70%;
-        left: 50%;
-        transform: translateX(-50%);
-        text-align: center; /* 1. 基础文本居中 */
-        display: flex; /* 2. 开启 Flex 布局 */
-        align-items: center; /* 3. 垂直方向居中 */
-        justify-content: center; /* 4. 水平方向居中 */
-        background: rgba(17, 24, 39, 0.85);
-        backdrop-filter: blur(8px);
-        color: #ffffff;
-        padding: 10px 24px;
-        border-radius: 20px;
-        font-size: 13px;
-        font-weight: 600;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15); /* 加深阴影 */
-        z-index: 9999;
-        pointer-events: none;
-        width: max-content; /* 宽度自动根据文字长度撑开 */
-        max-width: 90%; /* 保护措施：在极窄窗口下不溢出屏幕 */
-        animation: toastPopUp 0.5s var(--curve-pop) forwards;
-      }
-      @keyframes toastPopUp {
-        0% {
-          opacity: 0;
-          transform: translate(-50%, 30px) scale(0.85); /* 更大的景深起跳 */
-        }
-        100% {
-          opacity: 1;
-          transform: translate(-50%, 0) scale(1);
-        }
-      }
-
       /* 胶囊式多选按钮 (订阅管理) */
       .subs-chip {
         padding: 8px 14px;
@@ -3528,7 +3493,7 @@
       }
       /* 彩虹渐变放在伪元素中，可以被 overflow: hidden 裁剪成圆形 */
       .aurora-light::before {
-        content: '';
+        content: "";
         position: absolute;
         inset: -15px; /* 比 blur 大，确保模糊后仍覆盖整个区域 */
         background: conic-gradient(
@@ -4852,74 +4817,148 @@
                 style="
                   display: flex;
                   margin: 16px auto 0;
-                  padding: 8px 16px;
-                  font-size: 13px;
+                  padding: 6px 14px;
+                  font-size: 12px;
                   background: #f3f4f6;
                   color: var(--text-secondary);
                   border: 1px solid #e5e7eb;
-                  border-radius: 8px;
+                  border-radius: 6px;
+                  min-width: 140px;
+                  height: 34px;
                 "
                 @click="sendTestEmail"
                 :disabled="isSendingTestEmail"
               >
-                {{ isSendingTestEmail ? '发送中...' : '发送测试邮件' }}
+                <!-- 发送状态显示 -->
+                <div v-if="isSendingTestEmail" class="connection-status testing">
+                  <svg
+                    class="icon-antenna"
+                    viewBox="0 0 23 19"
+                    fill="currentColor"
+                  >
+                    <path
+                      class="wave-outer"
+                      d="M0 7.05773C0 9.60255 0.862072 11.9774 2.46764 13.6824C2.95053 14.1919 3.58435 14.1609 3.94343 13.7281C4.29009 13.3206 4.18312 12.8058 3.7974 12.3712C2.55402 10.9907 1.85886 9.11076 1.85886 7.05773C1.85886 5.00781 2.54781 3.13101 3.7974 1.75046C4.18623 1.31591 4.2963 0.801028 3.94343 0.393568C3.58125-0.0360787 2.94432-0.0764489 2.46764 0.439291C0.905547 2.11636 0 4.52222 0 7.05773ZM17.8045 13.7281C18.1635 14.1609 18.7974 14.1919 19.2803 13.6824C20.8858 11.9774 21.7479 9.60255 21.7479 7.05773C21.7479 4.52222 20.8423 2.11636 19.2803 0.439291C18.8036-0.0764489 18.1666-0.0360787 17.8045 0.393568C17.4516 0.801028 17.5617 1.31591 17.9505 1.75046C19.2001 3.13101 19.889 5.00781 19.889 7.05773C19.889 9.11076 19.1939 10.9907 17.9505 12.3712C17.5648 12.8058 17.4578 13.3206 17.8045 13.7281Z"
+                    />
+                    <path
+                      class="wave-inner"
+                      d="M4.24797 7.05773C4.24797 8.51501 4.7083 9.87775 5.53928 10.861C5.97423 11.3754 6.66265 11.3595 7.01908 10.9201C7.35021 10.5157 7.22947 10.0203 6.89833 9.56937C6.39624 8.93056 6.10683 7.9833 6.10683 7.05773C6.10683 6.13216 6.41622 5.20798 6.89833 4.54608C7.2197 4.08534 7.35021 3.59976 7.01908 3.19851C6.66265 2.7591 5.97423 2.73691 5.53928 3.25445C4.7083 4.23771 4.24797 5.60044 4.24797 7.05773ZM14.7288 10.9201C15.0852 11.3595 15.7737 11.3754 16.2086 10.861C17.0396 9.87775 17.4999 8.51501 17.4999 7.05773C17.4999 5.60044 17.0396 4.23771 16.2086 3.25445C15.7737 2.73691 15.0852 2.7591 14.7288 3.19851C14.3977 3.59976 14.5282 4.08534 14.8496 4.54608C15.3317 5.20798 15.6411 6.13216 15.6411 7.05773C15.6411 7.9833 15.3516 8.93056 14.8496 9.56937C14.5184 10.0203 14.3977 10.5157 14.7288 10.9201Z"
+                    />
+                    <path
+                      class="tower"
+                      d="M8.89277 7.05773C8.89277 7.82296 9.318 8.48433 9.96073 8.81056L9.96073 17.4066C9.96073 18.0165 10.3349 18.439 10.8804 18.439C11.4449 18.439 11.7965 18.0325 11.7965 17.4066L11.7965 8.81056C12.4294 8.48433 12.8613 7.8163 12.8613 7.05773C12.8613 5.95695 11.9812 5.06346 10.8804 5.06346C9.77294 5.06346 8.89277 5.95695 8.89277 7.05773Z"
+                    />
+                  </svg>
+                  <span class="status-text">发送中</span>
+                </div>
+                <div
+                  v-else-if="emailSendStatus === 'success'"
+                  class="connection-status success"
+                >
+                  <svg
+                    class="icon-antenna"
+                    viewBox="0 0 23 19"
+                    fill="currentColor"
+                  >
+                    <path
+                      class="wave-outer"
+                      d="M0 7.05773C0 9.60255 0.862072 11.9774 2.46764 13.6824C2.95053 14.1919 3.58435 14.1609 3.94343 13.7281C4.29009 13.3206 4.18312 12.8058 3.7974 12.3712C2.55402 10.9907 1.85886 9.11076 1.85886 7.05773C1.85886 5.00781 2.54781 3.13101 3.7974 1.75046C4.18623 1.31591 4.2963 0.801028 3.94343 0.393568C3.58125-0.0360787 2.94432-0.0764489 2.46764 0.439291C0.905547 2.11636 0 4.52222 0 7.05773ZM17.8045 13.7281C18.1635 14.1609 18.7974 14.1919 19.2803 13.6824C20.8858 11.9774 21.7479 9.60255 21.7479 7.05773C21.7479 4.52222 20.8423 2.11636 19.2803 0.439291C18.8036-0.0764489 18.1666-0.0360787 17.8045 0.393568C17.4516 0.801028 17.5617 1.31591 17.9505 1.75046C19.2001 3.13101 19.889 5.00781 19.889 7.05773C19.889 9.11076 19.1939 10.9907 17.9505 12.3712C17.5648 12.8058 17.4578 13.3206 17.8045 13.7281Z"
+                    />
+                    <path
+                      class="wave-inner"
+                      d="M4.24797 7.05773C4.24797 8.51501 4.7083 9.87775 5.53928 10.861C5.97423 11.3754 6.66265 11.3595 7.01908 10.9201C7.35021 10.5157 7.22947 10.0203 6.89833 9.56937C6.39624 8.93056 6.10683 7.9833 6.10683 7.05773C6.10683 6.13216 6.41622 5.20798 6.89833 4.54608C7.2197 4.08534 7.35021 3.59976 7.01908 3.19851C6.66265 2.7591 5.97423 2.73691 5.53928 3.25445C4.7083 4.23771 4.24797 5.60044 4.24797 7.05773ZM14.7288 10.9201C15.0852 11.3595 15.7737 11.3754 16.2086 10.861C17.0396 9.87775 17.4999 8.51501 17.4999 7.05773C17.4999 5.60044 17.0396 4.23771 16.2086 3.25445C15.7737 2.73691 15.0852 2.7591 14.7288 3.19851C14.3977 3.59976 14.5282 4.08534 14.8496 4.54608C15.3317 5.20798 15.6411 6.13216 15.6411 7.05773C15.6411 7.9833 15.3516 8.93056 14.8496 9.56937C14.5184 10.0203 14.3977 10.5157 14.7288 10.9201Z"
+                    />
+                    <path
+                      class="tower"
+                      d="M8.89277 7.05773C8.89277 7.82296 9.318 8.48433 9.96073 8.81056L9.96073 17.4066C9.96073 18.0165 10.3349 18.439 10.8804 18.439C11.4449 18.439 11.7965 18.0325 11.7965 17.4066L11.7965 8.81056C12.4294 8.48433 12.8613 7.8163 12.8613 7.05773C12.8613 5.95695 11.9812 5.06346 10.8804 5.06346C9.77294 5.06346 8.89277 5.95695 8.89277 7.05773Z"
+                    />
+                  </svg>
+                  <span class="status-text">发送成功</span>
+                </div>
+                <div
+                  v-else-if="emailSendStatus === 'error'"
+                  class="connection-status error"
+                >
+                  <svg
+                    class="icon-antenna"
+                    viewBox="0 0 23 19"
+                    fill="currentColor"
+                  >
+                    <path
+                      class="wave-outer"
+                      d="M0 7.05773C0 9.60255 0.862072 11.9774 2.46764 13.6824C2.95053 14.1919 3.58435 14.1609 3.94343 13.7281C4.29009 13.3206 4.18312 12.8058 3.7974 12.3712C2.55402 10.9907 1.85886 9.11076 1.85886 7.05773C1.85886 5.00781 2.54781 3.13101 3.7974 1.75046C4.18623 1.31591 4.2963 0.801028 3.94343 0.393568C3.58125-0.0360787 2.94432-0.0764489 2.46764 0.439291C0.905547 2.11636 0 4.52222 0 7.05773ZM17.8045 13.7281C18.1635 14.1609 18.7974 14.1919 19.2803 13.6824C20.8858 11.9774 21.7479 9.60255 21.7479 7.05773C21.7479 4.52222 20.8423 2.11636 19.2803 0.439291C18.8036-0.0764489 18.1666-0.0360787 17.8045 0.393568C17.4516 0.801028 17.5617 1.31591 17.9505 1.75046C19.2001 3.13101 19.889 5.00781 19.889 7.05773C19.889 9.11076 19.1939 10.9907 17.9505 12.3712C17.5648 12.8058 17.4578 13.3206 17.8045 13.7281Z"
+                    />
+                    <path
+                      class="wave-inner"
+                      d="M4.24797 7.05773C4.24797 8.51501 4.7083 9.87775 5.53928 10.861C5.97423 11.3754 6.66265 11.3595 7.01908 10.9201C7.35021 10.5157 7.22947 10.0203 6.89833 9.56937C6.39624 8.93056 6.10683 7.9833 6.10683 7.05773C6.10683 6.13216 6.41622 5.20798 6.89833 4.54608C7.2197 4.08534 7.35021 3.59976 7.01908 3.19851C6.66265 2.7591 5.97423 2.73691 5.53928 3.25445C4.7083 4.23771 4.24797 5.60044 4.24797 7.05773ZM14.7288 10.9201C15.0852 11.3595 15.7737 11.3754 16.2086 10.861C17.0396 9.87775 17.4999 8.51501 17.4999 7.05773C17.4999 5.60044 17.0396 4.23771 16.2086 3.25445C15.7737 2.73691 15.0852 2.7591 14.7288 3.19851C14.3977 3.59976 14.5282 4.08534 14.8496 4.54608C15.3317 5.20798 15.6411 6.13216 15.6411 7.05773C15.6411 7.9833 15.3516 8.93056 14.8496 9.56937C14.5184 10.0203 14.3977 10.5157 14.7288 10.9201Z"
+                    />
+                    <path
+                      class="tower"
+                      d="M8.89277 7.05773C8.89277 7.82296 9.318 8.48433 9.96073 8.81056L9.96073 17.4066C9.96073 18.0165 10.3349 18.439 10.8804 18.439C11.4449 18.439 11.7965 18.0325 11.7965 17.4066L11.7965 8.81056C12.4294 8.48433 12.8613 7.8163 12.8613 7.05773C12.8613 5.95695 11.9812 5.06346 10.8804 5.06346C9.77294 5.06346 8.89277 5.95695 8.89277 7.05773Z"
+                    />
+                  </svg>
+                  <span class="status-text">发送失败</span>
+                </div>
+                <div v-else class="connection-status idle">
+                  <svg
+                    class="icon-antenna"
+                    viewBox="0 0 23 19"
+                    fill="currentColor"
+                  >
+                    <path
+                      class="wave-outer"
+                      d="M0 7.05773C0 9.60255 0.862072 11.9774 2.46764 13.6824C2.95053 14.1919 3.58435 14.1609 3.94343 13.7281C4.29009 13.3206 4.18312 12.8058 3.7974 12.3712C2.55402 10.9907 1.85886 9.11076 1.85886 7.05773C1.85886 5.00781 2.54781 3.13101 3.7974 1.75046C4.18623 1.31591 4.2963 0.801028 3.94343 0.393568C3.58125-0.0360787 2.94432-0.0764489 2.46764 0.439291C0.905547 2.11636 0 4.52222 0 7.05773ZM17.8045 13.7281C18.1635 14.1609 18.7974 14.1919 19.2803 13.6824C20.8858 11.9774 21.7479 9.60255 21.7479 7.05773C21.7479 4.52222 20.8423 2.11636 19.2803 0.439291C18.8036-0.0764489 18.1666-0.0360787 17.8045 0.393568C17.4516 0.801028 17.5617 1.31591 17.9505 1.75046C19.2001 3.13101 19.889 5.00781 19.889 7.05773C19.889 9.11076 19.1939 10.9907 17.9505 12.3712C17.5648 12.8058 17.4578 13.3206 17.8045 13.7281Z"
+                    />
+                    <path
+                      class="wave-inner"
+                      d="M4.24797 7.05773C4.24797 8.51501 4.7083 9.87775 5.53928 10.861C5.97423 11.3754 6.66265 11.3595 7.01908 10.9201C7.35021 10.5157 7.22947 10.0203 6.89833 9.56937C6.39624 8.93056 6.10683 7.9833 6.10683 7.05773C6.10683 6.13216 6.41622 5.20798 6.89833 4.54608C7.2197 4.08534 7.35021 3.59976 7.01908 3.19851C6.66265 2.7591 5.97423 2.73691 5.53928 3.25445C4.7083 4.23771 4.24797 5.60044 4.24797 7.05773ZM14.7288 10.9201C15.0852 11.3595 15.7737 11.3754 16.2086 10.861C17.0396 9.87775 17.4999 8.51501 17.4999 7.05773C17.4999 5.60044 17.0396 4.23771 16.2086 3.25445C15.7737 2.73691 15.0852 2.7591 14.7288 3.19851C14.3977 3.59976 14.5282 4.08534 14.8496 4.54608C15.3317 5.20798 15.6411 6.13216 15.6411 7.05773C15.6411 7.9833 15.3516 8.93056 14.8496 9.56937C14.5184 10.0203 14.3977 10.5157 14.7288 10.9201Z"
+                    />
+                    <path
+                      class="tower"
+                      d="M8.89277 7.05773C8.89277 7.82296 9.318 8.48433 9.96073 8.81056L9.96073 17.4066C9.96073 18.0165 10.3349 18.439 10.8804 18.439C11.4449 18.439 11.7965 18.0325 11.7965 17.4066L11.7965 8.81056C12.4294 8.48433 12.8613 7.8163 12.8613 7.05773C12.8613 5.95695 11.9812 5.06346 10.8804 5.06346C9.77294 5.06346 8.89277 5.95695 8.89277 7.05773Z"
+                    />
+                  </svg>
+                  <span class="status-text">发送测试邮件</span>
+                </div>
               </button>
 
-              <!-- 诊断按钮 -->
-              <button
-                class="action-btn"
-                style="
-                  display: flex;
-                  margin: 8px auto 0;
-                  padding: 6px 12px;
-                  font-size: 12px;
-                  background: transparent;
-                  color: #6b7280;
-                  border: 1px dashed #d1d5db;
-                  border-radius: 6px;
-                "
-                @click="diagnoseEmailPush"
-              >
-                🔍 诊断配置
-              </button>
+              <!-- 诊断和测试推送按钮（一行排列） -->
+              <div style="display: flex; gap: 10px; margin-top: 12px; justify-content: center;">
+                <button
+                  class="action-btn"
+                  style="
+                    flex: 1;
+                    padding: 8px 12px;
+                    font-size: 12px;
+                    background: transparent;
+                    color: #6b7280;
+                    border: 1px dashed #d1d5db;
+                    border-radius: 6px;
+                    white-space: nowrap;
+                  "
+                  @click="diagnoseEmailPush"
+                >
+                  诊断配置
+                </button>
 
-              <!-- 测试推送按钮 -->
-              <button
-                class="action-btn"
-                style="
-                  display: flex;
-                  margin: 8px auto 0;
-                  padding: 6px 12px;
-                  font-size: 12px;
-                  background: transparent;
-                  color: #408ff7;
-                  border: 1px solid #408ff7;
-                  border-radius: 6px;
-                "
-                @click="testEmailPushWithArticle"
-                :disabled="isTestingPush"
-              >
-                {{ isTestingPush ? '推送中...' : '📤 测试推送最新文章' }}
-              </button>
-
-              <button
-                style="
-                  padding: 8px 12px;
-                  font-size: 12px;
-                  font-weight: 600;
-                  background: #fff;
-                  color: #8b5cf6;
-                  border: 1px solid #8b5cf6;
-                  border-radius: 6px;
-                "
-                @click="refreshSnapshotBrowser"
-              >
-                🔄 刷新截图样式
-              </button>
-            </div>
-
-            <div v-if="settingsMsg" class="floating-toast">
-              {{ settingsMsg }}
+                <button
+                  class="action-btn"
+                  style="
+                    flex: 1;
+                    padding: 8px 12px;
+                    font-size: 12px;
+                    background: transparent;
+                    color: #408ff7;
+                    border: 1px solid #408ff7;
+                    border-radius: 6px;
+                    white-space: nowrap;
+                  "
+                  @click="testEmailPushWithArticle"
+                  :disabled="isTestingPush"
+                >
+                  {{ isTestingPush ? '推送中...' : '试推送最新公文' }}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -5840,20 +5879,11 @@
     <script>
       // 全局错误捕获
       window.onerror = function (msg, url, line, col, error) {
-        // 忽略 ResizeObserver 良性错误
-        if (msg && msg.includes("ResizeObserver")) {
-          return true;
-        }
         console.error("JS错误:", msg, "行:", line);
         return false;
       };
 
       window.addEventListener("unhandledrejection", function (event) {
-        // 忽略 ResizeObserver 良性错误
-        if (event.reason && event.reason.message && event.reason.message.includes("ResizeObserver")) {
-          event.preventDefault();
-          return;
-        }
         console.error("Promise错误:", event.reason);
       });
 
@@ -6457,6 +6487,7 @@
             // 📧 邮件推送相关状态
             const newSubscriberEmail = ref("");
             const isSendingTestEmail = ref(false);
+            const emailSendStatus = ref("idle"); // idle, sending, success, error
             const isTestingPush = ref(false);
 
             // 获取 AI 品牌名称（用于状态提示）
@@ -6541,7 +6572,6 @@
             );
 
             const showApiKey = ref(false); // 密钥显示/隐藏状态
-            const settingsMsg = ref("");
             const isTesting = ref(false);
             const connectionStatus = ref("idle"); // idle | testing | success | error
             // 修复：使用响应式对象追踪 Set 变化
@@ -6852,21 +6882,47 @@
             };
 
             const sendTestEmail = async () => {
-              if (!config.value.smtpHost || !config.value.smtpUser || !config.value.smtpPassword) {
-                showNotification("发送失败", "请先配置 SMTP 服务器信息", "warning");
+              if (
+                !config.value.smtpHost ||
+                !config.value.smtpUser ||
+                !config.value.smtpPassword
+              ) {
+                showNotification(
+                  "发送失败",
+                  "请先配置 SMTP 服务器信息",
+                  "warning",
+                );
                 return;
               }
 
               isSendingTestEmail.value = true;
+              emailSendStatus.value = "sending";
               try {
-                const res = await pywebview.api.send_test_email(config.value.smtpUser);
+                // 优先发送给订阅者列表，否则发送给发件人自己
+                const testEmail = (config.value.subscriberList && config.value.subscriberList.length > 0)
+                  ? config.value.subscriberList[0]
+                  : config.value.smtpUser;
+                const res = await pywebview.api.send_test_email(testEmail);
                 if (res.status === "success") {
+                  emailSendStatus.value = "success";
                   showNotification("发送成功", res.message, "success");
+                  // 2秒后重置状态
+                  setTimeout(() => {
+                    emailSendStatus.value = "idle";
+                  }, 2000);
                 } else {
+                  emailSendStatus.value = "error";
                   showNotification("发送失败", res.message, "error");
+                  setTimeout(() => {
+                    emailSendStatus.value = "idle";
+                  }, 2000);
                 }
               } catch (e) {
+                emailSendStatus.value = "error";
                 showNotification("发送失败", "网络请求失败", "error");
+                setTimeout(() => {
+                  emailSendStatus.value = "idle";
+                }, 2000);
               } finally {
                 isSendingTestEmail.value = false;
               }
@@ -6877,7 +6933,11 @@
                 const res = await pywebview.api.diagnose_email_push();
                 if (res.status === "success") {
                   if (res.canSend) {
-                    showNotification("诊断结果", "邮件推送配置正常，可以发送", "success");
+                    showNotification(
+                      "诊断结果",
+                      "邮件推送配置正常，可以发送",
+                      "success",
+                    );
                   } else {
                     showNotification("诊断结果", res.message, "warning");
                   }
@@ -6893,7 +6953,8 @@
             const testEmailPushWithArticle = async () => {
               isTestingPush.value = true;
               try {
-                const res = await pywebview.api.test_email_push_with_latest_article();
+                const res =
+                  await pywebview.api.test_email_push_with_latest_article();
                 if (res.status === "success") {
                   showNotification("推送测试", res.message, "success");
                 } else {
@@ -6903,20 +6964,6 @@
                 showNotification("推送测试", "网络请求失败", "error");
               } finally {
                 isTestingPush.value = false;
-              }
-            };
-
-            // 刷新截图浏览器样式
-            const refreshSnapshotBrowser = async () => {
-              try {
-                const res = await pywebview.api.refresh_snapshot_browser();
-                if (res.status === "success") {
-                  showNotification("刷新成功", res.message, "success");
-                } else {
-                  showNotification("刷新失败", res.message, "error");
-                }
-              } catch (e) {
-                showNotification("刷新失败", "网络请求失败", "error");
               }
             };
 
@@ -7039,7 +7086,6 @@
               }
 
               isSettingsOpen.value = true;
-              settingsMsg.value = "";
 
               // 🌟 神奇魔法：自动滚动到顶部，让用户亲眼看到这张卡片顺滑地"挤"出来
               setTimeout(() => {
@@ -7061,19 +7107,18 @@
 
             // 🌟 新增：带自动保存的闭环退出逻辑
             const closeSettingsWithAutoSave = async () => {
-              // settingsMsg.value = "正在保存配置并应用...";
               try {
                 // 1. 先呼叫后端保存
                 const res = await pywebview.api.save_config(
                   JSON.parse(JSON.stringify(config.value)),
                 );
                 if (res.status === "success") {
-                  settingsMsg.value = "配置已保存并应用";
+                  showNotification("保存成功", "配置已保存并应用", "success");
                 } else {
-                  settingsMsg.value = "保存失败: " + res.message;
+                  showNotification("保存失败", res.message, "error");
                 }
               } catch (e) {
-                settingsMsg.value = "保存发生错误";
+                showNotification("保存失败", "保存发生错误", "error");
               }
 
               // 2. 🌟 核心：无论保存是否彻底成功，都坍塌物理空间
@@ -7088,21 +7133,18 @@
             // 恢复默认提示词
             const resetPrompt = () => {
               config.value.prompt = DEFAULT_PROMPT;
-              settingsMsg.value = "提示词已恢复默认，点击保存生效";
+              showNotification("提示词已恢复", "点击保存生效", "success");
             };
 
             // 保存设置
             const saveSettings = async () => {
-              settingsMsg.value = "正在保存";
-
               const res = await pywebview.api.save_config(
                 JSON.parse(JSON.stringify(config.value)),
               );
               if (res.status === "success") {
-                settingsMsg.value = "配置保存成功！";
-                setTimeout(() => (settingsMsg.value = ""), 3000);
+                showNotification("保存成功", "配置已保存并应用", "success");
               } else {
-                settingsMsg.value = "保存失败: " + res.message;
+                showNotification("保存失败", res.message, "error");
               }
             };
 
@@ -9493,7 +9535,6 @@
               backToPrevious,
               config,
               showApiKey,
-              settingsMsg,
               isTesting,
               connectionStatus,
               regeneratingIds,
@@ -9520,13 +9561,13 @@
               // 📧 邮件推送
               newSubscriberEmail,
               isSendingTestEmail,
+              emailSendStatus,
               isTestingPush,
               addSubscriber,
               removeSubscriber,
               sendTestEmail,
               diagnoseEmailPush,
               testEmailPushWithArticle,
-              refreshSnapshotBrowser,
 
               // 附件与工具
               truncateMiddle,

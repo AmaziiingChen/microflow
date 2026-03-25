@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Apple 级设置面板 Demo</title>
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+
+    <style>
+      /* ============================================================
+       1. 全局重置与优雅字体栈
+       ============================================================ */
+      :root {
+        --bg-light: #f2f2f7; /* Apple 经典设置页背景灰 */
+        --text-main: #1d1d1f;
+        --text-sub: #8e8e93;
+        --accent-color: #007aff; /* 系统蓝 */
+        --success-color: #34c759;
+        --error-color: #ff3b30;
+      }
+
+      body {
+        margin: 0;
+        padding: 60px 20px;
+        background-color: var(--bg-light);
+        font-family:
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "PingFang SC",
+          "Microsoft YaHei UI",
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+        display: flex;
+        justify-content: center;
+      }
+
+      /* ============================================================
+       2. ⚙️ 设置卡片容器 (Grouped Background)
+       ============================================================ */
+      .apple-settings-card {
+        background: #ffffff;
+        border-radius: 16px;
+        padding: 0 20px;
+        box-shadow:
+          0 2px 10px rgba(0, 0, 0, 0.02),
+          inset 0 0 0 1px rgba(0, 0, 0, 0.04);
+        width: 100%;
+        max-width: 540px;
+      }
+
+      .settings-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 18px 0;
+        min-height: 48px;
+        gap: 24px;
+      }
+
+      .settings-divider {
+        height: 1px;
+        background-color: rgba(0, 0, 0, 0.05);
+      }
+
+      /* 标签排版 */
+      .settings-label {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        flex: 1; /* 占据左侧空间 */
+      }
+      .label-title {
+        font-size: 16px;
+        font-weight: 500;
+        color: var(--text-main);
+        letter-spacing: 0.01em;
+      }
+      .label-desc {
+        font-size: 13px;
+        color: var(--text-sub);
+        line-height: 1.4;
+      }
+
+      /* 引导链接 */
+      .help-link {
+        color: var(--accent-color);
+        text-decoration: none;
+        font-weight: 500;
+        margin-top: 4px;
+        display: inline-block;
+        cursor: pointer;
+      }
+      .help-link:hover {
+        text-decoration: underline;
+      }
+
+      /* ============================================================
+       3. 🖱️ Apple 原生级输入框
+       ============================================================ */
+      .input-wrapper {
+        position: relative;
+        width: 260px; /* 固定右侧输入区域宽度 */
+        flex-shrink: 0;
+      }
+
+      .apple-input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 14px;
+        font-size: 14px;
+        font-family: inherit;
+        color: var(--text-main);
+        background: rgba(118, 118, 128, 0.08); /* 经典底灰 */
+        border: 1px solid transparent;
+        border-radius: 10px;
+        outline: none;
+        transition: all 0.25s cubic-bezier(0.25, 1, 0.5, 1);
+
+        /* 🌟 细节：定制光标颜色为主题蓝 */
+        caret-color: var(--accent-color);
+      }
+
+      /* 焦点光环 (Focus Ring) */
+      .apple-input:focus {
+        background: #ffffff;
+        border-color: var(--accent-color);
+        box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.25);
+      }
+
+      .apple-input::placeholder {
+        color: #8e8e93;
+      }
+
+      /* ============================================================
+       4. 🔒 高安全感密钥输入框
+       ============================================================ */
+      .input-wrapper.has-icon .apple-input {
+        padding-left: 36px;
+        /* 等宽代码字体，拉开密码圆点间距 */
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        letter-spacing: 0.1em;
+      }
+
+      .input-icon {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 16px;
+        height: 16px;
+        color: #8e8e93;
+        pointer-events: none;
+        transition: color 0.25s ease;
+      }
+
+      .input-wrapper.has-icon .apple-input:focus + .input-icon {
+        color: var(--accent-color);
+      }
+
+      /* ============================================================
+       5. 📡 雷达测试按钮组
+       ============================================================ */
+      .action-group {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 12px;
+      }
+
+      .apple-btn {
+        padding: 6px 14px;
+        font-size: 13px;
+        font-weight: 500;
+        color: #1d1d1f;
+        background: #ffffff;
+        border: 1px solid #d1d1d6;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+      .apple-btn:hover:not(:disabled) {
+        background: #f2f2f7;
+        border-color: #c7c7cc;
+      }
+      .apple-btn:active:not(:disabled) {
+        transform: scale(0.96);
+      }
+      .apple-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      /* 天线图标与状态文字 */
+      .connection-status {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        font-weight: 500;
+        transition: color 0.3s ease;
+      }
+      .icon-antenna {
+        width: 16px;
+        height: 16px;
+        transition: all 0.3s ease;
+      }
+
+      .status-idle {
+        color: transparent;
+      } /* 初始隐藏 */
+      .status-testing {
+        color: var(--accent-color);
+      }
+      .status-success {
+        color: var(--success-color);
+      }
+      .status-error {
+        color: var(--error-color);
+      }
+
+      /* 雷达波纹动画 */
+      .status-testing .wave-inner {
+        animation: pulse 1.2s infinite ease-in-out;
+      }
+      .status-testing .wave-outer {
+        animation: pulse 1.2s infinite ease-in-out 0.15s;
+      }
+      .status-error .wave-inner,
+      .status-error .wave-outer {
+        opacity: 0.1;
+      }
+
+      @keyframes pulse {
+        0% {
+          opacity: 0.15;
+        }
+        40% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0.15;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="app"
+      style="
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      "
+    >
+      <div class="apple-settings-card">
+        <div class="settings-row">
+          <div class="settings-label">
+            <span class="label-title">默认导出后缀</span>
+            <span class="label-desc">导出的公文文件名将自动追加此后缀</span>
+          </div>
+          <div class="input-wrapper">
+            <input
+              type="text"
+              class="apple-input"
+              placeholder="例如: _Microflow"
+              v-model="settings.suffix"
+            />
+          </div>
+        </div>
+
+        <div class="settings-divider"></div>
+
+        <div class="settings-row" style="align-items: flex-start">
+          <div class="settings-label">
+            <span class="label-title">DeepSeek 核心密钥</span>
+            <span class="label-desc" style="margin-bottom: 4px"
+              >由官方接口直连，仅在本地浏览器加密存储，绝不上传至任何第三方服务器。</span
+            >
+            <a class="help-link" @click.prevent="openTutorial"
+              >获取官方密钥 (约 5 元/半年) ↗</a
+            >
+          </div>
+
+          <div style="display: flex; flex-direction: column">
+            <div class="input-wrapper has-icon">
+              <input
+                type="password"
+                class="apple-input secure-input"
+                placeholder="sk-••••••••••••••••"
+                v-model="settings.apiKey"
+              />
+              <svg class="input-icon" viewBox="0 0 24 24" fill="currentColor">
+                <path
+                  d="M17 10H16V7C16 4.79 14.21 3 12 3C9.79 3 8 4.79 8 7V10H7C5.9 10 5 10.9 5 12V20C5 21.1 5.9 22 7 22H17C18.1 22 19 21.1 19 20V12C19 10.9 18.1 10 17 10ZM10 7C10 5.9 10.9 5 12 5C13.1 5 14 5.9 14 7V10H10V7ZM12 17C10.9 17 10 16.1 10 15C10 13.9 10.9 13 12 13C13.1 13 14 13.9 14 15C14 16.1 13.1 17 12 17Z"
+                />
+              </svg>
+            </div>
+
+            <div class="action-group">
+              <button
+                class="apple-btn"
+                :disabled="!settings.apiKey || connStatus === 'testing'"
+                @click="verifyKey"
+              >
+                验证密钥
+              </button>
+
+              <div class="connection-status" :class="'status-' + connStatus">
+                <svg
+                  class="icon-antenna"
+                  viewBox="0 0 23 19"
+                  fill="currentColor"
+                >
+                  <path
+                    class="wave-outer"
+                    d="M0 7.05773C0 9.60255 0.862072 11.9774 2.46764 13.6824C2.95053 14.1919 3.58435 14.1609 3.94343 13.7281C4.29009 13.3206 4.18312 12.8058 3.7974 12.3712C2.55402 10.9907 1.85886 9.11076 1.85886 7.05773C1.85886 5.00781 2.54781 3.13101 3.7974 1.75046C4.18623 1.31591 4.2963 0.801028 3.94343 0.393568C3.58125-0.0360787 2.94432-0.0764489 2.46764 0.439291C0.905547 2.11636 0 4.52222 0 7.05773ZM17.8045 13.7281C18.1635 14.1609 18.7974 14.1919 19.2803 13.6824C20.8858 11.9774 21.7479 9.60255 21.7479 7.05773C21.7479 4.52222 20.8423 2.11636 19.2803 0.439291C18.8036-0.0764489 18.1666-0.0360787 17.8045 0.393568C17.4516 0.801028 17.5617 1.31591 17.9505 1.75046C19.2001 3.13101 19.889 5.00781 19.889 7.05773C19.889 9.11076 19.1939 10.9907 17.9505 12.3712C17.5648 12.8058 17.4578 13.3206 17.8045 13.7281Z"
+                  />
+                  <path
+                    class="wave-inner"
+                    d="M4.24797 7.05773C4.24797 8.51501 4.7083 9.87775 5.53928 10.861C5.97423 11.3754 6.66265 11.3595 7.01908 10.9201C7.35021 10.5157 7.22947 10.0203 6.89833 9.56937C6.39624 8.93056 6.10683 7.9833 6.10683 7.05773C6.10683 6.13216 6.41622 5.20798 6.89833 4.54608C7.2197 4.08534 7.35021 3.59976 7.01908 3.19851C6.66265 2.7591 5.97423 2.73691 5.53928 3.25445C4.7083 4.23771 4.24797 5.60044 4.24797 7.05773ZM14.7288 10.9201C15.0852 11.3595 15.7737 11.3754 16.2086 10.861C17.0396 9.87775 17.4999 8.51501 17.4999 7.05773C17.4999 5.60044 17.0396 4.23771 16.2086 3.25445C15.7737 2.73691 15.0852 2.7591 14.7288 3.19851C14.3977 3.59976 14.5282 4.08534 14.8496 4.54608C15.3317 5.20798 15.6411 6.13216 15.6411 7.05773C15.6411 7.9833 15.3516 8.93056 14.8496 9.56937C14.5184 10.0203 14.3977 10.5157 14.7288 10.9201Z"
+                  />
+                  <path
+                    class="tower"
+                    d="M8.89277 7.05773C8.89277 7.82296 9.318 8.48433 9.96073 8.81056L9.96073 17.4066C9.96073 18.0165 10.3349 18.439 10.8804 18.439C11.4449 18.439 11.7965 18.0325 11.7965 17.4066L11.7965 8.81056C12.4294 8.48433 12.8613 7.8163 12.8613 7.05773C12.8613 5.95695 11.9812 5.06346 10.8804 5.06346C9.77294 5.06346 8.89277 5.95695 8.89277 7.05773Z"
+                  />
+                </svg>
+                <span>{{ connStatusText }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const { createApp, ref, reactive, computed } = Vue;
+
+      createApp({
+        setup() {
+          // 表单数据
+          const settings = reactive({
+            suffix: "",
+            apiKey: "",
+          });
+
+          // 连通性状态: 'idle', 'testing', 'success', 'error'
+          const connStatus = ref("idle");
+
+          const connStatusText = computed(() => {
+            switch (connStatus.value) {
+              case "idle":
+                return "";
+              case "testing":
+                return "正在握手...";
+              case "success":
+                return "引擎已激活";
+              case "error":
+                return "密钥无效或网络错误";
+              default:
+                return "";
+            }
+          });
+
+          const openTutorial = () => {
+            alert(
+              "此处可以弹出一个精美的 Modal，用 GIF 演示如何在官网获取 Key。",
+            );
+          };
+
+          const verifyKey = () => {
+            if (!settings.apiKey) return;
+
+            connStatus.value = "testing";
+
+            // 模拟网络请求验证
+            setTimeout(() => {
+              // 简单的防呆校验：要求是以 sk- 开头
+              if (
+                settings.apiKey.startsWith("sk-") &&
+                settings.apiKey.length > 10
+              ) {
+                connStatus.value = "success";
+              } else {
+                connStatus.value = "error";
+              }
+            }, 1500);
+          };
+
+          return {
+            settings,
+            connStatus,
+            connStatusText,
+            openTutorial,
+            verifyKey,
+          };
+        },
+      }).mount("#app");
+    </script>
+  </body>
+</html>
