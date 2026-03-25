@@ -486,6 +486,28 @@ class Api:
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
+    def update_article_summary(self, article_id: int, new_summary: str) -> Dict[str, Any]:
+        """
+        更新文章摘要（用户二次编辑）
+
+        Args:
+            article_id: 文章 ID
+            new_summary: 新的摘要内容
+
+        Returns:
+            {"status": "success"} 或 {"status": "error", ...}
+        """
+        try:
+            success = db.update_summary(article_id, new_summary)
+            if success:
+                logger.info(f"文章 {article_id} 摘要已更新")
+                return {"status": "success", "message": "摘要已更新"}
+            else:
+                return {"status": "error", "message": "文章不存在或更新失败"}
+        except Exception as e:
+            logger.error(f"更新文章摘要失败: {e}")
+            return {"status": "error", "message": str(e)}
+
     def cancel_ai_tasks(self) -> dict:
         """取消所有待处理的AI任务（用户主动终止）"""
         logger.info("【2】后端 API 已接收到取消指令")

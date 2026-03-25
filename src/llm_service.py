@@ -12,12 +12,16 @@ logger = logging.getLogger(__name__)
 # 全局配置服务实例（延迟初始化）
 _config_service = None
 
+
 def _get_config_service():
     """获取配置服务实例（延迟导入避免循环依赖）"""
     global _config_service
     if _config_service is None:
         from src.services.config_service import ConfigService
-        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.json')
+
+        config_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), "config.json"
+        )
         _config_service = ConfigService(config_path)
     return _config_service
 
@@ -32,10 +36,14 @@ class LLMService:
     BASE_DELAY = 1.0  # 初始延迟 1 秒
     MAX_DELAY = 32.0  # 最大延迟 32 秒
 
-    def __init__(self, api_key: Optional[str] = None, base_url: str = 'https://api.deepseek.com/v1'):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        base_url: str = "https://api.deepseek.com/v1",
+    ):
         self.api_key = api_key or os.environ.get("DEEPSEEK_API_KEY")
         self.base_url = base_url
-        self.model_name = 'deepseek-chat'
+        self.model_name = "deepseek-chat"
 
         self.client = None
 
@@ -44,39 +52,43 @@ class LLMService:
 ## Profile
 你是一位资深的高校公文分析专家。你的任务是仔细阅读原文，精准识别公文类型，提取核心要素，并采用最适合该公文逻辑的结构进行高度概括的总结。
 
-## 严格执行规则 (Rules)
+## 核心实体处理规则 (最高优先级)
 
-### 1. 实体标记规则 (XML标签包裹)
-请扫视全文（包括标题、正文及落款），对以下三类核心实体进行无遗漏的标签包裹：
-- **时间与期限**：遇到具体时间、日期、截止期限，必须用 `<date>` 包裹。例：`<date>3月15日</date>`。
-- **物理空间**：遇到任何实体建筑、楼层、教室编号、会议室、集会地点等，必须用 `<loc>` 包裹。例：`<loc>行政楼804室</loc>`。
-- **联系方式**：遇到电话号码、手机号、邮箱、微信号等，必须用 `<contact>` 包裹。例：`<contact>138xxxxxxx</contact>`。
+请扫视全文，对以下四类核心信息进行严格的格式化处理，**绝对不能混淆**：
 
-### 2. 视觉与排版铁律 (Markdown规范)
-- **禁用代码块**：输出内容严禁使用 ` ``` ` 包裹为代码块。
-- **标题层级**：正文一级板块必须使用 `### ` (三级标题) 开头，按需可使用 `#### ` 作为子板块。
-- **列表化表达**：凡涉及多个并列项（如要求、步骤、材料清单等），一律使用无序列表 `- ` 或有序列表 `1. `。
-- **高亮强调**：对关键信息（金额、实体标签等）需进行加粗强调。**注意**：为了确保 Markdown 渲染成功，加粗符号 `**` 与其前后的非加粗文字之间**必须保留一个半角空格**（例如：地点设在 ** `<loc>大礼堂</loc>` ** 举行）。
-- **信息缺失处理**：若原文未提及时间、地点或截止日期，请忽略该字段或备注"详见原文"，**绝对禁止编造或推理**信息。不必列举发文单位和发文日期。
+1. **时间与期限 (XML包裹)**：遇到具体时间、日期、截止期限，必须用 `<date>` 包裹。例：`<date>3月15日</date>`。
+2. **物理空间 (XML包裹)**：遇到实体建筑、楼层、教室编号等实体地点，必须用 `<loc>` 包裹。例：`<loc>行政楼804室</loc>`。
+3. **联系方式 (XML包裹)**：遇到电话号码、手机号、邮箱、微信号等**人际沟通方式**，必须用 `<contact>` 包裹。例：`<contact>138xxxxxxx</contact>`。
+4. **网页链接 (Markdown强制转换)**：遇到任何 `http` 或 `https` 开头的网址、报名链接、系统入口等，**绝对禁止使用 `<contact>` 包裹**！必须强制转换为标准的 Markdown 超链接格式 `[链接描述](URL)`。
+   - 错误示范：`<contact>http://grants.nsfc.gov.cn</contact>`
+   - 错误示范：请登录系统（`http://grants.nsfc.gov.cn`）
+   - 正确示范：请登录 [科学基金网络信息系统](http://grants.nsfc.gov.cn)
 
-## 输出格式规范 (Output Format)
+## 视觉与排版铁律 (Markdown规范)
+- **禁用代码块**：输出内容严禁使用 ``` 包裹为代码块。
+- **标题层级**：正文一级板块必须使用 `### ` (三级标题) 开头。
+- **列表化表达**：凡涉及多个并列项，一律使用无序列表 `- ` 或有序列表 `1. `。
+- **高亮强调**：对关键信息需进行加粗强调。注意：加粗符号与其前后的非加粗文字之间必须保留一个半角空格（例如：地点设在 ** <loc>大礼堂</loc> ** 举行）。
+- **信息缺失处理**：若原文未提及时间/地点，请忽略或备注"详见原文"，绝对禁止编造。
 
-【标签1】【标签2】【标签3】（注意，对于第一个标签，强制使用四个字进行总结，后续的不做要求）
+本系统的前端已通过原生代码自动渲染了【发文单位】、【发文日期】以及【文末文档附件列表（如 pdf/docx 下载）】。为避免画面冗余：
+1. **禁止输出外围信息**：总结中**绝对禁止**重复输出“发文单位”、“落款日期”，也严禁出现“附件详见文末”、“请下载附件查看”等废话提示语。
+2. **转移注意力（深化细节）**：请将原本用于总结外围信息的算力，100% 转移到“正文高价值细节”的深挖上。例如：具体的办理步骤、严苛的审核条件、处罚机制、学分折算细则等。
+3. **链接特例区分**：普通的文档附件需忽略，但**“外部系统的网页操作入口 / 报名问卷网址”**必须严格按照前述的 `[描述](URL)` 格式强制保留在正文中！
 
-### [自定义板块标题1]
+## 输出格式规范
+
+【标签1】【标签2】【标签3】
+（注意：第一个标签强制使用2个中文汉字总结公文性质，如：通知、公告、总结。后续标签涵盖受众、核心动作等，最多4个标签）
+
+### [自定义板块标题1] 
 - 内容详情...
-### [自定义板块标题2]
+### [自定义板块标题2] 
 - 内容详情...
 
-**标签要求**：
-1. 必须放在第一行，最多4个，每个标签用 `【】` 包裹。
-2. 内容必须是精炼的关键词，严禁使用完整句子。
-3. 【标签1】必须是公文性质（如：通知、公告、申请、报告、方案、总结等），需从文中提取明确线索，不可臆断。
-4. 后续标签应涵盖：[受众群体]、[核心动作] 等符合信息传递核心的关键词。
+正文要求：
+1. 不要套用固定模板，请根据公文内在逻辑自由创建板块标题，目标是让读者一眼抓住核心。
 
-**正文要求**：
-1. 不要套用固定模板，请根据公文的内在逻辑自由创建板块（例如："报名详情"、"评审流程"、"注意事项"等），目标是让读者一眼抓住核心。
-2. 次要说明、背景信息、附件链接等细节可放在最后的板块中。
 
 ## Input:
 {raw_text}
@@ -91,11 +103,10 @@ class LLMService:
     def _init_client(self):
         """初始化或重新初始化 OpenAI 客户端"""
         if self.api_key:
-            self.client = OpenAI(
-                api_key=self.api_key,
-                base_url=self.base_url
+            self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
+            logger.info(
+                f"已初始化 AI 客户端，模型: {self.model_name}，地址: {self.base_url}"
             )
-            logger.info(f"已初始化 AI 客户端，模型: {self.model_name}，地址: {self.base_url}")
         else:
             self.client = None
             logger.warning("API Key 为空，客户端未初始化")
@@ -111,16 +122,16 @@ class LLMService:
             是否应该重试
         """
         retryable_patterns = [
-            "429",                 # Too Many Requests
-            "rate_limit",          # 速率限制
+            "429",  # Too Many Requests
+            "rate_limit",  # 速率限制
             "rate limit",
-            "overloaded",          # 服务端过载
-            "timeout",             # 超时
+            "overloaded",  # 服务端过载
+            "timeout",  # 超时
             "timed out",
-            "connection",          # 连接问题
-            "503",                 # Service Unavailable
-            "502",                 # Bad Gateway
-            "500",                 # Internal Server Error
+            "connection",  # 连接问题
+            "503",  # Service Unavailable
+            "502",  # Bad Gateway
+            "500",  # Internal Server Error
         ]
         error_lower = error_msg.lower()
         return any(pattern in error_lower for pattern in retryable_patterns)
@@ -136,7 +147,7 @@ class LLMService:
             延迟秒数
         """
         # 指数退避：1s, 2s, 4s, 8s, 16s...
-        delay = self.BASE_DELAY * (2 ** attempt)
+        delay = self.BASE_DELAY * (2**attempt)
         # 添加 10% 的随机抖动，避免雷群效应
         jitter = delay * 0.1 * random.random()
         return min(delay + jitter, self.MAX_DELAY)
@@ -165,12 +176,15 @@ class LLMService:
                 # 🌟 通知前端显示欠费卡片（用户可能之前点击了"不再提醒"）
                 try:
                     import webview
+
                     if webview.windows:
-                        webview.windows[0].evaluate_js("""
+                        webview.windows[0].evaluate_js(
+                            """
                             if (window.updateApiBalanceStatus) {
                                 window.updateApiBalanceStatus(false);
                             }
-                        """)
+                        """
+                        )
                 except Exception as notify_err:
                     logger.debug(f"通知前端失败: {notify_err}")
                 return "⚠️【欠费提醒】您的 API 账户余额不足，AI 总结功能已暂停。请充值或更换密钥后点击“我已充值”恢复。"
@@ -188,12 +202,12 @@ class LLMService:
                     model=self.model_name,
                     messages=[
                         {"role": "system", "content": self.system_prompt},
-                        {"role": "user", "content": user_content}
+                        {"role": "user", "content": user_content},
                     ],
                     temperature=0.3,
                     max_tokens=3000,
                     top_p=0.9,
-                    timeout=60.0
+                    timeout=60.0,
                 )
 
                 content = response.choices[0].message.content
@@ -208,8 +222,13 @@ class LLMService:
 
                 # 🌟 检测余额不足错误并更新状态
                 balance_error_patterns = [
-                    "insufficient_quota", "insufficient_balance", "402",
-                    "余额不足", "balance", "quota exceeded", "额度"
+                    "insufficient_quota",
+                    "insufficient_balance",
+                    "402",
+                    "余额不足",
+                    "balance",
+                    "quota exceeded",
+                    "额度",
                 ]
                 if any(pattern in error_lower for pattern in balance_error_patterns):
                     logger.error(f"AI 调用失败（余额不足）({title}): {last_error}")
@@ -221,12 +240,15 @@ class LLMService:
                         # 🌟 主动通知前端更新余额状态
                         try:
                             import webview
+
                             if webview.windows:
-                                webview.windows[0].evaluate_js("""
+                                webview.windows[0].evaluate_js(
+                                    """
                                     if (window.updateApiBalanceStatus) {
                                         window.updateApiBalanceStatus(false);
                                     }
-                                """)
+                                """
+                                )
                         except Exception as notify_err:
                             logger.debug(f"通知前端失败: {notify_err}")
                     except Exception as config_err:
@@ -248,7 +270,9 @@ class LLMService:
                         time.sleep(delay)
                         continue
                     else:
-                        logger.error(f"AI 调用失败（已达最大重试次数 {self.MAX_RETRIES}）({title}): {last_error}")
+                        logger.error(
+                            f"AI 调用失败（已达最大重试次数 {self.MAX_RETRIES}）({title}): {last_error}"
+                        )
                         return f"⚠️ AI 服务暂时不可用，已重试 {self.MAX_RETRIES} 次仍失败：{last_error}"
 
                 # 其他未知错误
@@ -258,11 +282,13 @@ class LLMService:
         # 理论上不会到达这里，但作为安全保护
         return f"⚠️ AI 处理失败：{last_error}"
 
-    def update_config(self,
-                  api_key: Optional[str],
-                  model_name: Optional[str],
-                  system_prompt: Optional[str],
-                  base_url: Optional[str] = None):
+    def update_config(
+        self,
+        api_key: Optional[str],
+        model_name: Optional[str],
+        system_prompt: Optional[str],
+        base_url: Optional[str] = None,
+    ):
         """
         热更新配置：前端点击保存时触发，立刻重置客户端而无需重启应用。
         """
@@ -270,13 +296,13 @@ class LLMService:
         self.api_key = api_key or os.environ.get("DEEPSEEK_API_KEY")
 
         # 2. 处理 Model Name
-        self.model_name = str(model_name or 'deepseek-chat')
+        self.model_name = str(model_name or "deepseek-chat")
 
         # 3. 处理 Base URL
         if base_url and base_url.strip():
             self.base_url = base_url
         else:
-            self.base_url = 'https://api.deepseek.com/v1'
+            self.base_url = "https://api.deepseek.com/v1"
 
         # 4. 处理 System Prompt
         if system_prompt and system_prompt.strip():
@@ -289,10 +315,12 @@ class LLMService:
             self.client = None
             logger.warning("大模型 API Key 为空，客户端已重置为 None。")
 
-    def test_connection(self,
-                        api_key: Optional[str],
-                        model_name: Optional[str],
-                        base_url: Optional[str] = None) -> tuple[bool, str]:
+    def test_connection(
+        self,
+        api_key: Optional[str],
+        model_name: Optional[str],
+        base_url: Optional[str] = None,
+    ) -> tuple[bool, str]:
         """
         连通性测试：发起一次极小消耗的请求来验证 Key 是否有效。
         """
@@ -300,10 +328,10 @@ class LLMService:
             return False, "API Key 不能为空"
 
         # 确定最终的 Base URL
-        final_base_url = str(base_url or 'https://api.deepseek.com/v1')
+        final_base_url = str(base_url or "https://api.deepseek.com/v1")
 
         # 确定最终的 Model Name
-        final_model = str(model_name or 'deepseek-chat')
+        final_model = str(model_name or "deepseek-chat")
 
         try:
             # 使用临时客户端进行测试，不影响全局 client 状态
@@ -315,7 +343,7 @@ class LLMService:
                 messages=[{"role": "user", "content": "1"}],
                 max_tokens=5,
                 temperature=0.1,
-                timeout=10 # 测试时使用较短的超时
+                timeout=10,  # 测试时使用较短的超时
             )
 
             # 🌟 测试成功，清除欠费状态
@@ -327,12 +355,15 @@ class LLMService:
                 # 🌟 主动通知前端更新余额状态
                 try:
                     import webview
+
                     if webview.windows:
-                        webview.windows[0].evaluate_js("""
+                        webview.windows[0].evaluate_js(
+                            """
                             if (window.updateApiBalanceStatus) {
                                 window.updateApiBalanceStatus(true);
                             }
-                        """)
+                        """
+                        )
                 except Exception as notify_err:
                     logger.debug(f"通知前端失败: {notify_err}")
             except Exception as e:
@@ -345,11 +376,16 @@ class LLMService:
             # 增强型错误识别
             if "Authentication" in error_msg or "401" in error_msg:
                 return False, "API Key 无效或认证失败"
-            elif "insufficient_quota" in error_msg or "insufficient_balance" in error_msg:
+            elif (
+                "insufficient_quota" in error_msg or "insufficient_balance" in error_msg
+            ):
                 return False, "API 余额不足或额度超限"
             elif "timeout" in error_msg.lower():
                 return False, "连接超时，请检查网络环境或代理设置"
             elif "404" in error_msg:
-                return False, f"模型路径错误(404)，请检查 Base URL 或模型名称: {final_model}"
+                return (
+                    False,
+                    f"模型路径错误(404)，请检查 Base URL 或模型名称: {final_model}",
+                )
 
             return False, f"连接失败: {error_msg}"
