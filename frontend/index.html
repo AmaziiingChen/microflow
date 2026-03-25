@@ -4830,7 +4830,10 @@
                 :disabled="isSendingTestEmail"
               >
                 <!-- 发送状态显示 -->
-                <div v-if="isSendingTestEmail" class="connection-status testing">
+                <div
+                  v-if="isSendingTestEmail"
+                  class="connection-status testing"
+                >
                   <svg
                     class="icon-antenna"
                     viewBox="0 0 23 19"
@@ -4923,7 +4926,14 @@
               </button>
 
               <!-- 诊断和测试推送按钮（一行排列） -->
-              <div style="display: flex; gap: 10px; margin-top: 12px; justify-content: center;">
+              <div
+                style="
+                  display: flex;
+                  gap: 10px;
+                  margin-top: 12px;
+                  justify-content: center;
+                "
+              >
                 <button
                   class="action-btn"
                   style="
@@ -6446,7 +6456,11 @@
                 const pad = (n) => String(n).padStart(2, "0");
                 const datePart = `${year}年${pad(month)}月${pad(day)}日`;
                 // 🌟 只有当小时和分钟都存在，且不是 00:00 时才显示时间
-                if (hour && minute && !(parseInt(hour) === 0 && parseInt(minute) === 0)) {
+                if (
+                  hour &&
+                  minute &&
+                  !(parseInt(hour) === 0 && parseInt(minute) === 0)
+                ) {
                   return `${datePart} ${pad(hour)}:${pad(minute)}`;
                 }
                 return datePart;
@@ -6884,14 +6898,18 @@
               newSubscriberEmail.value = "";
 
               // 🌟 自动保存配置
-              await pywebview.api.save_config(JSON.parse(JSON.stringify(config.value)));
+              await pywebview.api.save_config(
+                JSON.parse(JSON.stringify(config.value)),
+              );
               showNotification("添加成功", `已添加 ${email}`, "success");
             };
 
             const removeSubscriber = async (index) => {
               config.value.subscriberList.splice(index, 1);
               // 🌟 自动保存配置
-              await pywebview.api.save_config(JSON.parse(JSON.stringify(config.value)));
+              await pywebview.api.save_config(
+                JSON.parse(JSON.stringify(config.value)),
+              );
             };
 
             const sendTestEmail = async () => {
@@ -6909,15 +6927,19 @@
               }
 
               // 🌟 自动保存配置后再发送
-              await pywebview.api.save_config(JSON.parse(JSON.stringify(config.value)));
+              await pywebview.api.save_config(
+                JSON.parse(JSON.stringify(config.value)),
+              );
 
               isSendingTestEmail.value = true;
               emailSendStatus.value = "sending";
               try {
                 // 优先发送给订阅者列表，否则发送给发件人自己
-                const testEmail = (config.value.subscriberList && config.value.subscriberList.length > 0)
-                  ? config.value.subscriberList[0]
-                  : config.value.smtpUser;
+                const testEmail =
+                  config.value.subscriberList &&
+                  config.value.subscriberList.length > 0
+                    ? config.value.subscriberList[0]
+                    : config.value.smtpUser;
                 const res = await pywebview.api.send_test_email(testEmail);
                 if (res.status === "success") {
                   emailSendStatus.value = "success";
@@ -6946,7 +6968,9 @@
 
             const diagnoseEmailPush = async () => {
               // 🌟 自动保存配置后再诊断
-              await pywebview.api.save_config(JSON.parse(JSON.stringify(config.value)));
+              await pywebview.api.save_config(
+                JSON.parse(JSON.stringify(config.value)),
+              );
 
               try {
                 const res = await pywebview.api.diagnose_email_push();
@@ -6971,7 +6995,9 @@
 
             const testEmailPushWithArticle = async () => {
               // 🌟 自动保存配置后再测试
-              await pywebview.api.save_config(JSON.parse(JSON.stringify(config.value)));
+              await pywebview.api.save_config(
+                JSON.parse(JSON.stringify(config.value)),
+              );
 
               isTestingPush.value = true;
               try {
@@ -7062,7 +7088,8 @@
                   favoritesOnly = true;
                 } else {
                   // 普通视图：按当前来源筛选
-                  sourceParam = activeSource.value !== "全部" ? activeSource.value : null;
+                  sourceParam =
+                    activeSource.value !== "全部" ? activeSource.value : null;
                   favoritesOnly = false;
                 }
 
@@ -7209,7 +7236,9 @@
             // 测试连通性
             const testConnection = async () => {
               // 🌟 自动保存配置后再测试
-              await pywebview.api.save_config(JSON.parse(JSON.stringify(config.value)));
+              await pywebview.api.save_config(
+                JSON.parse(JSON.stringify(config.value)),
+              );
 
               isTesting.value = true;
               connectionStatus.value = "testing";
@@ -7313,9 +7342,19 @@
                   .replace(/日/g, " ")
                   .replace(/\//g, "-");
                 // 提取标准格式 YYYY-MM-DD HH:MM:SS
-                const match = normalized.match(/(\d{4})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+                const match = normalized.match(
+                  /(\d{4})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/,
+                );
                 if (match) {
-                  const [, year, month, day, hour = "00", minute = "00", second = "00"] = match;
+                  const [
+                    ,
+                    year,
+                    month,
+                    day,
+                    hour = "00",
+                    minute = "00",
+                    second = "00",
+                  ] = match;
                   return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")} ${hour.padStart(2, "0")}:${minute.padStart(2, "0")}:${second.padStart(2, "0")}`;
                 }
                 return normalized;
@@ -9206,7 +9245,7 @@
                 "正在处理",
                 `重新生成 ${aiBrandName.value} 总结`,
                 "info",
-                5000,
+                2000,
               );
 
               try {
@@ -9258,7 +9297,7 @@
                     "生成完成",
                     `${aiBrandName.value} 总结已重新生成`,
                     "success",
-                    3000,
+                    2000,
                   );
                 } else {
                   showNotification(
@@ -9332,13 +9371,7 @@
 
             // 键盘快捷键（Windows/Mac 通用）
             window.addEventListener("keydown", (e) => {
-              // Esc 键处理（与主键盘监听器保持一致）
-              if (e.key === "Escape") {
-                if (currentView.value === "detail") {
-                  navigateBack();
-                  return;
-                }
-              }
+              // ESC 键已在主键盘监听器中统一处理，此处不再重复
 
               // Alt + ArrowLeft / Alt + ArrowRight (Windows/Mac 通用)
               if (e.altKey) {
