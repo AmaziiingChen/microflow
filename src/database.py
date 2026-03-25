@@ -361,6 +361,7 @@ class DatabaseManager:
         # 初始化数据库
         self._init_db()
         self._migrate_source_name()
+        self._backfill_exact_time_on_startup()
 
         self._initialized = True
         logger.info("🗄️ DatabaseManager 初始化完成 (连接池模式)")
@@ -421,6 +422,74 @@ class DatabaseManager:
             self._write_worker.submit(migrate, wait=True, timeout=30.0)
         except Exception as e:
             logger.error(f"数据库迁移失败: {e}")
+
+    def _backfill_exact_time_on_startup(self):
+        """启动时清洗并填充时间数据"""
+        def backfill(cursor: sqlite3.Cursor):
+            # 1. 🌟 标准化 date 字段格式
+            # 处理中文日期
+            cursor.execute('''
+                UPDATE articles
+                SET date = REPLACE(REPLACE(REPLACE(date, '年', '-'), '月', '-'), '日', '')
+                WHERE date LIKE '%年%' OR date LIKE '%月%' OR date LIKE '%日%'
+            ''')
+            date_cn_count = cursor.rowcount
+
+            # 处理斜杠日期
+            cursor.execute('''
+                UPDATE articles
+                SET date = REPLACE(date, '/', '-')
+                WHERE date LIKE '%/%'
+            ''')
+            date_slash_count = cursor.rowcount
+
+            # 2. 为 exact_time 为空但有 date 的记录填充默认时间
+            cursor.execute('''
+                UPDATE articles
+                SET exact_time = date || ' 00:00:00'
+                WHERE (exact_time IS NULL OR exact_time = '')
+                  AND date IS NOT NULL
+                  AND date != ''
+            ''')
+            fill_count = cursor.rowcount
+
+            # 3. 🌟 清洗 exact_time 格式：将中文日期标准化
+            # 处理 "年月日" 格式
+            cursor.execute('''
+                UPDATE articles
+                SET exact_time = REPLACE(REPLACE(REPLACE(exact_time, '年', '-'), '月', '-'), '日', ' ')
+                WHERE exact_time LIKE '%年%' OR exact_time LIKE '%月%' OR exact_time LIKE '%日%'
+            ''')
+            cn_count = cursor.rowcount
+
+            # 处理斜杠格式
+            cursor.execute('''
+                UPDATE articles
+                SET exact_time = REPLACE(exact_time, '/', '-')
+                WHERE exact_time LIKE '%/%'
+            ''')
+            slash_count = cursor.rowcount
+
+            # 4. 🌟 确保时间部分完整：如果只有日期没有时间，补充 00:00:00
+            cursor.execute('''
+                UPDATE articles
+                SET exact_time = exact_time || ' 00:00:00'
+                WHERE exact_time IS NOT NULL
+                  AND exact_time != ''
+                  AND length(exact_time) = 10
+                  AND exact_time LIKE '____-__-__'
+            ''')
+            time_fill_count = cursor.rowcount
+
+            total = date_cn_count + date_slash_count + fill_count + cn_count + slash_count + time_fill_count
+            if total > 0:
+                logger.info(f"✅ 时间数据清洗完成: 日期格式 {date_cn_count + date_slash_count} 条, 填充空值 {fill_count} 条, 时间格式 {cn_count + slash_count + time_fill_count} 条")
+            return total
+
+        try:
+            self._write_worker.submit(backfill, wait=True, timeout=30.0)
+        except Exception as e:
+            logger.error(f"时间数据清洗失败: {e}")
 
     def generate_hash(self, text: str) -> str:
         """生成文本的 MD5 哈希值"""
@@ -487,7 +556,9 @@ class DatabaseManager:
             if conditions:
                 base_query += " WHERE " + " AND ".join(conditions)
 
-            base_query += " ORDER BY date DESC, exact_time DESC LIMIT ? OFFSET ?"
+            # 🌟 统一排序：优先使用 exact_time，如果为空则使用 date || ' 00:00:00'
+            # COALESCE 会返回第一个非空值，但 exact_time 可能是空字符串，需要用 CASE
+            base_query += " ORDER BY COALESCE(NULLIF(exact_time, ''), date || ' 00:00:00') DESC LIMIT ? OFFSET ?"
             params.extend([limit, offset])
 
             cursor.execute(base_query, tuple(params))
@@ -539,7 +610,7 @@ class DatabaseManager:
                 query = f"""
                     SELECT * FROM articles
                     WHERE is_read = 0 AND source_name IN ({placeholders})
-                    ORDER BY exact_time DESC, date DESC
+                    ORDER BY COALESCE(NULLIF(exact_time, ''), date || ' 00:00:00') DESC
                     LIMIT 1
                 """
                 cursor.execute(query, tuple(source_names))
@@ -547,7 +618,7 @@ class DatabaseManager:
                 cursor.execute("""
                     SELECT * FROM articles
                     WHERE is_read = 0
-                    ORDER BY exact_time DESC, date DESC
+                    ORDER BY COALESCE(NULLIF(exact_time, ''), date || ' 00:00:00') DESC
                     LIMIT 1
                 """)
 
@@ -570,7 +641,7 @@ class DatabaseManager:
         with self._get_read_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT date FROM articles WHERE source_name = ? ORDER BY date DESC, exact_time DESC LIMIT 1",
+                "SELECT date FROM articles WHERE source_name = ? ORDER BY COALESCE(NULLIF(exact_time, ''), date || ' 00:00:00') DESC LIMIT 1",
                 (source_name,)
             )
             row = cursor.fetchone()
@@ -640,7 +711,7 @@ class DatabaseManager:
             query = f"""
             SELECT * FROM articles
             WHERE {where_clause}
-            ORDER BY exact_time DESC, date DESC
+            ORDER BY COALESCE(NULLIF(exact_time, ''), date || ' 00:00:00') DESC
             LIMIT ?
             """
 
@@ -696,11 +767,90 @@ class DatabaseManager:
 
     # ==================== 写操作 ====================
 
+    def _normalize_datetime(self, datetime_str: str, date_str: str = "") -> str:
+        """
+        标准化日期时间格式为 YYYY-MM-DD HH:MM:SS
+
+        Args:
+            datetime_str: 原始日期时间字符串（可能包含各种格式）
+            date_str: 备用日期字符串（仅日期部分）
+
+        Returns:
+            标准化的日期时间字符串，格式为 "YYYY-MM-DD HH:MM:SS"
+        """
+        import re
+        from datetime import datetime
+
+        if not datetime_str and not date_str:
+            return ""
+
+        # 优先使用 datetime_str
+        source = datetime_str if datetime_str else date_str
+
+        # 统一分隔符：将中文和斜杠替换为横杠
+        source = source.replace('年', '-').replace('月', '-').replace('日', ' ').replace('/', '-')
+
+        # 尝试提取日期时间部分
+        # 支持格式：2026-03-25 14:30:00, 2026-03-25 14:30, 2026-03-25
+        match = re.match(
+            r'(\d{4})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?',
+            source.strip()
+        )
+
+        if match:
+            year, month, day = match.group(1), match.group(2), match.group(3)
+            hour = match.group(4) or "00"
+            minute = match.group(5) or "00"
+            second = match.group(6) or "00"
+
+            # 补零对齐
+            month = month.zfill(2)
+            day = day.zfill(2)
+            hour = hour.zfill(2)
+            minute = minute.zfill(2)
+            second = second.zfill(2)
+
+            return f"{year}-{month}-{day} {hour}:{minute}:{second}"
+
+        # 无法解析，返回原始字符串
+        return datetime_str
+
+    def _normalize_date(self, date_str: str) -> str:
+        """
+        标准化日期格式为 YYYY-MM-DD
+
+        Args:
+            date_str: 原始日期字符串
+
+        Returns:
+            标准化的日期字符串，格式为 "YYYY-MM-DD"
+        """
+        import re
+
+        if not date_str:
+            return ""
+
+        # 统一分隔符
+        source = date_str.replace('年', '-').replace('月', '-').replace('日', '').replace('/', '-')
+
+        # 提取日期部分
+        match = re.match(r'(\d{4})-(\d{1,2})-(\d{1,2})', source.strip())
+
+        if match:
+            year, month, day = match.group(1), match.group(2), match.group(3)
+            return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+
+        return date_str
+
     def insert_or_update_article(self, title: str, url: str, date: str, exact_time: str,
                                   category: str, department: str, attachments: str,
                                   summary: str, raw_content: str, source_name: str = '公文通'):
         """插入或更新文章（异步写入）"""
         current_hash = self.generate_hash(raw_content)
+
+        # 🌟 标准化日期和时间格式
+        date = self._normalize_date(date)
+        exact_time = self._normalize_datetime(exact_time, date)
 
         def do_insert(cursor: sqlite3.Cursor):
             cursor.execute('''
@@ -723,6 +873,10 @@ class DatabaseManager:
         """插入或更新文章（同步版本，等待写入完成）"""
         current_hash = self.generate_hash(raw_content)
 
+        # 🌟 标准化日期和时间格式
+        date = self._normalize_date(date)
+        exact_time = self._normalize_datetime(exact_time, date)
+
         def do_insert(cursor: sqlite3.Cursor):
             cursor.execute('''
                 REPLACE INTO articles
@@ -737,6 +891,34 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"同步写入失败: {e}")
             return False
+
+    def backfill_exact_time(self) -> int:
+        """
+        为 exact_time 为空但有 date 的文章填充默认时间
+
+        Returns:
+            更新的记录数
+        """
+        def do_backfill(cursor: sqlite3.Cursor):
+            # 查找 exact_time 为空但有 date 的记录
+            cursor.execute('''
+                UPDATE articles
+                SET exact_time = date || ' 00:00:00'
+                WHERE (exact_time IS NULL OR exact_time = '')
+                  AND date IS NOT NULL
+                  AND date != ''
+            ''')
+            return cursor.rowcount
+
+        try:
+            result = self._write_worker.submit(do_backfill, wait=True, timeout=30.0)
+            count = result.result() if hasattr(result, 'result') else result
+            if count and count > 0:
+                logger.info(f"✅ 已为 {count} 篇文章填充默认时间")
+            return count or 0
+        except Exception as e:
+            logger.error(f"填充默认时间失败: {e}")
+            return 0
 
     def mark_as_read(self, url: str):
         """标记文章为已读"""

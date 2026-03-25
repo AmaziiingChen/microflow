@@ -876,7 +876,13 @@ class Api:
             # 直接调用 ArticleProcessor 的邮件发送方法
             self.article_processor._send_email_notification(article)
 
-            return {"status": "success", "message": f"已触发邮件推送，请检查邮箱：{subscriber_list}"}
+            # 🌟 格式化订阅者显示：1个显示全名，2个及以上显示"...等N个邮箱"
+            if len(subscriber_list) == 1:
+                recipient_info = subscriber_list[0]
+            else:
+                recipient_info = f"...等{len(subscriber_list)}个邮箱"
+
+            return {"status": "success", "message": f"已触发邮件推送，请检查{recipient_info}"}
 
         except Exception as e:
             logger.error(f"测试邮件推送失败: {e}")

@@ -4,6 +4,8 @@ import logging
 import os
 import smtplib
 import base64
+import random
+import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
@@ -80,34 +82,47 @@ class EmailService:
         )
 
         # 创建 HTML 正文 - 快照图片 + 可点击按钮
+        # 注意：邮件客户端对CSS支持有限，使用 table 布局最可靠
         html_body = f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:20px;background:#f6f6f8;">
-    <div style="max-width:480px;margin:0 auto;">
-        <!-- 快照图片 -->
-        <img src="cid:article_snapshot" alt="公文快照" style="max-width:100%;display:block;border-radius:16px;">
-
-        <!-- 可点击的查看原文按钮 -->
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin-top:20px;">
-            <tr>
-                <td>
-                    <a href="{article_url}" target="_blank" style="display:inline-block;padding:14px 32px;background:#f2ca44;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;border-radius:24px;box-shadow:0 4px 12px rgba(242,202,68,0.3);">
-                        <span style="white-space:nowrap;">查看原文&nbsp;
-                            <svg style="display:inline-block;vertical-align:middle;width:18px;height:18px;" viewBox="0 0 21.5635 19.9456" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M1.78027 11.1251L8.70898 11.1398C8.80664 11.1398 8.8457 11.1788 8.8457 11.2765L8.85546 18.1759C8.85546 20.1974 11.4629 20.6369 12.3418 18.7081L19.5 3.11244C20.4424 1.04213 18.8652-0.422718 16.8242 0.505016L1.18456 7.6681C-0.656255 8.50306-0.270513 11.1154 1.78027 11.1251Z" fill="currentColor"/>
-                            </svg>
-                        </span>
-                    </a>
-                </td>
-            </tr>
-        </table>
-
-        <!-- 底部提示 -->
-        <p style="text-align:center;color:#9ca3af;font-size:12px;margin-top:16px;">
-            此邮件由 MicroFlow 自动推送，请勿直接回复
-        </p>
-    </div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f6f6f8;">
+        <tr>
+            <td align="center" style="padding:0;">
+                <table role="presentation" width="480" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;">
+                    <!-- 快照图片 -->
+                    <tr>
+                        <td align="center" style="padding:0;">
+                            <img src="cid:article_snapshot" alt="公文快照" width="480" style="display:block;border-radius:16px;max-width:100%;">
+                        </td>
+                    </tr>
+                    <!-- 查看原文按钮 -->
+                    <tr>
+                        <td align="center" style="padding-top:20px;">
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                                <tr>
+                                    <td style="background:#f2ca44;border-radius:24px;box-shadow:0 4px 12px rgba(242,202,68,0.3);">
+                                        <a href="{article_url}" target="_blank" style="display:inline-block;padding:14px 32px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;">
+                                            查看原文&nbsp;<img src="data:image/svg+xml;base64,PHN2ZyB2ZXJzaW9uPSIxLjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIHZpZXdCb3g9IjAgMCAyMS4wNDk0IDE5LjM4MjMiIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiI+PGc+PHJlY3QgaGVpZ2h0PSIxOS4zODIzIiBvcGFjaXR5PSIwIiB3aWR0aD0iMjEuMDQ5NCIgeD0iMCIgeT0iMCIvPjxwYXRoIGQ9Ik0xLjYwMjMxIDEwLjY1MzNMOC42MDAzNCAxMC42NzMzQzguNzE1NzggMTAuNjczMyA4Ljc1ODM5IDEwLjcxNTkgOC43NTgzOSAxMC44MzEzTDguNzcxNzEgMTcuNzg5NEM4Ljc3MTcxIDE5LjYwNDcgMTEuMDY2MyAyMC4wMDg2IDExLjg2MzUgMTguMjY2NUwxOS4wNDMgMi42OTkyNUMxOS44ODA1IDAuODYzNTUyIDE4LjQ2ODctMC40MDkzMzEgMTYuNjcyOSAwLjQxMTc1OUwxLjA0NTcxIDcuNjAxNTFDLTAuNTgwMDM5IDguMzQyMjYtMC4yNDU4NDIgMTAuNjQzNSAxLjYwMjMxIDEwLjY1MzNaIiBmaWxsPSJ3aGl0ZSIvPjwvZz48L3N2Zz4="" style="display:inline-block;vertical-align:middle;">
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <!-- 底部提示 -->
+                    <tr>
+                        <td align="center" style="padding-top:16px;">
+                            <p style="color:#9ca3af;font-size:12px;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;margin:0;">
+                                此邮件由 MicroFlow 自动推送，请勿直接回复
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
 </body>
 </html>"""
 
@@ -174,8 +189,14 @@ class EmailService:
             # 登录
             smtp.login(self.smtp_user, self.smtp_password)
 
-            # 逐个发送
-            for to_addr in to_addrs:
+            # 逐个发送（带间隔，避免触发反垃圾机制）
+            for i, to_addr in enumerate(to_addrs):
+                # 🌟 从第二封开始，每次发送前等待 1-2 秒随机间隔
+                if i > 0:
+                    delay = random.uniform(1.0, 2.0)
+                    logger.info(f"📧 等待 {delay:.1f} 秒后发送下一封...")
+                    time.sleep(delay)
+
                 try:
                     msg = self._create_html_email(
                         to_addr=to_addr,

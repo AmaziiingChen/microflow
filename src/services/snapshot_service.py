@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "snapshot_template.html")
 
 # 默认星星图标 SVG（当找不到 AI 品牌图标时使用）
-DEFAULT_AI_ICON_SVG = '''<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+DEFAULT_AI_ICON_SVG = """<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="#FFB800"/>
-</svg>'''
+</svg>"""
 
 
 def _get_ai_icon_svg(model_name: str) -> str:
@@ -35,20 +35,22 @@ def _get_ai_icon_svg(model_name: str) -> str:
         return DEFAULT_AI_ICON_SVG
 
     # 1. 提取品牌关键词
-    brand_key = model_name.lower().split('-')[0]
+    brand_key = model_name.lower().split("-")[0]
 
     # 2. 别名映射
-    brand_map = {'gpt': 'openai', 'claude': 'anthropic', 'gemini': 'google'}
+    brand_map = {"gpt": "openai", "claude": "anthropic", "gemini": "google"}
     slug = brand_map.get(brand_key, brand_key)
 
     # 3. 🚀 打包兼容性路径处理
-    if getattr(sys, 'frozen', False):
-        base_path = getattr(sys, '_MEIPASS', '')
+    if getattr(sys, "frozen", False):
+        base_path = getattr(sys, "_MEIPASS", "")
     else:
-        base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        base_path = os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        )
 
     # 确保指向 /data/icons 文件夹
-    icons_dir = os.path.join(base_path, 'data', 'icons')
+    icons_dir = os.path.join(base_path, "data", "icons")
 
     # 4. 检索逻辑：优先精准匹配，次选模糊匹配
     svg_content = None
@@ -61,21 +63,23 @@ def _get_ai_icon_svg(model_name: str) -> str:
             target_exact = [f"{slug}.svg", f"icon_{slug}.svg", f"{slug}-color.svg"]
             for f in target_exact:
                 if f in files:
-                    with open(os.path.join(icons_dir, f), 'r', encoding='utf-8') as fs:
+                    with open(os.path.join(icons_dir, f), "r", encoding="utf-8") as fs:
                         svg_content = fs.read()
                     break
 
             # 策略 B: 模糊匹配
             if not svg_content:
                 for f in files:
-                    if f.endswith('.svg') and slug in f.lower():
-                        with open(os.path.join(icons_dir, f), 'r', encoding='utf-8') as fs:
+                    if f.endswith(".svg") and slug in f.lower():
+                        with open(
+                            os.path.join(icons_dir, f), "r", encoding="utf-8"
+                        ) as fs:
                             svg_content = fs.read()
                         break
 
         # 5. 尺寸加固：确保截图必现
-        if svg_content and 'width=' not in svg_content:
-            svg_content = svg_content.replace('<svg', '<svg width="100%" height="100%"')
+        if svg_content and "width=" not in svg_content:
+            svg_content = svg_content.replace("<svg", '<svg width="100%" height="100%"')
 
         return svg_content or DEFAULT_AI_ICON_SVG
 
@@ -152,60 +156,53 @@ def _get_attachment_icon_svg(icon_type: str) -> str:
     """
     # 从 index.html 复制的正确 SVG 图标
     icons = {
-        "pdf": '''<svg viewBox="0 0 1024 1024" width="24" height="24">
+        "pdf": """<svg viewBox="0 0 1024 1024" width="24" height="24">
             <path d="M776.704 988.16H247.296c-84.48 0-153.6-69.632-153.6-154.624V190.464C93.696 105.472 162.816 35.84 247.296 35.84h378.88c40.96 0 79.36 18.944 104.448 50.688L901.12 304.64c18.432 23.552 28.672 53.248 28.672 82.944v445.952c0.512 84.992-68.608 154.624-153.088 154.624z" fill="#FFEEEF"></path>
             <path d="M776.704 1024H247.296c-104.448 0-189.44-85.504-189.44-190.464V190.464C57.856 85.504 142.848 0 247.296 0h378.88c52.224 0 100.352 23.552 132.608 65.024l170.496 217.6c23.552 29.696 36.352 67.072 36.352 104.96v445.952c0.512 104.96-84.48 190.464-188.928 190.464zM247.296 72.192c-65.024 0-117.76 53.248-117.76 118.272v643.072c0 65.536 52.736 118.272 117.76 118.272h528.896c65.024 0 117.76-53.248 117.76-118.272V387.584c0-21.504-7.168-43.008-20.992-60.928l-170.496-217.6c-18.432-23.552-46.592-36.864-76.288-36.864h-378.88z" fill="#FFB8BE"></path>
             <path d="M302.592 792.576c-10.24 0-19.456-4.096-23.04-5.632-17.92-7.68-28.672-23.552-28.672-43.008 0-12.288 0-50.688 140.8-111.616 31.744-57.856 56.32-115.712 73.216-172.032-15.872-33.792-54.272-118.784-27.136-164.352 7.68-15.872 26.624-25.6 48.128-25.6 15.872 0 30.72 7.68 40.448 19.968 20.48 28.672 17.92 86.016-6.144 161.28 20.48 37.888 48.64 74.752 83.968 110.08l4.096-0.512c28.672-4.608 55.296-9.216 84.48-9.216 34.304 1.536 57.856 9.728 70.656 25.088 9.728 11.776 10.24 24.576 9.216 31.232 1.536 15.36-1.536 27.648-9.728 36.352-15.36 16.896-44.032 16.896-62.464 16.896-38.4-2.56-75.264-17.408-107.52-43.008-53.76 11.776-106.496 28.16-165.376 52.224-45.056 80.896-87.04 121.856-124.928 121.856z m33.28-75.264c-6.144 4.096-11.264 8.704-16.896 13.824 6.656-3.584 11.776-8.192 16.896-13.824z m159.744-182.272c-9.728 25.088-22.016 51.712-36.352 80.384 26.624-8.704 53.76-16.384 81.408-23.04l-5.12-5.12h6.144c-14.336-16.896-29.184-35.328-43.52-53.76l-2.56 1.536z m185.344 70.656c6.656 1.536 13.824 2.56 22.016 2.56h1.024c2.56 0.512 5.12 1.024 7.68 1.024s4.608 0 7.168-0.512c-4.608-1.536-11.776-3.072-24.064-3.072H680.96z m-195.584-281.6c-3.584 16.896-2.56 34.304 2.048 51.2 3.072-16.896 2.56-34.304-0.512-51.2h-1.536z" fill="#FF5462"></path>
-        </svg>''',
-
-        "doc": '''<svg viewBox="0 0 1024 1024" width="24" height="24">
+        </svg>""",
+        "doc": """<svg viewBox="0 0 1024 1024" width="24" height="24">
             <path d="M776.04389 985.695761H247.95611c-84.269327 0-153.216958-68.947631-153.216958-153.727681V192.03192c0-84.269327 68.947631-153.727681 153.216958-153.727681h377.935162c40.857855 0 79.162095 18.896758 104.187531 50.561596L900.149626 305.412469c18.386035 23.493267 28.600499 52.604489 28.600499 82.226434v443.818454c0.510723 84.78005-68.436908 154.238404-152.706235 154.238404z" fill="#E6F1FF"></path>
             <path d="M776.04389 1024H247.95611c-104.187531 0-188.967581-85.290773-188.967581-190.499751V190.499751C58.988529 85.290773 143.768579 0 247.95611 0h377.935162c52.093766 0 100.101746 23.493267 132.277307 64.861845l170.070822 217.56808c23.493267 29.621945 36.261347 66.904738 36.261347 105.208978v446.37207c0.510723 104.698254-84.269327 189.989027-188.456858 189.989027zM247.95611 72.01197c-64.861845 0-117.466334 53.115212-117.466334 118.487781v643.000498c0 65.372569 52.604489 118.487781 117.466334 118.487781h527.577057c64.861845 0 117.466334-53.115212 117.466334-118.487781V387.638903c0-21.450374-7.150125-43.411471-20.939651-60.77606l-170.070823-217.56808c-18.386035-23.493267-46.47581-37.282793-76.097755-37.282793h-377.935162z" fill="#96C6FF"></path>
             <path d="M292.389027 387.12818h76.608479l48.00798 247.190024h3.064339l51.07232-215.014463h84.78005l48.00798 215.014463h3.064339l49.029426-247.190024H731.610973l-76.608479 334.012967h-91.419452L512 509.191022h-3.064339l-52.604489 211.950125H364.911721L292.389027 387.12818z" fill="#0075FF"></path>
-        </svg>''',
-
-        "ppt": '''<svg viewBox="0 0 1024 1024" width="24" height="24">
+        </svg>""",
+        "ppt": """<svg viewBox="0 0 1024 1024" width="24" height="24">
             <path d="M776.704 988.16H247.296c-84.48 0-153.6-69.632-153.6-154.624V190.464C93.696 105.472 162.816 35.84 247.296 35.84h378.88c40.96 0 79.36 18.944 104.448 50.688L901.12 304.64c18.432 23.552 28.672 53.248 28.672 82.944v445.952c0.512 84.992-68.608 154.624-153.088 154.624z" fill="#FFF0EB"></path>
             <path d="M776.704 1024H247.296c-104.448 0-189.44-85.504-189.44-190.464V190.464C57.856 85.504 142.848 0 247.296 0h378.88c52.224 0 100.352 23.552 132.608 65.024l170.496 217.6c23.552 29.696 36.352 67.072 36.352 104.96v445.952c0.512 104.96-84.48 190.464-188.928 190.464zM247.296 72.192c-65.024 0-117.76 53.248-117.76 118.272v643.072c0 65.536 52.736 118.272 117.76 118.272h528.896c65.024 0 117.76-53.248 117.76-118.272V387.584c0-21.504-7.168-43.008-20.992-60.928l-170.496-217.6c-18.432-23.552-46.592-36.864-76.288-36.864h-378.88z" fill="#FFC1AC"></path>
             <path d="M359.424 768V337.92h145.408c123.904 0 167.936 37.888 167.936 144.384 0 110.592-44.032 149.504-167.936 149.504H445.44V768H359.424zM445.44 565.248h46.08c69.12 0 92.672-20.48 92.672-80.384 0-58.88-25.088-80.384-92.672-80.384h-46.08v160.768z" fill="#FF6A38"></path>
-        </svg>''',
-
-        "xls": '''<svg viewBox="0 0 1024 1024" width="24" height="24">
+        </svg>""",
+        "xls": """<svg viewBox="0 0 1024 1024" width="24" height="24">
             <path d="M776.704 985.6H247.296c-84.48 0-153.6-69.12-153.6-154.112V189.952C93.696 105.472 162.816 35.84 247.296 35.84h378.88c40.96 0 79.36 18.944 104.448 50.688L901.12 303.616c18.432 23.552 28.672 52.736 28.672 82.432v444.928c0.512 84.992-68.608 154.624-153.088 154.624z" fill="#E9F6F3"></path>
             <path d="M776.704 1021.44H247.296c-104.448 0-189.44-84.992-189.44-189.952V189.952C57.856 84.992 142.848 0 247.296 0h378.88c52.224 0 100.352 23.552 132.608 64.512L929.28 281.6c23.552 29.696 36.352 66.56 36.352 104.96v444.928c0.512 104.96-84.48 189.952-188.928 189.952zM247.296 71.68c-65.024 0-117.76 52.736-117.76 118.272v641.536c0 65.024 52.736 118.272 117.76 118.272h528.896c65.024 0 117.76-52.736 117.76-118.272V386.56c0-21.504-7.168-43.008-20.992-60.416l-170.496-217.088c-18.432-23.552-46.592-36.864-76.288-36.864 0-0.512-378.88-0.512-378.88-0.512z" fill="#A3DBCC"></path>
             <path d="M595.456 749.056l-86.528-128-86.528 128H314.368l140.8-195.072-130.56-188.928h107.52l76.8 123.904 76.288-123.904h107.52l-130.56 188.928 140.8 195.072z" fill="#20A884"></path>
-        </svg>''',
-
-        "pic": '''<svg viewBox="0 0 1024 1024" width="24" height="24">
+        </svg>""",
+        "pic": """<svg viewBox="0 0 1024 1024" width="24" height="24">
             <path d="M776.704 988.16H247.296c-84.48 0-153.6-69.632-153.6-154.624V190.464C93.696 105.472 162.816 35.84 247.296 35.84h378.88c40.96 0 79.36 18.944 104.448 50.688L901.12 304.64c18.432 23.552 28.672 53.248 28.672 82.944v445.952c0.512 84.992-68.608 154.624-153.088 154.624z" fill="#E6FCFD"></path>
             <path d="M776.704 1024H247.296c-104.448 0-189.44-85.504-189.44-190.464V190.464C57.856 85.504 142.848 0 247.296 0h378.88c52.224 0 100.352 23.552 132.608 65.024l170.496 217.6c23.552 29.696 36.352 67.072 36.352 104.96v445.952c0.512 104.96-84.48 190.464-188.928 190.464zM247.296 72.192c-65.024 0-117.76 53.248-117.76 118.272v643.072c0 65.536 52.736 118.272 117.76 118.272h528.896c65.024 0 117.76-53.248 117.76-118.272V387.584c0-21.504-7.168-43.008-20.992-60.928l-170.496-217.6c-18.432-23.552-46.592-36.864-76.288-36.864h-378.88z" fill="#92EFEF"></path>
             <path d="M439.808 392.192m-71.68 0a71.68 71.68 0 1 0 143.36 0 71.68 71.68 0 1 0 -143.36 0Z" fill="#4EEAE2"></path>
             <path d="M398.848 495.104L261.12 747.52h275.456zM581.12 402.432l-97.792 132.608 117.76 212.48H762.88z" fill="#4EEAE2"></path>
-        </svg>''',
-
-        "zip": '''<svg viewBox="0 0 1024 1024" width="24" height="24">
+        </svg>""",
+        "zip": """<svg viewBox="0 0 1024 1024" width="24" height="24">
             <path d="M776.704 988.16H247.296c-84.48 0-153.6-69.632-153.6-154.624V190.464C93.696 105.472 162.816 35.84 247.296 35.84h378.88c40.96 0 79.36 18.944 104.448 50.688L901.12 304.64c18.432 23.552 28.672 53.248 28.672 82.944v445.952c0.512 84.992-68.608 154.624-153.088 154.624z" fill="#F5ECEC"></path>
             <path d="M776.704 1024H247.296c-104.448 0-189.44-85.504-189.44-190.464V190.464C57.856 85.504 142.848 0 247.296 0h378.88c52.224 0 100.352 23.552 132.608 65.024l170.496 217.6c23.552 29.696 36.352 67.072 36.352 104.96v445.952c0.512 104.96-84.48 190.464-188.928 190.464zM247.296 72.192c-65.024 0-117.76 53.248-117.76 118.272v643.072c0 65.536 52.736 118.272 117.76 118.272h528.896c65.024 0 117.76-53.248 117.76-118.272V387.584c0-21.504-7.168-43.008-20.992-60.928l-170.496-217.6c-18.432-23.552-46.592-36.864-76.288-36.864h-378.88z" fill="#DBBDBD"></path>
             <path d="M332.8 744.96v-52.224L576.512 414.72H350.72V355.84h326.144v52.736L433.664 686.08H691.2v58.88z" fill="#BC8585"></path>
-        </svg>''',
-
-        "txt": '''<svg viewBox="0 0 1024 1024" width="24" height="24">
+        </svg>""",
+        "txt": """<svg viewBox="0 0 1024 1024" width="24" height="24">
             <path d="M776.704 988.16H247.296c-84.48 0-153.6-69.632-153.6-154.624V190.464C93.696 105.472 162.816 35.84 247.296 35.84h378.88c40.96 0 79.36 18.944 104.448 50.688L901.12 304.64c18.432 23.552 28.672 53.248 28.672 82.944v445.952c0.512 84.992-68.608 154.624-153.088 154.624z" fill="#E6F5FC"></path>
             <path d="M776.704 1024H247.296c-104.448 0-189.44-85.504-189.44-190.464V190.464C57.856 85.504 142.848 0 247.296 0h378.88c52.224 0 100.352 23.552 132.608 65.024l170.496 217.6c23.552 29.696 36.352 67.072 36.352 104.96v445.952c0.512 104.96-84.48 190.464-188.928 190.464zM247.296 72.192c-65.024 0-117.76 53.248-117.76 118.272v643.072c0 65.536 52.736 118.272 117.76 118.272h528.896c65.024 0 117.76-53.248 117.76-118.272V387.584c0-21.504-7.168-43.008-20.992-60.928l-170.496-217.6c-18.432-23.552-46.592-36.864-76.288-36.864h-378.88z" fill="#96D6F4"></path>
             <path d="M708.608 427.52h-148.992v339.456H467.968V427.52H318.976V347.136h389.632v80.384z" fill="#009DE6"></path>
-        </svg>''',
-
-        "file": '''<svg viewBox="0 0 1024 1024" width="24" height="24">
+        </svg>""",
+        "file": """<svg viewBox="0 0 1024 1024" width="24" height="24">
             <path d="M776.704 988.16H247.296c-84.48 0-153.6-69.632-153.6-154.624V190.464C93.696 105.472 162.816 35.84 247.296 35.84h378.88c40.96 0 79.36 18.944 104.448 50.688L901.12 304.64c18.432 23.552 28.672 53.248 28.672 82.944v445.952c0.512 84.992-68.608 154.624-153.088 154.624z" fill="#E6F5FC"></path>
             <path d="M776.704 1024H247.296c-104.448 0-189.44-85.504-189.44-190.464V190.464C57.856 85.504 142.848 0 247.296 0h378.88c52.224 0 100.352 23.552 132.608 65.024l170.496 217.6c23.552 29.696 36.352 67.072 36.352 104.96v445.952c0.512 104.96-84.48 190.464-188.928 190.464zM247.296 72.192c-65.024 0-117.76 53.248-117.76 118.272v643.072c0 65.536 52.736 118.272 117.76 118.272h528.896c65.024 0 117.76-53.248 117.76-118.272V387.584c0-21.504-7.168-43.008-20.992-60.928l-170.496-217.6c-18.432-23.552-46.592-36.864-76.288-36.864h-378.88z" fill="#96D6F4"></path>
             <path d="M708.608 427.52h-148.992v339.456H467.968V427.52H318.976V347.136h389.632v80.384z" fill="#009DE6"></path>
-        </svg>'''
+        </svg>""",
     }
 
     return icons.get(icon_type, icons["file"])
 
 
-def _truncate_middle(filename: str, max_display_len: int = 22) -> dict:
+def _truncate_middle(filename: str, max_display_len: int = 25) -> dict:
     """
     文件名中间省略处理（截图专用：固定宽度，直接截断）
 
@@ -233,7 +230,7 @@ def _truncate_middle(filename: str, max_display_len: int = 22) -> dict:
         return {"start": main_part, "end": "", "suffix": suffix, "short": True}
 
     # 长文件名：前半部分限制长度，后半部分固定显示最后4字符
-    end_len = 4
+    end_len = 6
     start_len = max_display_len - end_len - 1  # -1 是省略号的位置
     start = main_part[:start_len]
     end = main_part[-end_len:]
@@ -295,8 +292,22 @@ def _generate_html_template(article_data: Dict[str, Any]) -> str:
 
     logger.info(f"📸 snapshot_service - 接收到 model_name: {model_name}")
 
-    # 格式化日期
-    date_display = exact_time if exact_time else date
+    # 格式化日期 - 🌟 如果时间是 00:00，则不显示时间部分
+    if exact_time:
+        # 检查是否是 "00:00:00" 或 "00:00" 结尾
+        import re
+        time_match = re.search(r'(\d{1,2}):(\d{1,2})(?::\d{1,2})?$', exact_time)
+        if time_match:
+            hour, minute = int(time_match.group(1)), int(time_match.group(2))
+            if hour == 0 and minute == 0:
+                # 时间是 00:00，只显示日期部分
+                date_display = re.sub(r'\s+\d{1,2}:\d{1,2}(:\d{1,2})?$', '', exact_time)
+            else:
+                date_display = exact_time
+        else:
+            date_display = exact_time
+    else:
+        date_display = date
 
     # 🌟 AI 品牌图标和标题
     ai_icon_svg = _get_ai_icon_svg(model_name)
@@ -323,6 +334,7 @@ def _generate_html_template(article_data: Dict[str, Any]) -> str:
         first_line = lines[0].strip() if lines else ""
         if first_line.startswith("【"):
             import re
+
             matches = re.findall(r"【(.*?)】", first_line)
             if matches:
                 parsed_tags = matches
@@ -368,12 +380,12 @@ def _generate_html_template(article_data: Dict[str, Any]) -> str:
     attachment_badge = ""
     if attachments:
         attachment_count = len(attachments)
-        attachment_badge = f'''<span class="badge-attachment">
+        attachment_badge = f"""<span class="badge-attachment">
             <svg class="icon-svg" viewBox="0 0 17.3523 21.2951">
                 <path d="M3.28199 21.2915L13.709 21.2915C15.8578 21.2915 16.991 20.1419 16.991 17.9864L16.991 9.33974L9.51384 9.33974C8.31353 9.33974 7.72093 8.74714 7.72093 7.54372L7.72093 0L3.28199 0C1.14295 0 0 1.15627 0 3.31173L0 17.9864C0 20.1486 1.13629 21.2915 3.28199 21.2915ZM9.79778 7.84347L16.8924 7.84347C16.8462 7.37787 16.4916 6.93135 15.9545 6.38451L10.6606 1.0209C10.1458 0.50246 9.68946 0.150938 9.2172 0.0950003L9.2172 7.26955C9.2172 7.65216 9.40851 7.84347 9.79778 7.84347Z" fill="currentColor"/>
             </svg>
             {attachment_count}
-        </span>'''
+        </span>"""
     html = html.replace("{{ATTACHMENT_BADGE}}", attachment_badge)
 
     # 🌟 处理底部附件区域（带文件名省略）
@@ -392,22 +404,22 @@ def _generate_html_template(article_data: Dict[str, Any]) -> str:
                 name_html = f'<span class="att-name">{att_name}</span>'
             else:
                 # 长文件名：start + … + end + suffix
-                name_html = f'''<span class="att-name" title="{att_name}">
+                name_html = f"""<span class="att-name" title="{att_name}">
                     <span class="att-name-prefix">{truncated["start"]}</span>
                     <span class="att-name-ellipsis">…</span>
                     <span class="att-name-middle">{truncated["end"]}</span>
                     <span class="att-name-suffix">{truncated["suffix"]}</span>
-                </span>'''
+                </span>"""
 
-            attachments_html += f'''<div class="attachment-card">
+            attachments_html += f"""<div class="attachment-card">
                 <div class="att-icon">{icon_svg}</div>
                 <div class="att-info">{name_html}</div>
-            </div>'''
+            </div>"""
 
-        attachments_section = f'''<div class="attachments-section">
+        attachments_section = f"""<div class="attachments-section">
             <div class="attachments-divider"></div>
             <div class="attachments-list">{attachments_html}</div>
-        </div>'''
+        </div>"""
     html = html.replace("{{ATTACHMENTS_SECTION}}", attachments_section)
 
     return html
@@ -415,7 +427,7 @@ def _generate_html_template(article_data: Dict[str, Any]) -> str:
 
 def _get_fallback_template() -> str:
     """回退模板（当模板文件读取失败时使用）"""
-    return '''<!DOCTYPE html>
+    return """<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -510,7 +522,7 @@ def _get_fallback_template() -> str:
                 </span>
                 <span>
                     <svg class="disclaimer-icon" opacity="0.5" viewBox="0 0 1024 1024" width="14" height="14"><path d="M505.4 878.6c-196.7 0-358-150.9-374.9-343.1 1-18.6 16.1-33.4 34.9-33.4 10.8 0 20.5 4.8 26.9 12.4 0.2 0.3 0.5 0.1 0.5-0.7 41.6 44.2 100.5 71.9 166.1 71.9 127.1 0 230.1-103 230.1-230.1 0-66.1-28-125.1-72.6-166.8 0.1-0.1 0.5-0.1 0.3-0.3-7-6.5-11.4-15.7-11.4-26.1 0-19 14.9-34.1 33.7-35.3 192.1 17.1 342.9 178.3 342.9 375 0 208-168.5 376.5-376.5 376.5z" fill="currentColor"></path></svg>
-                    具体内容请查看信息源文
+                    具体内容请查看信息原文
                 </span>
             </div>
             <div class="btn-group">
@@ -525,10 +537,12 @@ def _get_fallback_template() -> str:
         </div>
     </div>
 </body>
-</html>'''
+</html>"""
 
 
-def render_article_snapshot(article_data: Dict[str, Any], max_retries: int = 3) -> Optional[str]:
+def render_article_snapshot(
+    article_data: Dict[str, Any], max_retries: int = 3
+) -> Optional[str]:
     """
     渲染文章快照（同步接口，使用 Playwright 同步 API）
 
@@ -560,7 +574,7 @@ def render_article_snapshot(article_data: Dict[str, Any], max_retries: int = 3) 
                     "--disable-dev-shm-usage",
                     "--disable-gpu",
                     "--disable-software-rasterizer",
-                ]
+                ],
             )
 
             # Retina 高清截图
@@ -580,7 +594,8 @@ def render_article_snapshot(article_data: Dict[str, Any], max_retries: int = 3) 
             # 创建临时文件
             temp_dir = tempfile.gettempdir()
             safe_title = "".join(
-                c for c in article_data.get("title", "snapshot")
+                c
+                for c in article_data.get("title", "snapshot")
                 if c.isalnum() or c in " -_"
             )[:50]
             timestamp = int(datetime.now().timestamp() * 1000)

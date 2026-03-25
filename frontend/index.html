@@ -6428,6 +6428,7 @@
             };
 
             // 全局时间格式化函数：yyyy年mm月dd日 HH:mm 或 yyyy年mm月dd日
+            // 🌟 如果时间是 00:00，则不显示时间部分（表示该文章没有具体时间）
             const formatDateTime = (dateStr) => {
               if (!dateStr) return "";
               // 清理字符串
@@ -6444,7 +6445,8 @@
                 const [, year, month, day, hour, minute] = match;
                 const pad = (n) => String(n).padStart(2, "0");
                 const datePart = `${year}年${pad(month)}月${pad(day)}日`;
-                if (hour && minute) {
+                // 🌟 只有当小时和分钟都存在，且不是 00:00 时才显示时间
+                if (hour && minute && !(parseInt(hour) === 0 && parseInt(minute) === 0)) {
                   return `${datePart} ${pad(hour)}:${pad(minute)}`;
                 }
                 return datePart;
@@ -6588,6 +6590,11 @@
 
             // 点击搜索放大镜的智能交互
             const handleSearchClick = () => {
+              // 🌟 设置界面禁用搜索功能
+              if (isSettingsOpen.value) {
+                return;
+              }
+
               if (!isSearchUIExpanded.value) {
                 // 1. 未展开时：触发物理形变，并聚焦
                 isSearchUIExpanded.value = true;
@@ -6856,7 +6863,7 @@
             };
 
             // 📧 邮件推送相关方法
-            const addSubscriber = () => {
+            const addSubscriber = async () => {
               const email = newSubscriberEmail.value.trim();
               if (!email) return;
 
@@ -6875,10 +6882,16 @@
 
               config.value.subscriberList.push(email);
               newSubscriberEmail.value = "";
+
+              // 🌟 自动保存配置
+              await pywebview.api.save_config(JSON.parse(JSON.stringify(config.value)));
+              showNotification("添加成功", `已添加 ${email}`, "success");
             };
 
-            const removeSubscriber = (index) => {
+            const removeSubscriber = async (index) => {
               config.value.subscriberList.splice(index, 1);
+              // 🌟 自动保存配置
+              await pywebview.api.save_config(JSON.parse(JSON.stringify(config.value)));
             };
 
             const sendTestEmail = async () => {
@@ -6894,6 +6907,9 @@
                 );
                 return;
               }
+
+              // 🌟 自动保存配置后再发送
+              await pywebview.api.save_config(JSON.parse(JSON.stringify(config.value)));
 
               isSendingTestEmail.value = true;
               emailSendStatus.value = "sending";
@@ -6929,6 +6945,9 @@
             };
 
             const diagnoseEmailPush = async () => {
+              // 🌟 自动保存配置后再诊断
+              await pywebview.api.save_config(JSON.parse(JSON.stringify(config.value)));
+
               try {
                 const res = await pywebview.api.diagnose_email_push();
                 if (res.status === "success") {
@@ -6951,6 +6970,9 @@
             };
 
             const testEmailPushWithArticle = async () => {
+              // 🌟 自动保存配置后再测试
+              await pywebview.api.save_config(JSON.parse(JSON.stringify(config.value)));
+
               isTestingPush.value = true;
               try {
                 const res =
@@ -6973,11 +6995,31 @@
               searchTimeout = setTimeout(async () => {
                 const keyword = searchQuery.value.trim();
 
+                // 🌟 判断当前视图上下文
+                const isInFavoritesView = activeSource.value === "收藏";
+                const isInSettingsView = isSettingsOpen.value;
+
                 // 如果用户清空了搜索框，恢复正常的分页列表
                 if (!keyword) {
                   isSearching.value = false;
                   page.value = 1;
                   noMoreData.value = false;
+
+                  // 🌟 根据当前视图恢复对应列表
+                  if (isInFavoritesView) {
+                    // 收藏视图：恢复收藏列表
+                    const res = await pywebview.api.get_history_paged(
+                      1,
+                      20,
+                      null,
+                      null,
+                      true, // favoritesOnly
+                    );
+                    if (res.status === "success") {
+                      articles.value = res.data;
+                    }
+                    return;
+                  }
 
                   // 🌟 修复：当 activeSource 为"全部"且有订阅时，传递订阅来源列表
                   let sourceParam = null;
@@ -7003,16 +7045,32 @@
                   return;
                 }
 
-                // 🌟 修复 1：提取当前的来源参数
-                const sourceParam =
-                  activeSource.value !== "全部" ? activeSource.value : null;
-
                 // 开始执行搜索
                 isSearching.value = true;
-                // 🌟 修复 2：将搜索词和来源参数一起发给后端
+
+                // 🌟 根据视图上下文决定搜索参数
+                let sourceParam = null;
+                let favoritesOnly = false;
+
+                if (isInSettingsView) {
+                  // 设置视图：搜索所有内容，不限制来源和收藏
+                  sourceParam = null;
+                  favoritesOnly = false;
+                } else if (isInFavoritesView) {
+                  // 收藏视图：只搜索收藏的文章
+                  sourceParam = null;
+                  favoritesOnly = true;
+                } else {
+                  // 普通视图：按当前来源筛选
+                  sourceParam = activeSource.value !== "全部" ? activeSource.value : null;
+                  favoritesOnly = false;
+                }
+
+                // 🌟 将搜索词、来源参数和收藏筛选一起发给后端
                 const res = await pywebview.api.search_articles(
                   keyword,
                   sourceParam,
+                  favoritesOnly,
                 );
                 if (res.status === "success") {
                   articles.value = res.data; // 替换列表内容为搜索结果
@@ -7150,6 +7208,9 @@
 
             // 测试连通性
             const testConnection = async () => {
+              // 🌟 自动保存配置后再测试
+              await pywebview.api.save_config(JSON.parse(JSON.stringify(config.value)));
+
               isTesting.value = true;
               connectionStatus.value = "testing";
 
@@ -7243,10 +7304,27 @@
                 };
               });
 
+              // 🌟 辅助函数：标准化时间字符串用于排序比较
+              const normalizeTimeForSort = (timeStr) => {
+                if (!timeStr) return "";
+                // 统一分隔符：中文 -> 横杠，斜杠 -> 横杠
+                let normalized = timeStr
+                  .replace(/年|月/g, "-")
+                  .replace(/日/g, " ")
+                  .replace(/\//g, "-");
+                // 提取标准格式 YYYY-MM-DD HH:MM:SS
+                const match = normalized.match(/(\d{4})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+                if (match) {
+                  const [, year, month, day, hour = "00", minute = "00", second = "00"] = match;
+                  return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")} ${hour.padStart(2, "0")}:${minute.padStart(2, "0")}:${second.padStart(2, "0")}`;
+                }
+                return normalized;
+              };
+
               // 👇 变化 2：新增排序逻辑，按照时间降序（最新抓取的在最上面）
               mapped.sort((a, b) => {
-                const timeA = a.exact_time || a.date || "";
-                const timeB = b.exact_time || b.date || "";
+                const timeA = normalizeTimeForSort(a.exact_time || a.date);
+                const timeB = normalizeTimeForSort(b.exact_time || b.date);
                 // 使用 localeCompare 比较字符串时间，timeB 放前面表示降序
                 return timeB.localeCompare(timeA);
               });
@@ -7336,11 +7414,17 @@
               const getDateGroupName = (dateStr) => {
                 if (!dateStr) return "未知时间";
 
-                // 兼容处理中文字符和横杠，转化为标准日期格式
+                // 🌟 标准化时间格式后再解析
                 let cleanStr = dateStr
                   .replace(/年|月/g, "-")
-                  .replace(/日/g, "");
-                let itemDate = new Date(cleanStr);
+                  .replace(/日/g, "")
+                  .replace(/\//g, "-");
+
+                // 🌟 提取日期部分（去掉时间）
+                const dateMatch = cleanStr.match(/(\d{4}-\d{1,2}-\d{1,2})/);
+                if (!dateMatch) return "更早";
+
+                let itemDate = new Date(dateMatch[1]);
 
                 if (isNaN(itemDate.getTime())) return "更早";
 
