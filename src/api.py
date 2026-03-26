@@ -855,12 +855,13 @@ class Api:
 
             # ========== 第一步：基础配置检查 ==========
             issues = []
+            warnings = []  # 提示性问题，不阻止诊断
             config_issues = []  # 仅配置问题，不阻止连通性测试
 
             if not enabled:
-                issues.append("邮件通知未启用")
+                warnings.append("邮件通知未启用")
             if len(subscriber_list) == 0:
-                issues.append("订阅者列表为空")
+                warnings.append("订阅者列表为空（测试邮件将发送给发件人自己）")
             if not smtp_host:
                 config_issues.append("SMTP 服务器未配置")
             if not smtp_user:
@@ -957,20 +958,21 @@ class Api:
                 logger.warning(f"📧 SMTP 连接异常: {e}")
 
             # ========== 第四步：汇总结果 ==========
-            # 基础配置完整且连通性测试成功才认为可以发送
-            can_send = (
-                enabled and
-                len(subscriber_list) > 0 and
-                connection_result == "success"
-            )
+            # SMTP 连接成功即认为配置正确（订阅者为空不影响测试邮件发送）
+            can_send = connection_result == "success"
+
+            # 合并提示信息
+            all_hints = issues + warnings
 
             # 生成消息
             if can_send:
-                message = "邮件推送配置正常，SMTP 连接测试成功"
+                message = "SMTP 连接测试成功"
+                if warnings:
+                    message += f"（提示: {', '.join(warnings)}）"
             elif connection_result and connection_result != "success":
                 message = issues[-1] if issues else "SMTP 连接测试失败"
             else:
-                message = f"问题: {', '.join(issues)}"
+                message = f"问题: {', '.join(issues)}" if issues else f"提示: {', '.join(warnings)}"
 
             logger.info(f"📧 邮件推送诊断完成: canSend={can_send}, connectionResult={connection_result}")
 
@@ -987,6 +989,7 @@ class Api:
                     "connectionTest": connection_result
                 },
                 "issues": issues,
+                "warnings": warnings,
                 "message": message
             }
 

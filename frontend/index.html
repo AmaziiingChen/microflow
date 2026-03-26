@@ -4551,29 +4551,23 @@
         word-break: break-word;
       }
 
-      /* 分割线样式 */
+      /* 模块标题样式 */
       .settings-section-divider {
         display: flex;
         align-items: center;
-        margin: 8px 0 12px;
+        margin: 8px 12px 2px; /* 负 margin-bottom 抵消容器的 gap */
         color: #9ca3af;
       }
 
-      .settings-section-divider::before,
-      .settings-section-divider::after {
-        content: "";
-        flex: 1;
-        height: 1px;
-        background: #e5e7eb;
+      /* 第一个模块标题顶部间距减小 */
+      .settings-section-divider:first-of-type {
+        margin-top: 2px;
       }
 
-      .divider-text {
-        margin: 0 12px;
-        font-size: 12px;
-        font-weight: 600;
-        letter-spacing: 0.5px;
-        color: #6b7280;
-        text-transform: uppercase;
+      /* 去掉分界线 */
+      .settings-section-divider::before,
+      .settings-section-divider::after {
+        display: none;
       }
 
       /* ============================================================
@@ -4772,16 +4766,22 @@
         margin-top: 8px;
       }
 
-      /* 分割线样式调整 */
+      /* 模块标题样式调整 */
       .settings-section-divider {
-        margin: 12px 0 16px;
+        margin: 8px 0 -12px; /* 负 margin-bottom 抵消容器的 gap */
+      }
+
+      .settings-section-divider:first-of-type {
+        margin-top: 4px;
       }
 
       .divider-text {
-        font-size: 13px;
+        margin: 8px;
+        font-size: 14px;
         font-weight: 600;
-        color: #6c6c70;
-        letter-spacing: 0.3px;
+        letter-spacing: 0.5px;
+        color: #6b7280;
+        text-transform: uppercase;
       }
 
       /* 按钮统一样式优化 */
@@ -5712,7 +5712,7 @@
               @click.stop
               v-if="config.emailNotifyEnabled"
             >
-              <div class="settings-card-title">收件人邮箱</div>
+              <div class="settings-card-title">订阅邮箱</div>
               <div style="display: flex; gap: 8px; margin-bottom: 8px">
                 <input
                   type="email"
@@ -6146,13 +6146,13 @@
           class="list-view"
           style="padding-top: 0; min-height: 40px; overflow: hidden"
         >
-          <div id="load-more-anchor">
+          <div id="load-more-anchor" v-show="!isSettingsOpen">
             <span v-if="isLoadingMore">加载更多中</span>
             <span v-else-if="isSearching"
               >找到 {{ processedArticles.filter(a => !a.is_announcement &&
               !a.isHeader).length }} 篇相关条目</span
             >
-            <span v-else-if="noMoreData && !isSettingsOpen"
+            <span v-else-if="noMoreData"
               >共 {{ processedArticles.filter(a => !a.is_announcement &&
               !a.isHeader).length }} 篇条目</span
             >
@@ -10546,7 +10546,7 @@
                 "下载附件",
                 `正在准备下载 ${name}`,
                 "success",
-                10000,
+                3000,
               );
               try {
                 const res = await pywebview.api.download_attachment(url, name);
