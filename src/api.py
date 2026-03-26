@@ -1,3 +1,5 @@
+# pyright: reportOptionalMemberAccess=false
+# pyright: reportArgumentType=false
 """
 V2 版本后端调度引擎 - 多源数据订阅架构
 
@@ -6,6 +8,7 @@ V2 版本后端调度引擎 - 多源数据订阅架构
 2. 维护爬虫实例列表，遍历抓取所有数据源
 3. 支持 source_name 字段，实现多来源聚合
 """
+
 import sys
 import logging
 
@@ -13,6 +16,7 @@ import logging
 try:
     if sys.version_info >= (3, 10):
         import truststore
+
         truststore.inject_into_ssl()
         logging.info("🛡️ 已成功注入系统原生 SSL 信任库 (truststore)")
 except ImportError:
@@ -29,11 +33,13 @@ import tempfile
 import platform
 import subprocess
 import base64
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import time
 from src.database import db
 from src.llm_service import LLMService
 from src.services import SystemService, DownloadService, ConfigService
+from src.services.rule_generator import RuleGeneratorService
+from src.services.custom_spider_rules_manager import get_rules_manager
 from src.core import DaemonManager, SpiderScheduler, ArticleProcessor
 from src.core.scheduler import SPIDER_REGISTRY
 from src.core.network_utils import check_network_status, NetworkStatus
@@ -73,20 +79,29 @@ class Api:
 
         # 🌟 核心组件：文章处理器（传入回调函数用于唤醒窗口）
         self.article_processor = ArticleProcessor(
-            self.llm, db,
+            self.llm,
+            db,
             on_task_complete=self._on_task_complete,  # 🌟 新增：任务完成回调
             on_article_processed=self._on_article_processed,
             on_progress=self._push_ai_progress,  # 🌟 新增：AI 进度回调
-            config_service=self.config_service  # 📧 邮件推送配置服务
+            config_service=self.config_service,  # 📧 邮件推送配置服务
         )
         self.scheduler = SpiderScheduler(
             article_processor=self.article_processor,
             progress_callback=self._push_progress,
-            config_service=self.config_service
+            config_service=self.config_service,
         )
 
         # 🌟 核心组件：守护进程管理器
         self.daemon_manager = DaemonManager()
+        # 🌟 设置冷却时间获取器（从配置服务动态读取）
+        self.daemon_manager.set_cooldown_getter(
+            lambda: self.config_service.get("updateCooldown", 60)
+        )
+
+        # 🌟 核心组件：动态爬虫规则生成器和规则管理器
+        self.rule_generator = RuleGeneratorService(self.config_service)
+        self.rules_manager = get_rules_manager()
 
         # 线程控制
         self.is_running = True
@@ -94,6 +109,56 @@ class Api:
 
         # 加载配置并应用
         self._apply_config()
+
+    def _get_active_dynamic_sources(self) -> list:
+        """获取所有启用的动态爬虫任务名称"""
+        try:
+            rules = self.rules_manager.load_custom_rules()
+            sources = [rule.get('task_name') for rule in rules if rule.get('enabled', True)]
+            logger.info(f"[DEBUG] _get_active_dynamic_sources - 规则数: {len(rules)}, 启用的来源: {sources}")
+            return sources
+        except Exception as e:
+            logger.error(f"获取动态来源失败: {e}", exc_info=True)
+            return []
+
+    def _get_effective_sources(self) -> Optional[List[str]]:
+        """
+        统一获取有效来源列表（数据订阅管理 + 自定义数据源）
+
+        逻辑：
+        1. 如果用户订阅了来源，返回：订阅来源 + 启用的动态来源
+        2. 如果用户没有订阅任何来源，返回：启用的动态来源
+        3. 如果两者都为空，返回空列表 []（表示不显示任何内容）
+
+        Returns:
+            有效来源列表，或空列表（表示不显示任何内容）
+        """
+        # 🌟 详细调试：追踪配置读取
+        try:
+            subscribed = self.config_service.get("subscribedSources", [])
+            logger.info(f"[DEBUG] _get_effective_sources - config_service.get('subscribedSources') 返回: {subscribed}, type: {type(subscribed)}")
+        except Exception as e:
+            logger.error(f"[DEBUG] _get_effective_sources - 读取 subscribedSources 失败: {e}")
+            subscribed = []
+
+        try:
+            dynamic = self._get_active_dynamic_sources()
+            logger.info(f"[DEBUG] _get_effective_sources - _get_active_dynamic_sources() 返回: {dynamic}")
+        except Exception as e:
+            logger.error(f"[DEBUG] _get_effective_sources - 获取动态来源失败: {e}")
+            dynamic = []
+
+        # 合并两个列表，去重
+        effective = []
+        for s in subscribed:
+            if s not in effective:
+                effective.append(s)
+        for d in dynamic:
+            if d not in effective:
+                effective.append(d)
+
+        logger.info(f"[DEBUG] _get_effective_sources - 最终有效来源: {effective}")
+        return effective  # 🌟 直接返回列表，空列表表示"不显示任何内容"
 
     def _push_progress(self, completed: int, total: int, current_title: str = ""):
         """
@@ -106,7 +171,11 @@ class Api:
         """
         try:
             # 转义单引号，防止 JS 语法错误
-            safe_title = current_title.replace("'", "\\'").replace('"', '\\"') if current_title else ""
+            safe_title = (
+                current_title.replace("'", "\\'").replace('"', '\\"')
+                if current_title
+                else ""
+            )
             js_code = f"if(window.updatePyProgress) window.updatePyProgress({completed}, {total}, '{safe_title}');"
             webview.windows[0].evaluate_js(js_code)
         except Exception as e:
@@ -148,14 +217,22 @@ class Api:
             if not webview.windows:
                 return
             # 转义单引号
-            safe_title = current_title.replace("'", "\\'").replace('"', '\\"') if current_title else ""
+            safe_title = (
+                current_title.replace("'", "\\'").replace('"', '\\"')
+                if current_title
+                else ""
+            )
             js_code = f"if(window.updatePyProgress) window.updatePyProgress({completed}, {total}, '{safe_title}');"
             webview.windows[0].evaluate_js(js_code)
-            logger.debug(f"AI 进度推送: {completed}/{total} - {current_title[:20] if current_title else ''}")
+            logger.debug(
+                f"AI 进度推送: {completed}/{total} - {current_title[:20] if current_title else ''}"
+            )
         except Exception as e:
             logger.warning(f"AI 进度推送失败: {e}")
 
-    def _on_task_complete(self, success: bool, reason: str, article_data: Optional[Dict[str, Any]]):
+    def _on_task_complete(
+        self, success: bool, reason: str, article_data: Optional[Dict[str, Any]]
+    ):
         """
         单个任务完成后的回调（无论成功失败）：检查是否所有任务都已完成
 
@@ -172,23 +249,29 @@ class Api:
             ai_total = stats.get("ai_total", 0)
             ai_completed = stats.get("ai_completed", 0)
 
-            logger.info(f"📋 任务完成回调: success={success}, reason={reason}, processed={processed}/{submitted}, ai={ai_completed}/{ai_total}")
+            logger.info(
+                f"📋 任务完成回调: success={success}, reason={reason}, processed={processed}/{submitted}, ai={ai_completed}/{ai_total}"
+            )
 
             # 如果所有任务都处理完了
             if submitted > 0 and processed >= submitted:
                 # 如果没有 AI 任务，或者所有 AI 任务都完成了
                 if ai_total == 0 or ai_completed >= ai_total:
-                    logger.info(f"✅ 所有任务处理完成，准备关闭加载状态: processed={processed}/{submitted}, ai_total={ai_total}")
+                    logger.info(
+                        f"✅ 所有任务处理完成，准备关闭加载状态: processed={processed}/{submitted}, ai_total={ai_total}"
+                    )
                     # 通知前端关闭加载状态
                     if webview.windows:
-                        js_result = webview.windows[0].evaluate_js("""
+                        js_result = webview.windows[0].evaluate_js(
+                            """
                             if (window.updatePyProgress) {
                                 window.updatePyProgress(0, 0, '');
                                 'success';
                             } else {
                                 'no_updatePyProgress';
                             }
-                        """)
+                        """
+                        )
                         logger.info(f"📢 前端 JS 执行结果: {js_result}")
                     else:
                         logger.warning("⚠️ webview.windows 为空，无法通知前端")
@@ -207,13 +290,14 @@ class Api:
 
         try:
             # 检查静音模式
-            mute_mode = self.config_service.get('muteMode', False)
+            mute_mode = self.config_service.get("muteMode", False)
             json_data = json.dumps(article_data, ensure_ascii=False)
 
             if mute_mode:
                 # 静音模式：仅显示托盘红点，静默更新前端数据
                 try:
                     import main
+
                     main.set_tray_alert()
                 except Exception as e:
                     logger.warning(f"设置托盘红点失败: {e}")
@@ -221,14 +305,18 @@ class Api:
                 # 静默更新前端数据（不弹出详情）
                 js_code = f"if(window.silentUpdateArticle) window.silentUpdateArticle({json_data});"
                 self.window.evaluate_js(js_code)
-                logger.info(f"🔔 静音模式：已显示托盘红点 - {article_data.get('title', '未知标题')}")
+                logger.info(
+                    f"🔔 静音模式：已显示托盘红点 - {article_data.get('title', '未知标题')}"
+                )
             else:
                 # 强提醒模式：唤醒窗口并弹出详情
                 self.window.restore()
                 self.window.show()
                 js_code = f"if(window.openArticleDetail) window.openArticleDetail({json_data});"
                 self.window.evaluate_js(js_code)
-                logger.info(f"🔔 已唤醒窗口并推送文章: {article_data.get('title', '未知标题')}")
+                logger.info(
+                    f"🔔 已唤醒窗口并推送文章: {article_data.get('title', '未知标题')}"
+                )
 
         except Exception as e:
             logger.warning(f"文章处理回调执行失败: {e}")
@@ -252,22 +340,24 @@ class Api:
                 "message": msg,
                 "submitted_count": 0,
                 "queue_size": 0,
-                "cooldown_remaining": 0
+                "cooldown_remaining": 0,
             }
 
         # 🌟 优先检查 API 余额状态（如果配置了 AI）
-        api_key = self.config_service.get('apiKey', '')
+        api_key = self.config_service.get("apiKey", "")
         if api_key:  # 只有配置了 API Key 才检查余额
             if not self.config_service.get_api_balance_ok():
                 # 余额不足，通知前端显示欠费卡片
                 logger.warning("检测到 API 余额不足，拦截更新请求")
                 try:
                     if webview.windows:
-                        webview.windows[0].evaluate_js("""
+                        webview.windows[0].evaluate_js(
+                            """
                             if (window.updateApiBalanceStatus) {
                                 window.updateApiBalanceStatus(false);
                             }
-                        """)
+                        """
+                        )
                 except Exception as e:
                     logger.debug(f"通知前端显示欠费卡片失败: {e}")
                 return {
@@ -275,7 +365,7 @@ class Api:
                     "message": "API 余额不足，请充值后重试",
                     "submitted_count": 0,
                     "queue_size": 0,
-                    "cooldown_remaining": 0
+                    "cooldown_remaining": 0,
                 }
 
         # 🌟 安全心跳：每次触发爬虫前，强制校验云端最新配置（触发 304 极速校验）
@@ -284,15 +374,19 @@ class Api:
             if latest_version_data.get("status") == "success":
                 # 1. 动态停服检测
                 if latest_version_data.get("is_active") is False:
-                    kill_reason = latest_version_data.get("kill_message", "该软件已被禁用")
-                    logger.warning(f"安全心跳检测到停服指令，立即熔断！原因: {kill_reason}")
+                    kill_reason = latest_version_data.get(
+                        "kill_message", "该软件已被禁用"
+                    )
+                    logger.warning(
+                        f"安全心跳检测到停服指令，立即熔断！原因: {kill_reason}"
+                    )
                     self._execute_self_destruct(kill_reason)
                     return {
                         "status": "read_only",
                         "message": f"服务已暂停: {kill_reason}",
                         "submitted_count": 0,
                         "queue_size": 0,
-                        "cooldown_remaining": 0
+                        "cooldown_remaining": 0,
                     }
 
                 # 2. 动态更新检测（静默通知前端）
@@ -300,30 +394,39 @@ class Api:
                 if latest_ver and latest_ver > self.CURRENT_VERSION:
                     logger.info(f"安全心跳检测到新版本: {latest_ver}")
                     if webview.windows:
-                        webview.windows[0].evaluate_js(f"if(window.onNewVersionAvailable) window.onNewVersionAvailable('{latest_ver}');")
+                        webview.windows[0].evaluate_js(
+                            f"if(window.onNewVersionAvailable) window.onNewVersionAvailable('{latest_ver}');"
+                        )
         except Exception as e:
             logger.debug(f"安全心跳检测失败（网络波动，允许继续执行）: {e}")
 
         # 🌟 终极防御：如果前端的锁失效了，后端在这里强行拦截
         if is_manual:
             last_fetch = self.daemon_manager._get_last_fetch_time()
-            remaining = DaemonManager.MANUAL_UPDATE_COOLDOWN - (time.time() - last_fetch)
+            cooldown_seconds = self.config_service.get(
+                "updateCooldown", 60
+            )  # 🌟 动态获取冷却时间
+            remaining = cooldown_seconds - (time.time() - last_fetch)
             if remaining > 0:
                 logger.warning(f"拦截高频手动刷新，剩余冷却 {remaining:.1f} 秒")
                 return {
                     "status": "cooldown",
                     "remaining": int(remaining),
                     "message": f"刷新太快啦，请等待 {int(remaining)} 秒",
-                    "cooldown_remaining": int(remaining)
+                    "cooldown_remaining": int(remaining),
                 }
 
         # 🌟 无论是否手动，都先记录时间戳，防止守护线程重复执行
         self.daemon_manager.record_manual_update()
 
-        mode = self.config_service.get('trackMode', 'continuous')
+        mode = self.config_service.get("trackMode", "continuous")
 
         # 获取用户订阅的来源列表
-        subscribed_sources = self.config_service.get('subscribedSources', None)
+        subscribed_sources = self.config_service.get("subscribedSources", None)
+
+        if subscribed_sources is not None:
+            subscribed_sources = list(subscribed_sources)  # 复制副本防止污染配置
+            subscribed_sources.extend(self._get_active_dynamic_sources())
 
         # 🌟 核心：在执行爬虫之前，立即通知前端开始加载
         # 无论是手动还是自动，都要通知前端显示进度条和冷却状态
@@ -331,21 +434,25 @@ class Api:
             if webview.windows:
                 # 如果是后台自动执行，合并通知（同时显示进度条和提示消息）
                 if not is_manual:
-                    webview.windows[0].evaluate_js("""
+                    webview.windows[0].evaluate_js(
+                        """
                         if (window.onStartFetching) {
                             window.onStartFetching();
                         }
                         if (window.showAutoFetchNotice) {
                             window.showAutoFetchNotice();
                         }
-                    """)
+                    """
+                    )
                 else:
                     # 手动触发只显示进度条
-                    webview.windows[0].evaluate_js("""
+                    webview.windows[0].evaluate_js(
+                        """
                         if (window.onStartFetching) {
                             window.onStartFetching();
                         }
-                    """)
+                    """
+                    )
                 # 🌟 关键修复：给浏览器一个处理事件循环的机会
                 # 确保通知在爬虫执行之前被渲染到 UI
                 time.sleep(0.05)
@@ -358,14 +465,14 @@ class Api:
             is_manual=is_manual,
             wait_for_completion=False,  # 不等待处理完成，立即返回
             enabled_sources=subscribed_sources,
-            spider_progress_callback=self._push_spider_progress   # 🌟 新增
+            spider_progress_callback=self._push_spider_progress,  # 🌟 新增
         )
 
         # 如果调度器返回错误，直接返回（带冷却时间）
         if result.get("status") == "error" and result.get("message"):
             return {
                 **result,
-                "cooldown_remaining": self.daemon_manager.get_cooldown_remaining()
+                "cooldown_remaining": self.daemon_manager.get_cooldown_remaining(),
             }
 
         # 🌟 爬虫阶段完成后，通知前端切换状态
@@ -376,11 +483,13 @@ class Api:
             if webview.windows:
                 if submitted_count == 0:
                     # 无新文章，直接关闭加载状态
-                    webview.windows[0].evaluate_js("""
+                    webview.windows[0].evaluate_js(
+                        """
                         if (window.onSpiderComplete) {
                             window.onSpiderComplete(false);
                         }
-                    """)
+                    """
+                    )
                     logger.debug("爬虫完成，已通知前端关闭加载状态（无新文章）")
                 # else: 有新文章时，由 _on_task_complete 处理完成通知
         except Exception as e:
@@ -390,8 +499,12 @@ class Api:
         if is_manual and result.get("status") == "success":
             self.daemon_manager.record_manual_update()
 
-        # 获取最新数据
-        all_articles = db.get_articles_paged(limit=20, offset=0)
+        # 获取最新数据（🌟 修复：必须加上全局白名单过滤）
+        filter_sources = self._get_effective_sources()
+        if not filter_sources:
+            all_articles = []  # 如果全都取消订阅了，就返回空
+        else:
+            all_articles = db.get_articles_paged(limit=20, offset=0, source_names=filter_sources)
 
         # 🌟 获取冷却剩余时间
         cooldown_remaining = self.daemon_manager.get_cooldown_remaining()
@@ -400,6 +513,7 @@ class Api:
         try:
             import main
             from datetime import datetime
+
             sync_time = datetime.now().strftime("%H:%M")
             main.update_tray_status(sync_time=sync_time)
         except Exception as e:
@@ -411,7 +525,7 @@ class Api:
             "queue_size": result.get("queue_size", 0),
             "data": all_articles,
             "warnings": result.get("warnings"),
-            "cooldown_remaining": cooldown_remaining
+            "cooldown_remaining": cooldown_remaining,
         }
 
     def get_update_cooldown(self) -> Dict[str, Any]:
@@ -438,19 +552,44 @@ class Api:
             logger.error(f"读取历史记录失败: {e}")
             return {"status": "error", "message": "读取本地数据库失败"}
 
-    def get_history_paged(self, page: int = 1, page_size: int = 20, source_name: str = None, source_names: list = None, favorites_only: bool = False) -> Dict[str, Any]:# type: ignore
+    def get_history_paged(self, page: int = 1, page_size: int = 20, source_name: str = None, source_names: list = None, favorites_only: bool = False) -> Dict[str, Any]:  # type: ignore
         """分页获取历史记录，支持按来源筛选、按收藏筛选
 
         Args:
             page: 页码
             page_size: 每页数量
-            source_name: 单个来源筛选
-            source_names: 多个来源筛选列表（优先级高于 source_name）
+            source_name: 单个来源筛选（仅支持指定单个来源，不支持数组）
+            source_names: 【已废弃】不再信任前端传来的数组
             favorites_only: 是否只返回收藏的文章
         """
         try:
             offset = (page - 1) * page_size
-            articles = db.get_articles_paged(limit=page_size, offset=offset, source_name=source_name, source_names=source_names, favorites_only=favorites_only)
+
+            # 🌟 统一大门卫：抛弃前端传来的容易出错的数组，完全由后端定夺
+            if source_name and source_name != "全部":
+                filter_sources = [source_name]
+            else:
+                filter_sources = self._get_effective_sources()
+
+            logger.info(f"[DEBUG] get_history_paged - source_name={source_name}, filter_sources={filter_sources}")
+
+            # 🌟 致命防御：如果什么都没订阅，直接阻断
+            if not filter_sources and not source_name:
+                return {"status": "success", "data": []}
+
+            articles = db.get_articles_paged(
+                limit=page_size,
+                offset=offset,
+                source_name=None,
+                source_names=filter_sources,
+                favorites_only=favorites_only,
+            )
+
+            # 🌟 详细调试：显示返回文章的来源分布
+            from collections import Counter
+            source_counts = Counter(a.get('source_name') for a in articles)
+            logger.info(f"[DEBUG] get_history_paged - 返回文章来源分布: {dict(source_counts)}")
+
             return {"status": "success", "data": articles}
         except Exception as e:
             logger.error(f"分页读取失败: {e}")
@@ -463,6 +602,7 @@ class Api:
             # 🌟 异步刷新托盘未读数量（不阻塞当前请求）
             try:
                 import threading
+
                 threading.Thread(target=self._refresh_tray_status, daemon=True).start()
             except Exception:
                 pass
@@ -486,7 +626,9 @@ class Api:
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
-    def update_article_summary(self, article_id: int, new_summary: str) -> Dict[str, Any]:
+    def update_article_summary(
+        self, article_id: int, new_summary: str
+    ) -> Dict[str, Any]:
         """
         更新文章摘要（用户二次编辑）
 
@@ -513,7 +655,7 @@ class Api:
         logger.info("【2】后端 API 已接收到取消指令")
         try:
             logger.info("【2.1】正在调用 scheduler.request_cancel()...")
-            self.scheduler.request_cancel()         # 🌟 新增：一脚踩死爬虫抓取线程
+            self.scheduler.request_cancel()  # 🌟 新增：一脚踩死爬虫抓取线程
             logger.info("【2.2】正在调用 article_processor.request_cancel()...")
             self.article_processor.request_cancel()
             logger.info("【2.3】取消指令已发送完毕")
@@ -548,11 +690,12 @@ class Api:
     def open_in_browser(self, url: str):
         """打开外部链接（用于附件验证码页面）"""
         import webbrowser
+
         success = webbrowser.open(url)
         logger.info(f"打开浏览器链接: {url} -> {'成功' if success else '失败'}")
         return {"status": "success" if success else "error"}
 
-    def start_daemon(self, interval_minutes: int = 15, debug_seconds: int = None):# type: ignore
+    def start_daemon(self, interval_minutes: int = 15, debug_seconds: int = None):  # type: ignore
         """启动后台守护线程"""
         debug_mode = debug_seconds is not None
 
@@ -564,7 +707,7 @@ class Api:
 
         # 🌟 热重载 Getter：动态读取配置，带安全边界（最小 15 分钟）
         def get_interval_seconds() -> int:
-            polling_minutes = self.config_service.get('pollingInterval', 60)
+            polling_minutes = self.config_service.get("pollingInterval", 60)
             # 防御性转换：确保最小 900 秒（15 分钟）
             return max(int(polling_minutes) * 60, 900)
 
@@ -572,7 +715,7 @@ class Api:
             task_callback=self.check_updates,
             interval_getter=get_interval_seconds,
             on_new_articles=on_new_articles,
-            debug_mode=debug_mode
+            debug_mode=debug_mode,
         )
 
     def _refresh_tray_status(self, count: int = None):
@@ -583,31 +726,45 @@ class Api:
         """
         try:
             import sys
+
             # 🌟 关键修复：使用 __main__ 获取真正的主模块，而不是 import main
             # 当 main.py 作为入口点运行时，它的模块名是 __main__，不是 main
-            main_mod = sys.modules.get('__main__')
+            main_mod = sys.modules.get("__main__")
             if main_mod is None:
                 logger.warning("无法获取主模块")
                 return
 
             from datetime import datetime
+
             # 如果没有传入 count，则从数据库获取
             if count is None:
-                subscribed_sources = self.config_service.get('subscribedSources', None)
+                subscribed_sources = self.config_service.get("subscribedSources", None)
+                if subscribed_sources is not None:
+                    subscribed_sources = list(subscribed_sources)
+                    subscribed_sources.extend(self._get_active_dynamic_sources())
                 count = db.get_unread_count(source_names=subscribed_sources)
             # 获取当前时间
             sync_time = datetime.now().strftime("%H:%M")
             # 🔍 调试：打印更新前的状态
-            logger.info(f"📊 [DEBUG] _refresh_tray_status 被调用: count={count}, sync_time={sync_time}")
-            logger.info(f"📊 [DEBUG] 当前 main._unread_count={getattr(main_mod, '_unread_count', 'N/A')}")
-            logger.info(f"📊 [DEBUG] 当前 main._status_item={getattr(main_mod, '_status_item', 'N/A')}")
-            logger.info(f"📊 [DEBUG] 当前 main._base_image={getattr(main_mod, '_base_image', 'N/A')}")
+            logger.info(
+                f"📊 [DEBUG] _refresh_tray_status 被调用: count={count}, sync_time={sync_time}"
+            )
+            logger.info(
+                f"📊 [DEBUG] 当前 main._unread_count={getattr(main_mod, '_unread_count', 'N/A')}"
+            )
+            logger.info(
+                f"📊 [DEBUG] 当前 main._status_item={getattr(main_mod, '_status_item', 'N/A')}"
+            )
+            logger.info(
+                f"📊 [DEBUG] 当前 main._base_image={getattr(main_mod, '_base_image', 'N/A')}"
+            )
             # 更新托盘
             main_mod.update_tray_status(unread=count, sync_time=sync_time)
             logger.info(f"📊 [DEBUG] update_tray_status 调用完成")
         except Exception as e:
             logger.error(f"❌ [DEBUG] 刷新托盘状态失败: {e}")
             import traceback
+
             traceback.print_exc()
 
     def download_attachment(self, url: str, filename: str) -> dict:
@@ -626,26 +783,30 @@ class Api:
         """接收 Base64 图片并调用操作系统底层接口暴力写入剪贴板（无需第三方库）"""
         try:
             # 1. 解码前端传来的 Base64 数据并存入临时文件
-            if ',' in b64_data:
-                b64_data = b64_data.split(',')[1]
+            if "," in b64_data:
+                b64_data = b64_data.split(",")[1]
             img_data = base64.b64decode(b64_data)
 
-            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
                 temp_path = f.name
                 f.write(img_data)
 
             # 2. 根据不同操作系统，调用原生底层脚本注入剪贴板
             system = platform.system().lower()
-            if system == 'darwin':
+            if system == "darwin":
                 # macOS: 使用内置的 AppleScript (osascript) 强行写入图像
                 script = f'set the clipboard to (read (POSIX file "{temp_path}") as TIFF picture)'
-                subprocess.run(['osascript', '-e', script], check=True)
-            elif system == 'windows':
+                subprocess.run(["osascript", "-e", script], check=True)
+            elif system == "windows":
                 # Windows: 使用内置的 PowerShell 调用 .NET 的剪贴板接口
                 # 隐藏 PowerShell 弹窗黑框
-                creation_flags = 0x08000000 if os.name == 'nt' else 0
+                creation_flags = 0x08000000 if os.name == "nt" else 0
                 script = f'Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Clipboard]::SetImage([System.Drawing.Image]::FromFile("{temp_path}"))'
-                subprocess.run(["powershell", "-command", script], check=True, creationflags=creation_flags)
+                subprocess.run(
+                    ["powershell", "-command", script],
+                    check=True,
+                    creationflags=creation_flags,
+                )
             else:
                 return {"status": "error", "message": "当前系统暂不支持一键复制图片"}
 
@@ -689,17 +850,17 @@ class Api:
             api_key=config.api_key,
             model_name=config.model_name,
             system_prompt=config.prompt,
-            base_url=config.base_url
+            base_url=config.base_url,
         )
 
     def load_config(self) -> dict:
         """暴露给前端：获取配置"""
         config_data = self.config_service.to_dict()
-        
+
         # 🌟 修复：启动时恢复置顶状态，改为对属性赋值
-        if self.window and config_data.get('isPinned', False):
+        if self.window and config_data.get("isPinned", False):
             self.window.on_top = True
-            
+
         return {"status": "success", "data": config_data}
 
     def save_config(self, new_config: dict) -> dict:
@@ -709,7 +870,7 @@ class Api:
                 return {"status": "error", "message": "保存配置文件失败"}
 
             # 应用开机自启设置
-            self._set_autostart(new_config.get('autoStart', False))
+            self._set_autostart(new_config.get("autoStart", False))
 
             # 热更新 LLM 配置
             self._apply_config()
@@ -720,7 +881,13 @@ class Api:
             logger.error(f"保存配置失败: {e}")
             return {"status": "error", "message": str(e)}
 
-    def test_ai_connection(self, api_key: str, model_name: str, provider: str = 'custom', base_url: str = '') -> dict:
+    def test_ai_connection(
+        self,
+        api_key: str,
+        model_name: str,
+        provider: str = "custom",
+        base_url: str = "",
+    ) -> dict:
         """测试 AI 连通性"""
         logger.info("正在进行 AI 连通性测试...")
         is_ok, msg = self.llm.test_connection(api_key, model_name, base_url)
@@ -749,10 +916,8 @@ class Api:
 
     def get_cooldown_config(self) -> dict:
         """获取冷却时间配置"""
-        return {
-            "status": "success",
-            "cooldown_seconds": DaemonManager.MANUAL_UPDATE_COOLDOWN
-        }
+        cooldown_seconds = self.config_service.get("updateCooldown", 60)
+        return {"status": "success", "cooldown_seconds": cooldown_seconds}
 
     # ==================== 📧 邮件推送 API ====================
 
@@ -768,24 +933,18 @@ class Api:
         """
         try:
             # 获取邮件配置
-            smtp_host = self.config_service.get('smtpHost', '')
-            smtp_port = self.config_service.get('smtpPort', 465)
-            smtp_user = self.config_service.get('smtpUser', '')
-            smtp_password = self.config_service.get('smtpPassword', '')
+            smtp_host = self.config_service.get("smtpHost", "")
+            smtp_port = self.config_service.get("smtpPort", 465)
+            smtp_user = self.config_service.get("smtpUser", "")
+            smtp_password = self.config_service.get("smtpPassword", "")
 
             if not smtp_host or not smtp_user or not smtp_password:
-                return {
-                    "status": "error",
-                    "message": "请先配置 SMTP 服务器信息"
-                }
+                return {"status": "error", "message": "请先配置 SMTP 服务器信息"}
 
             # 如果未指定测试邮箱，使用 SMTP 用户名
             to_addr = test_email or smtp_user
             if not to_addr:
-                return {
-                    "status": "error",
-                    "message": "请提供测试邮箱地址"
-                }
+                return {"status": "error", "message": "请提供测试邮箱地址"}
 
             # 导入邮件服务
             from src.services.email_service import EmailService
@@ -794,15 +953,15 @@ class Api:
                 smtp_host=smtp_host,
                 smtp_port=smtp_port,
                 smtp_user=smtp_user,
-                smtp_password=smtp_password
+                smtp_password=smtp_password,
             )
 
             result = email_service.send_test_email(to_addr)
 
-            if result.get('success'):
+            if result.get("success"):
                 return {"status": "success", "message": f"测试邮件已发送至 {to_addr}"}
             else:
-                return {"status": "error", "message": result.get('message', '发送失败')}
+                return {"status": "error", "message": result.get("message", "发送失败")}
 
         except ImportError as e:
             logger.error(f"邮件服务模块导入失败: {e}")
@@ -816,12 +975,14 @@ class Api:
         try:
             return {
                 "status": "success",
-                "emailNotifyEnabled": self.config_service.get('emailNotifyEnabled', False),
-                "smtpHost": self.config_service.get('smtpHost', ''),
-                "smtpPort": self.config_service.get('smtpPort', 465),
-                "smtpUser": self.config_service.get('smtpUser', ''),
-                "hasPassword": bool(self.config_service.get('smtpPassword', '')),
-                "subscriberList": self.config_service.get('subscriberList', []),
+                "emailNotifyEnabled": self.config_service.get(
+                    "emailNotifyEnabled", False
+                ),
+                "smtpHost": self.config_service.get("smtpHost", ""),
+                "smtpPort": self.config_service.get("smtpPort", 465),
+                "smtpUser": self.config_service.get("smtpUser", ""),
+                "hasPassword": bool(self.config_service.get("smtpPassword", "")),
+                "subscriberList": self.config_service.get("subscriberList", []),
             }
         except Exception as e:
             return {"status": "error", "message": str(e)}
@@ -842,16 +1003,16 @@ class Api:
                 return {
                     "status": "error",
                     "message": "ArticleProcessor 缺少 config_service",
-                    "canSend": False
+                    "canSend": False,
                 }
 
             # 获取各项配置
-            enabled = self.config_service.get('emailNotifyEnabled', False)
-            subscriber_list = self.config_service.get('subscriberList', [])
-            smtp_host = self.config_service.get('smtpHost', '')
-            smtp_port = self.config_service.get('smtpPort', 465)
-            smtp_user = self.config_service.get('smtpUser', '')
-            smtp_password = self.config_service.get('smtpPassword', '')
+            enabled = self.config_service.get("emailNotifyEnabled", False)
+            subscriber_list = self.config_service.get("subscriberList", [])
+            smtp_host = self.config_service.get("smtpHost", "")
+            smtp_port = self.config_service.get("smtpPort", 465)
+            smtp_user = self.config_service.get("smtpUser", "")
+            smtp_password = self.config_service.get("smtpPassword", "")
 
             # ========== 第一步：基础配置检查 ==========
             issues = []
@@ -873,7 +1034,9 @@ class Api:
             try:
                 smtp_port_int = int(smtp_port)
                 if not (1 <= smtp_port_int <= 65535):
-                    config_issues.append(f"端口号无效 ({smtp_port})，应在 1-65535 范围内")
+                    config_issues.append(
+                        f"端口号无效 ({smtp_port})，应在 1-65535 范围内"
+                    )
             except (ValueError, TypeError):
                 config_issues.append(f"端口号格式错误 ({smtp_port})")
                 smtp_port_int = 465  # 使用默认值继续
@@ -890,13 +1053,15 @@ class Api:
                         "emailNotifyEnabled": enabled,
                         "subscriberList": subscriber_list,
                         "smtpHost": smtp_host,
-                        "smtpPort": smtp_port_int if 'smtp_port_int' in dir() else smtp_port,
+                        "smtpPort": (
+                            smtp_port_int if "smtp_port_int" in dir() else smtp_port
+                        ),
                         "smtpUser": smtp_user,
                         "hasPassword": bool(smtp_password),
-                        "connectionTest": "skipped"
+                        "connectionTest": "skipped",
                     },
                     "issues": issues,
-                    "message": f"配置问题: {', '.join(config_issues)}"
+                    "message": f"配置问题: {', '.join(config_issues)}",
                 }
 
             # ========== 第三步：真实 SMTP 连通性测试 ==========
@@ -922,7 +1087,10 @@ class Api:
             except smtplib.SMTPAuthenticationError as e:
                 connection_result = "auth_failed"
                 error_detail = str(e)
-                if "535" in error_detail or "authentication failed" in error_detail.lower():
+                if (
+                    "535" in error_detail
+                    or "authentication failed" in error_detail.lower()
+                ):
                     issues.append("SMTP 认证失败：用户名或授权码错误")
                 else:
                     issues.append(f"SMTP 认证失败：{error_detail}")
@@ -972,9 +1140,15 @@ class Api:
             elif connection_result and connection_result != "success":
                 message = issues[-1] if issues else "SMTP 连接测试失败"
             else:
-                message = f"问题: {', '.join(issues)}" if issues else f"提示: {', '.join(warnings)}"
+                message = (
+                    f"问题: {', '.join(issues)}"
+                    if issues
+                    else f"提示: {', '.join(warnings)}"
+                )
 
-            logger.info(f"📧 邮件推送诊断完成: canSend={can_send}, connectionResult={connection_result}")
+            logger.info(
+                f"📧 邮件推送诊断完成: canSend={can_send}, connectionResult={connection_result}"
+            )
 
             return {
                 "status": "success",
@@ -986,11 +1160,11 @@ class Api:
                     "smtpPort": smtp_port_int,
                     "smtpUser": smtp_user,
                     "hasPassword": bool(smtp_password),
-                    "connectionTest": connection_result
+                    "connectionTest": connection_result,
                 },
                 "issues": issues,
                 "warnings": warnings,
-                "message": message
+                "message": message,
             }
 
         except Exception as e:
@@ -1014,8 +1188,8 @@ class Api:
             logger.info(f"📧 测试邮件推送：使用文章 [{article.get('title', '')[:30]}]")
 
             # 检查配置
-            enabled = self.config_service.get('emailNotifyEnabled', False)
-            subscriber_list = self.config_service.get('subscriberList', [])
+            enabled = self.config_service.get("emailNotifyEnabled", False)
+            subscriber_list = self.config_service.get("subscriberList", [])
 
             if not enabled:
                 return {"status": "error", "message": "邮件通知未启用"}
@@ -1023,7 +1197,7 @@ class Api:
                 return {"status": "error", "message": "订阅者列表为空"}
 
             # 🌟 添加 model_name 字段（从配置获取当前模型名称）
-            article["model_name"] = self.config_service.get('modelName', 'AI')
+            article["model_name"] = self.config_service.get("modelName", "AI")
 
             # 直接调用 ArticleProcessor 的邮件发送方法
             self.article_processor._send_email_notification(article)
@@ -1034,7 +1208,10 @@ class Api:
             else:
                 recipient_info = f"...等{len(subscriber_list)}个邮箱"
 
-            return {"status": "success", "message": f"已触发邮件推送，请检查{recipient_info}"}
+            return {
+                "status": "success",
+                "message": f"已触发邮件推送，请检查{recipient_info}",
+            }
 
         except Exception as e:
             logger.error(f"测试邮件推送失败: {e}")
@@ -1048,7 +1225,10 @@ class Api:
             {"status": "success", "message": str}
         """
         # 新实现每次截图都创建新的浏览器实例，样式自动生效
-        return {"status": "success", "message": "样式已自动生效，下次截图将使用最新样式"}
+        return {
+            "status": "success",
+            "message": "样式已自动生效，下次截图将使用最新样式",
+        }
 
     def _set_autostart(self, enabled: bool):
         """设置开机自启"""
@@ -1059,16 +1239,48 @@ class Api:
         if self.window:
             self.window.hide()
 
-    def search_articles(self, keyword: str, source_name: str = None, favorites_only: bool = False) -> dict: #type: ignore
-        """全局搜索（支持按来源筛选、按收藏筛选）"""
+    def search_articles(self, keyword: str, source_name: str = None, favorites_only: bool = False) -> dict:  # type: ignore
+        """全局搜索（支持按来源筛选、按收藏筛选）
+
+        Args:
+            keyword: 搜索关键词
+            source_name: 单个来源筛选（仅支持指定单个来源）
+            favorites_only: 是否只返回收藏的文章
+
+        搜索逻辑：
+        - 如果指定了 source_name 且不是"全部"，只搜索该来源
+        - 否则，搜索所有有效来源（订阅来源 + 启用的动态来源）
+        """
         try:
+            # 🌟 统一大门卫：完全由后端定夺
+            if source_name and source_name != "全部":
+                filter_sources = [source_name]
+            else:
+                filter_sources = self._get_effective_sources()
+
+            logger.info(f"[DEBUG] search_articles - keyword={keyword}, source_name={source_name}, filter_sources={filter_sources}")
+
+            # 🌟 致命防御：如果什么都没订阅，直接阻断
+            if not filter_sources and not source_name:
+                return {"status": "success", "data": []}
+
             if not keyword or not keyword.strip():
                 # 如果搜索词为空，相当于直接获取分页列表
-                articles = db.get_articles_paged(limit=20, offset=0, source_name=source_name, favorites_only=favorites_only)
+                articles = db.get_articles_paged(
+                    limit=20,
+                    offset=0,
+                    source_names=filter_sources,
+                    favorites_only=favorites_only,
+                )
                 return {"status": "success", "data": articles}
 
-            # 将 source_name 和 favorites_only 传递给底层的数据库方法
-            data = db.search_articles(keyword.strip(), limit=50, source_name=source_name, favorites_only=favorites_only)
+            data = db.search_articles(
+                keyword.strip(),
+                limit=50,
+                source_names=filter_sources,
+                favorites_only=favorites_only,
+            )
+            logger.info(f"[DEBUG] search_articles - 返回结果数: {len(data)}")
             return {"status": "success", "data": data}
         except Exception as e:
             logger.error(f"搜索失败: {e}")
@@ -1094,6 +1306,11 @@ class Api:
                 for spider_cls, _, _, _ in SPIDER_REGISTRY
                 if spider_cls.SOURCE_NAME in db_sources
             ]
+            # 🌟 追加动态爬虫来源
+            dynamic_sources = self._get_active_dynamic_sources()
+            for ds in dynamic_sources:
+                if ds in db_sources and ds not in ordered_sources:
+                    ordered_sources.append(ds)
 
             return {"status": "success", "data": ordered_sources}
         except Exception as e:
@@ -1109,16 +1326,11 @@ class Api:
             {"status": "success", "count": int}
         """
         try:
-            # 获取用户订阅的来源列表
-            subscribed_sources = self.config_service.get('subscribedSources', None)
-
-            # 🌟 如果指定了单个部门，优先使用该部门
+            # 🌟 统一来源过滤逻辑
             if source_name and source_name != "全部":
                 filter_sources = [source_name]
-            elif subscribed_sources and len(subscribed_sources) > 0:
-                filter_sources = subscribed_sources
             else:
-                filter_sources = None
+                filter_sources = self._get_effective_sources()
 
             logger.info(f"📊 获取未读数量 - 筛选来源: {filter_sources}")
 
@@ -1126,22 +1338,14 @@ class Api:
             count = db.get_unread_count(source_names=filter_sources)
             logger.info(f"📊 未读数量统计结果: {count}")
 
-            # 🌟 同步更新状态栏图标（直接传入已计算的 count，避免重复计算）
-            # 注意：状态栏始终显示订阅来源的总未读数，而不是当前筛选的未读数
-            if filter_sources == subscribed_sources or filter_sources is None:
-                # 当前筛选的就是订阅来源，直接更新
-                try:
-                    import threading
-                    threading.Thread(target=self._refresh_tray_status, args=(count,), daemon=True).start()
-                except Exception:
-                    pass
-            else:
-                # 当前筛选的是单个部门，需要重新计算订阅来源的总未读数
-                try:
-                    import threading
-                    threading.Thread(target=self._refresh_tray_status, daemon=True).start()
-                except Exception:
-                    pass
+            # 🌟 同步更新状态栏图标
+            try:
+                import threading
+                threading.Thread(
+                    target=self._refresh_tray_status, daemon=True
+                ).start()
+            except Exception:
+                pass
 
             return {"status": "success", "count": count}
         except Exception as e:
@@ -1158,21 +1362,17 @@ class Api:
             {"status": "success", "url": str, "id": int} 或 {"status": "success", "found": false}
         """
         try:
-            subscribed_sources = self.config_service.get('subscribedSources', None)
-
-            # 🌟 如果指定了单个部门，优先使用该部门
+            # 🌟 统一来源过滤逻辑
             if source_name and source_name != "全部":
                 filter_sources = [source_name]
-            elif subscribed_sources and len(subscribed_sources) > 0:
-                filter_sources = subscribed_sources
             else:
-                filter_sources = None
+                filter_sources = self._get_effective_sources()
 
             article = db.get_first_unread(source_names=filter_sources)
 
             if article:
                 logger.info(f"📊 找到未读文章: {article['title'][:30]}...")
-                return {"status": "success", "url": article['url'], "id": article['id']}
+                return {"status": "success", "url": article["url"], "id": article["id"]}
             else:
                 logger.info("📊 没有找到未读文章")
                 return {"status": "success", "found": False}
@@ -1192,6 +1392,7 @@ class Api:
         """
         try:
             import main
+
             main.update_tray_status(unread=unread, sync_time=sync_time)
             return {"status": "success"}
         except Exception as e:
@@ -1205,8 +1406,9 @@ class Api:
             {"status": "success", "count": int}
         """
         try:
-            subscribed_sources = self.config_service.get('subscribedSources', None)
-            count = db.get_unread_count(source_names=subscribed_sources)
+            # 🌟 统一来源过滤逻辑
+            filter_sources = self._get_effective_sources()
+            count = db.get_unread_count(source_names=filter_sources)
             return {"status": "success", "count": count}
         except Exception as e:
             logger.error(f"获取托盘未读数量失败: {e}")
@@ -1229,11 +1431,14 @@ class Api:
                 return {"status": "error", "message": "文章不存在"}
 
             # 2. 检查是否有原文内容
-            raw_text = article.get('raw_text', '')
-            title = article.get('title', '未知标题')
+            raw_text = article.get("raw_text", "")
+            title = article.get("title", "未知标题")
 
             if not raw_text or len(raw_text.strip()) < 10:
-                return {"status": "error", "message": "原文内容过短或缺失，无法生成总结"}
+                return {
+                    "status": "error",
+                    "message": "原文内容过短或缺失，无法生成总结",
+                }
 
             # 3. 调用 LLM 服务重新生成总结
             logger.info(f"正在重新生成文章总结: {title}")
@@ -1258,12 +1463,12 @@ class Api:
     def import_custom_font(self) -> Dict[str, Any]:
         """呼出系统原生文件选择器，导入并持久化自定义字体"""
         try:
-            file_types = ('字体文件 (*.ttf;*.otf;*.woff;*.woff2)', '所有文件 (*.*)')
+            file_types = ("字体文件 (*.ttf;*.otf;*.woff;*.woff2)", "所有文件 (*.*)")
             # 呼出文件选择对话框
             result = webview.windows[0].create_file_dialog(
-                webview.OPEN_DIALOG, #type: ignore
+                webview.OPEN_DIALOG,  # type: ignore
                 allow_multiple=False,
-                file_types=file_types
+                file_types=file_types,
             )
 
             if not result:
@@ -1271,12 +1476,17 @@ class Api:
 
             source_path = result[0]
             ext = os.path.splitext(source_path)[1].lower()
-            if ext not in ['.ttf', '.otf', '.woff', '.woff2']:
-                return {"status": "error", "message": "不支持的字体格式，仅支持 ttf/otf/woff/woff2"}
+            if ext not in [".ttf", ".otf", ".woff", ".woff2"]:
+                return {
+                    "status": "error",
+                    "message": "不支持的字体格式，仅支持 ttf/otf/woff/woff2",
+                }
 
             # 将字体安全拷贝到 frontend/fonts 目录下，供本地 HTTP 服务器读取
-            frontend_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'frontend')
-            fonts_dir = os.path.join(frontend_dir, 'fonts')
+            frontend_dir = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend"
+            )
+            fonts_dir = os.path.join(frontend_dir, "fonts")
             os.makedirs(fonts_dir, exist_ok=True)
 
             # 统一重命名避免编码问题
@@ -1288,7 +1498,7 @@ class Api:
             return {
                 "status": "success",
                 "font_path": f"fonts/{target_filename}",
-                "font_name": os.path.basename(source_path)
+                "font_name": os.path.basename(source_path),
             }
         except Exception as e:
             logger.error(f"导入字体失败: {e}")
@@ -1309,7 +1519,10 @@ class Api:
             if res.get("status") == "success":
                 data = self._version_info
             else:
-                return {"has_update": False, "error": res.get("message", "获取版本失败")}
+                return {
+                    "has_update": False,
+                    "error": res.get("message", "获取版本失败"),
+                }
 
         if not data:
             return {"has_update": False}
@@ -1336,7 +1549,7 @@ class Api:
                 "has_update": True,
                 "version": latest_version,
                 "notes": notes,
-                "download_url": download_url
+                "download_url": download_url,
             }
 
         return {"has_update": False}
@@ -1373,7 +1586,9 @@ class Api:
 
             # ===== 场景 A：网络请求成功 =====
             if response.status_code != 200:
-                logger.warning(f"启动检查：无法获取远程配置 (HTTP {response.status_code})，默认放行")
+                logger.warning(
+                    f"启动检查：无法获取远程配置 (HTTP {response.status_code})，默认放行"
+                )
                 # 非正常 HTTP 状态码，视为网络问题，走离线 TTL 检查
                 return self._check_offline_ttl()
 
@@ -1383,12 +1598,14 @@ class Api:
             self._version_info = data
 
             # 🌟 步骤 3：检查 is_active 字段（云端最高仲裁）
-            is_active = data.get('is_active', True)
+            is_active = data.get("is_active", True)
 
             if is_active is False:
                 # 🔐 云端标记为不可用，执行只读锁定逻辑
-                kill_reason = data.get('kill_message', '该软件已被禁用')
-                logger.warning(f"🚫 启动检查：远程配置标记为不可用，进入只读模式。原因: {kill_reason}")
+                kill_reason = data.get("kill_message", "该软件已被禁用")
+                logger.warning(
+                    f"🚫 启动检查：远程配置标记为不可用，进入只读模式。原因: {kill_reason}"
+                )
                 self._execute_self_destruct(kill_reason)
 
                 # 🌟 优雅降级：返回成功但附加 read_only 模式
@@ -1447,12 +1664,18 @@ class Api:
         current_time = time.time()
         elapsed_seconds = current_time - last_sync
 
-        logger.info(f"🔐 离线 TTL 检查：上次同步时间 = {last_sync:.0f}，已过 {elapsed_seconds / 86400:.1f} 天")
+        logger.info(
+            f"🔐 离线 TTL 检查：上次同步时间 = {last_sync:.0f}，已过 {elapsed_seconds / 86400:.1f} 天"
+        )
 
         if elapsed_seconds > self.OFFLINE_TTL_SECONDS:
             # 超过 7 天未连接授权服务器，触发只读锁定
-            logger.warning(f"🚫 离线检查：已连续 {elapsed_seconds / 86400:.1f} 天未连接授权服务器，进入只读模式")
-            self._execute_self_destruct("已连续7天未连接授权服务器，为保障安全已暂停服务")
+            logger.warning(
+                f"🚫 离线检查：已连续 {elapsed_seconds / 86400:.1f} 天未连接授权服务器，进入只读模式"
+            )
+            self._execute_self_destruct(
+                "已连续7天未连接授权服务器，为保障安全已暂停服务"
+            )
             response = self._build_success_response({})
             response["mode"] = "read_only"
             response["reason"] = "已连续7天未连接授权服务器，为保障安全已暂停服务"
@@ -1472,7 +1695,7 @@ class Api:
         if self.config_service.current.is_locked:
             try:
                 current_config = self.config_service.to_dict()
-                current_config['isLocked'] = False
+                current_config["isLocked"] = False
                 self.config_service.save(current_config)
                 logger.info("🔓 云端验证成功，已解除只读锁定，恢复正常模式")
             except Exception as e:
@@ -1484,7 +1707,7 @@ class Api:
         """
         try:
             current_config = self.config_service.to_dict()
-            current_config['lastCloudSyncTime'] = time.time()
+            current_config["lastCloudSyncTime"] = time.time()
             self.config_service.save(current_config)
             logger.info("🔐 已更新云端同步时间戳")
         except Exception as e:
@@ -1502,7 +1725,7 @@ class Api:
         # 锁定配置文件
         try:
             current_config = self.config_service.to_dict()
-            current_config['isLocked'] = True
+            current_config["isLocked"] = True
             self.config_service.save(current_config)
             logger.info("✅ 已将配置标记为锁定")
         except Exception as e:
@@ -1523,7 +1746,7 @@ class Api:
         response: Dict[str, Any] = {
             "status": "success",
             "has_update": False,
-            "announcement": version_data.get("announcement", {})
+            "announcement": version_data.get("announcement", {}),
         }
 
         # 检查版本更新
@@ -1559,7 +1782,7 @@ class Api:
         # 2. 发起真实的网络请求（携带 304 缓存协商头）
         headers = {}
         if self._version_etag:
-            headers['If-None-Match'] = self._version_etag
+            headers["If-None-Match"] = self._version_etag
 
         try:
             response = requests.get(VERSION_URL, timeout=5, headers=headers)
@@ -1573,17 +1796,19 @@ class Api:
             if response.status_code == 200:
                 data = response.json()
                 self._version_info = data
-                self._version_etag = response.headers.get('ETag')  # 记录最新 ETag
+                self._version_etag = response.headers.get("ETag")  # 记录最新 ETag
                 return {"status": "success", **data}
 
-            return {"status": "error", "message": f"请求异常，状态码: {response.status_code}"}
+            return {
+                "status": "error",
+                "message": f"请求异常，状态码: {response.status_code}",
+            }
         except Exception as e:
             logger.debug(f"获取版本信息网络异常: {e}")
             # 弱网兜底：如果曾经成功获取过，退级使用旧缓存
             if self._version_info:
                 return {"status": "success", **self._version_info}
             return {"status": "error", "message": "无法获取版本信息"}
-    
 
     def set_window_on_top(self, is_on_top: bool):
         """前端调用：切换窗口置顶状态
@@ -1625,44 +1850,48 @@ class Api:
         🌟 增强版图标检索：支持模糊匹配与打包路径兼容
         """
         # 1. 提取品牌关键词
-        brand_key = model_name.lower().split('-')[0]
-        
+        brand_key = model_name.lower().split("-")[0]
+
         # 2. 别名映射（可根据需要增删）
-        brand_map = {'gpt': 'openai', 'claude': 'anthropic', 'gemini': 'google'}
+        brand_map = {"gpt": "openai", "claude": "anthropic", "gemini": "google"}
         slug = brand_map.get(brand_key, brand_key)
 
         # 3. 🚀 打包兼容性路径处理
         # 如果是 PyInstaller 打包后的环境，使用 sys._MEIPASS；否则使用当前文件目录
-        if getattr(sys, 'frozen', False):
+        if getattr(sys, "frozen", False):
             # 生产环境：指向解压后的临时资源目录
-            base_path = getattr(sys, '_MEIPASS', '')  # type: ignore[attr-defined]
+            base_path = getattr(sys, "_MEIPASS", "")  # type: ignore[attr-defined]
         else:
             # 开发环境：指向当前项目根目录
             base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
         # 确保指向 /data/icons 文件夹
-        icons_dir = os.path.join(base_path, 'data', 'icons')
-        
+        icons_dir = os.path.join(base_path, "data", "icons")
+
         # 4. 检索逻辑：优先精准匹配，次选模糊匹配
         svg_content = None
-        
+
         try:
             if os.path.exists(icons_dir):
                 files = os.listdir(icons_dir)
-                
+
                 # 策略 A: 精准匹配 (mimo.svg / icon_mimo.svg)
                 target_exact = [f"{slug}.svg", f"icon_{slug}.svg", f"{slug}-color.svg"]
                 for f in target_exact:
                     if f in files:
-                        with open(os.path.join(icons_dir, f), 'r', encoding='utf-8') as fs:
+                        with open(
+                            os.path.join(icons_dir, f), "r", encoding="utf-8"
+                        ) as fs:
                             svg_content = fs.read()
                         break
-                
+
                 # 策略 B: 模糊匹配 (匹配 xiaomimimo.svg)
                 if not svg_content:
                     for f in files:
-                        if f.endswith('.svg') and slug in f.lower():
-                            with open(os.path.join(icons_dir, f), 'r', encoding='utf-8') as fs:
+                        if f.endswith(".svg") and slug in f.lower():
+                            with open(
+                                os.path.join(icons_dir, f), "r", encoding="utf-8"
+                            ) as fs:
                                 svg_content = fs.read()
                             break
 
@@ -1670,18 +1899,268 @@ class Api:
             if not svg_content:
                 url = f"https://unpkg.com/@lobehub/icons-static-svg@latest/icons/{slug}-color.svg"
                 resp = requests.get(url, timeout=3)
-                if resp.status_code == 200 and resp.text.startswith('<svg'):
+                if resp.status_code == 200 and resp.text.startswith("<svg"):
                     svg_content = resp.text
                     # 下载后顺手存进本地库，下次就不用下电了
                     os.makedirs(icons_dir, exist_ok=True)
-                    with open(os.path.join(icons_dir, f"{slug}.svg"), 'w', encoding='utf-8') as f:
+                    with open(
+                        os.path.join(icons_dir, f"{slug}.svg"), "w", encoding="utf-8"
+                    ) as f:
                         f.write(svg_content)
 
             # 6. 尺寸加固：确保截图必现
-            if svg_content and 'width=' not in svg_content:
-                svg_content = svg_content.replace('<svg', '<svg width="100%" height="100%"')
+            if svg_content and "width=" not in svg_content:
+                svg_content = svg_content.replace(
+                    "<svg", '<svg width="100%" height="100%"'
+                )
 
             return {"status": "success", "svg_raw": svg_content or ""}
-            
+
         except Exception as e:
             return {"status": "error", "message": str(e), "svg_raw": ""}
+
+    # ==================== 🕷️ 动态爬虫规则生成 API ====================
+
+    def generate_custom_spider_rule(
+        self,
+        url: str,
+        task_id: str,
+        task_name: str,
+        target_fields: list,
+        require_ai_summary: bool = False,
+        task_purpose: str = "",
+    ) -> Dict[str, Any]:
+        """
+        生成自定义爬虫规则
+
+        使用 AI 分析网页结构，自动生成 CSS 选择器规则，并进行沙盒测试验证。
+
+        Args:
+            url: 目标网页 URL
+            task_id: 任务 ID
+            task_name: 任务名称（映射到数据库 department 字段）
+            target_fields: 用户想要提取的字段列表
+            require_ai_summary: 是否需要对抓取内容进行 AI 摘要
+            task_purpose: 任务目的/类别（映射到数据库 category 字段）
+
+        Returns:
+            {
+                "status": "success/error",
+                "rule": dict,          # 生成的完整规则
+                "sample_data": list    # 沙盒测试提取的前 3 条数据样本
+            }
+        """
+        try:
+            logger.info(f"🕷️ 收到规则生成请求: task_id={task_id}, url={url}")
+
+            # 参数验证
+            if not url or not url.startswith(("http://", "https://")):
+                return {"status": "error", "message": "无效的 URL"}
+
+            if not target_fields or not isinstance(target_fields, list):
+                return {"status": "error", "message": "target_fields 必须是非空列表"}
+
+            # 调用规则生成服务
+            result = self.rule_generator.generate_and_test_rule(
+                task_id=task_id,
+                task_name=task_name,
+                url=url,
+                target_fields=target_fields,
+                require_ai_summary=require_ai_summary,
+                task_purpose=task_purpose,
+            )
+
+            if result.success:
+                return {
+                    "status": "success",
+                    "rule": result.rule.model_dump() if result.rule else None,
+                    "sample_data": result.sample_data,
+                }
+            else:
+                return {"status": "error", "message": result.error_message}
+
+        except Exception as e:
+            logger.error(f"生成爬虫规则失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def confirm_and_save_rule(self, rule_dict: dict) -> Dict[str, Any]:
+        """
+        确认并保存规则
+
+        用户确认沙盒测试结果无误后，将规则写入持久化存储。
+
+        Args:
+            rule_dict: 规则字典（SpiderRuleOutput 格式）
+
+        Returns:
+            {"status": "success/error", "message": str}
+        """
+        try:
+            logger.info(f"🕷️ 保存规则: rule_id={rule_dict.get('rule_id')}")
+
+            # 参数验证
+            if not rule_dict:
+                return {"status": "error", "message": "规则数据不能为空"}
+
+            required_fields = [
+                "rule_id",
+                "task_id",
+                "task_name",
+                "url",
+                "list_container",
+                "item_selector",
+                "field_selectors",
+            ]
+            missing_fields = [f for f in required_fields if f not in rule_dict]
+            if missing_fields:
+                return {
+                    "status": "error",
+                    "message": f"缺少必要字段: {', '.join(missing_fields)}",
+                }
+
+            # 保存规则
+            success = self.rules_manager.save_custom_rule(rule_dict)
+
+            if success:
+                logger.info(f"✅ 规则保存成功: {rule_dict.get('rule_id')}")
+                return {
+                    "status": "success",
+                    "message": "规则保存成功",
+                    "rule_id": rule_dict.get("rule_id"),
+                }
+            else:
+                return {"status": "error", "message": "规则保存失败"}
+
+        except Exception as e:
+            logger.error(f"保存规则失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def get_custom_spider_rules(self) -> Dict[str, Any]:
+        """
+        获取所有自定义爬虫规则
+
+        Returns:
+            {"status": "success", "rules": list}
+        """
+        try:
+            rules = self.rules_manager.load_custom_rules()
+            return {"status": "success", "rules": rules}
+        except Exception as e:
+            logger.error(f"获取规则列表失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def debug_effective_sources(self) -> Dict[str, Any]:
+        """
+        🐛 调试接口：查看有效来源列表的详细信息
+
+        Returns:
+            {"status": "success", "subscribed": list, "dynamic": list, "effective": list}
+        """
+        try:
+            subscribed = self.config_service.get("subscribedSources", [])
+            dynamic = self._get_active_dynamic_sources()
+            effective = self._get_effective_sources()
+
+            logger.info(f"[DEBUG API] subscribedSources from config: {subscribed}")
+            logger.info(f"[DEBUG API] dynamic sources: {dynamic}")
+            logger.info(f"[DEBUG API] effective sources: {effective}")
+
+            return {
+                "status": "success",
+                "subscribed": subscribed,
+                "dynamic": dynamic,
+                "effective": effective,
+            }
+        except Exception as e:
+            logger.error(f"调试接口失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def get_custom_spider_rule_by_id(self, rule_id: str) -> Dict[str, Any]:
+        """
+        根据 ID 获取规则
+
+        Args:
+            rule_id: 规则 ID
+
+        Returns:
+            {"status": "success", "rule": dict}
+        """
+        try:
+            rule = self.rules_manager.get_rule_by_id(rule_id)
+            if rule:
+                return {"status": "success", "rule": rule}
+            else:
+                return {"status": "error", "message": "规则不存在"}
+        except Exception as e:
+            logger.error(f"获取规则失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def delete_custom_spider_rule(self, rule_id: str) -> Dict[str, Any]:
+        """
+        删除规则
+
+        Args:
+            rule_id: 规则 ID
+
+        Returns:
+            {"status": "success/error"}
+        """
+        try:
+            success = self.rules_manager.delete_rule(rule_id)
+            if success:
+                return {"status": "success", "message": "规则已删除"}
+            else:
+                return {"status": "error", "message": "删除失败或规则不存在"}
+        except Exception as e:
+            logger.error(f"删除规则失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def toggle_custom_spider_rule(self, rule_id: str, enabled: bool) -> Dict[str, Any]:
+        """
+        切换规则启用状态
+
+        Args:
+            rule_id: 规则 ID
+            enabled: 是否启用
+
+        Returns:
+            {"status": "success/error"}
+        """
+        try:
+            success = self.rules_manager.update_rule_status(rule_id, enabled)
+            if success:
+                status = "启用" if enabled else "禁用"
+                return {"status": "success", "message": f"规则已{status}"}
+            else:
+                return {"status": "error", "message": "更新失败或规则不存在"}
+        except Exception as e:
+            logger.error(f"切换规则状态失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def test_custom_spider_rule(self, rule_dict: dict) -> Dict[str, Any]:
+        """
+        测试已有规则
+
+        Args:
+            rule_dict: 规则字典
+
+        Returns:
+            {"status": "success", "sample_data": list}
+        """
+        try:
+            from src.models.spider_rule import SpiderRuleOutput
+
+            # 构建规则对象
+            rule = SpiderRuleOutput(**rule_dict)
+
+            # 测试规则
+            sample_data = self.rule_generator.test_existing_rule(rule, max_items=5)
+
+            return {
+                "status": "success",
+                "sample_data": sample_data,
+                "count": len(sample_data),
+            }
+        except Exception as e:
+            logger.error(f"测试规则失败: {e}")
+            return {"status": "error", "message": str(e)}

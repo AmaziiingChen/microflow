@@ -544,21 +544,30 @@ class DatabaseManager:
                 conditions.append("is_favorite = 1")
 
             # 来源筛选
+            logger.info(f"[DEBUG DB] get_articles_paged - source_name={source_name}, source_names={source_names}")
+
             if source_name:
                 conditions.append("source_name = ?")
                 params.append(source_name)
-            elif source_names and len(source_names) > 0:
-                placeholders = ','.join('?' * len(source_names))
-                conditions.append(f"source_name IN ({placeholders})")
-                params.extend(source_names)
+            elif source_names is not None:
+                # 🌟 区分 None（不过滤）和空列表（不显示任何内容）
+                if len(source_names) > 0:
+                    placeholders = ','.join('?' * len(source_names))
+                    conditions.append(f"source_name IN ({placeholders})")
+                    params.extend(source_names)
+                    logger.info(f"[DEBUG DB] SQL条件: source_name IN ({placeholders}), params={source_names}")
+                else:
+                    # 空列表：添加一个永远为假的条件
+                    conditions.append("1 = 0")
+                    logger.info("[DEBUG DB] 空列表，添加 1=0 条件")
 
             # 组装 WHERE 子句
             if conditions:
                 base_query += " WHERE " + " AND ".join(conditions)
 
-            # 🌟 统一排序：优先使用 exact_time，如果为空则使用 date || ' 00:00:00'
-            # COALESCE 会返回第一个非空值，但 exact_time 可能是空字符串，需要用 CASE
-            base_query += " ORDER BY COALESCE(NULLIF(exact_time, ''), date || ' 00:00:00') DESC LIMIT ? OFFSET ?"
+            # 🌟 统一排序：优先使用入库时间 created_at（确保新抓取的文章显示在前面）
+            # 然后按发布日期 exact_time/date 排序
+            base_query += " ORDER BY created_at DESC, COALESCE(NULLIF(exact_time, ''), date || ' 00:00:00') DESC LIMIT ? OFFSET ?"
             params.extend([limit, offset])
 
             cursor.execute(base_query, tuple(params))
@@ -575,7 +584,10 @@ class DatabaseManager:
         """获取未读文章数量
 
         Args:
-            source_names: 可选的来源筛选列表（用于订阅模式）
+            source_names: 来源筛选列表
+                - None: 不过滤（统计所有未读）
+                - 空列表: 返回 0（不显示任何内容）
+                - 有内容: 统计指定来源的未读
 
         Returns:
             未读文章数量
@@ -583,12 +595,17 @@ class DatabaseManager:
         with self._get_read_connection() as conn:
             cursor = conn.cursor()
 
-            if source_names and len(source_names) > 0:
+            if source_names is None:
+                # None: 不过滤
+                cursor.execute("SELECT COUNT(*) FROM articles WHERE is_read = 0")
+            elif len(source_names) == 0:
+                # 空列表: 返回 0
+                return 0
+            else:
+                # 有内容: 统计指定来源
                 placeholders = ','.join('?' * len(source_names))
                 query = f"SELECT COUNT(*) FROM articles WHERE is_read = 0 AND source_name IN ({placeholders})"
                 cursor.execute(query, tuple(source_names))
-            else:
-                cursor.execute("SELECT COUNT(*) FROM articles WHERE is_read = 0")
 
             row = cursor.fetchone()
             return row[0] if row else 0
@@ -597,15 +614,31 @@ class DatabaseManager:
         """获取第一个未读文章（按时间降序，最新的未读优先）
 
         Args:
-            source_names: 可选的来源筛选列表（用于订阅模式）
+            source_names: 来源筛选列表
+                - None: 不过滤
+                - 空列表: 返回 None（不显示任何内容）
+                - 有内容: 查询指定来源
 
         Returns:
             未读文章字典，如果没有则返回 None
         """
+        # 🌟 空列表: 直接返回 None
+        if source_names is not None and len(source_names) == 0:
+            return None
+
         with self._get_read_connection() as conn:
             cursor = conn.cursor()
 
-            if source_names and len(source_names) > 0:
+            if source_names is None:
+                # None: 不过滤
+                cursor.execute("""
+                    SELECT * FROM articles
+                    WHERE is_read = 0
+                    ORDER BY COALESCE(NULLIF(exact_time, ''), date || ' 00:00:00') DESC
+                    LIMIT 1
+                """)
+            else:
+                # 有内容: 查询指定来源
                 placeholders = ','.join('?' * len(source_names))
                 query = f"""
                     SELECT * FROM articles
@@ -614,13 +647,6 @@ class DatabaseManager:
                     LIMIT 1
                 """
                 cursor.execute(query, tuple(source_names))
-            else:
-                cursor.execute("""
-                    SELECT * FROM articles
-                    WHERE is_read = 0
-                    ORDER BY COALESCE(NULLIF(exact_time, ''), date || ' 00:00:00') DESC
-                    LIMIT 1
-                """)
 
             row = cursor.fetchone()
             if row:
@@ -655,8 +681,16 @@ class DatabaseManager:
             row = cursor.fetchone()
             return dict(row) if row else None
 
-    def search_articles(self, keyword: str, limit: int = 50, source_name: Optional[str] = None, favorites_only: bool = False) -> List[Dict]:
-        """搜索文章（支持搜索AI总结标签）"""
+    def search_articles(self, keyword: str, limit: int = 50, source_name: Optional[str] = None, source_names: Optional[List[str]] = None, favorites_only: bool = False) -> List[Dict]:
+        """搜索文章（支持搜索AI总结标签）
+
+        Args:
+            keyword: 搜索关键词
+            limit: 返回数量限制
+            source_name: 单个来源筛选
+            source_names: 多个来源筛选列表（优先级高于 source_name）
+            favorites_only: 仅返回收藏的文章
+        """
         with self._get_read_connection() as conn:
             cursor = conn.cursor()
 
@@ -701,6 +735,15 @@ class DatabaseManager:
             if source_name:
                 extra_conditions.append("source_name = ?")
                 params.append(source_name)
+            elif source_names is not None:
+                # 🌟 区分 None（不过滤）和空列表（不显示任何内容）
+                if len(source_names) > 0:
+                    placeholders = ','.join('?' * len(source_names))
+                    extra_conditions.append(f"source_name IN ({placeholders})")
+                    params.extend(source_names)
+                else:
+                    # 空列表：添加一个永远为假的条件
+                    extra_conditions.append("1 = 0")
             if favorites_only:
                 extra_conditions.append("is_favorite = 1")
 
@@ -711,7 +754,7 @@ class DatabaseManager:
             query = f"""
             SELECT * FROM articles
             WHERE {where_clause}
-            ORDER BY COALESCE(NULLIF(exact_time, ''), date || ' 00:00:00') DESC
+            ORDER BY created_at DESC, COALESCE(NULLIF(exact_time, ''), date || ' 00:00:00') DESC
             LIMIT ?
             """
 

@@ -71,3 +71,6 @@ LOG_PATH: Path = DATA_DIR / "microflow.log"
 
 # 全局常量：最后抓取时间文件路径
 LAST_FETCH_TIME_PATH: Path = DATA_DIR / ".last_fetch_time"
+
+# 全局常量：自定义爬虫规则文件路径
+CUSTOM_SPIDERS_RULES_PATH: Path = DATA_DIR / "custom_spiders_rules.json"

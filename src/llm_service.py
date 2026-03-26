@@ -18,11 +18,9 @@ def _get_config_service():
     global _config_service
     if _config_service is None:
         from src.services.config_service import ConfigService
+        from src.core.paths import CONFIG_PATH  # 🌟 使用正确的配置路径
 
-        config_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "config.json"
-        )
-        _config_service = ConfigService(config_path)
+        _config_service = ConfigService(str(CONFIG_PATH))
     return _config_service
 
 

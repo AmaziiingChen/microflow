@@ -50,8 +50,8 @@ class DaemonManager:
     # 最小执行间隔（秒）：防止连续触发
     MIN_RUN_INTERVAL = 600  # 10 分钟
 
-    # 🌟 手动更新冷却时间（秒）
-    MANUAL_UPDATE_COOLDOWN = 120  # 2 分钟
+    # 🌟 默认冷却时间（秒），可被外部配置覆盖
+    DEFAULT_UPDATE_COOLDOWN = 60  # 1 分钟
 
     def __init__(self):
         self._stop_event = threading.Event()
@@ -61,6 +61,35 @@ class DaemonManager:
         # 网络状态追踪
         self._last_network_status: Optional[NetworkStatus] = None
         self._last_successful_run: float = 0  # 上次成功抓取的时间戳
+
+        # 🌟 冷却时间获取器（可由外部设置，支持动态配置）
+        self._cooldown_getter: Optional[Callable[[], int]] = None
+
+    def set_cooldown_getter(self, getter: Callable[[], int]) -> None:
+        """
+        设置冷却时间获取器
+
+        Args:
+            getter: 返回冷却时间（秒）的函数
+        """
+        self._cooldown_getter = getter
+        logger.info("🔧 已设置冷却时间获取器")
+
+    def _get_cooldown_seconds(self) -> int:
+        """
+        获取当前冷却时间（秒）
+
+        优先使用外部配置，否则使用默认值。
+
+        Returns:
+            冷却时间（秒）
+        """
+        if self._cooldown_getter:
+            try:
+                return self._cooldown_getter()
+            except Exception as e:
+                logger.warning(f"获取冷却时间失败: {e}")
+        return self.DEFAULT_UPDATE_COOLDOWN
 
     # ==================== 持久化冷却方法 ====================
 
@@ -207,11 +236,12 @@ class DaemonManager:
 
                 if first_run:
                     # 🌟 首次运行冷却校验：防止用户通过重启绕过冷却限制
+                    cooldown_seconds = self._get_cooldown_seconds()  # 🌟 动态获取冷却时间
                     time_since_last_fetch = current_time - last_run_time
-                    if time_since_last_fetch < self.MANUAL_UPDATE_COOLDOWN:
+                    if time_since_last_fetch < cooldown_seconds:
                         # 刚刚抓取过，跳过首抓
                         remaining_cooldown = int(
-                            self.MANUAL_UPDATE_COOLDOWN - time_since_last_fetch
+                            cooldown_seconds - time_since_last_fetch
                         )
                         logger.info(
                             f"⏳ 检测到近期已抓取（{int(time_since_last_fetch)}秒前），跳过首抓，剩余冷却: {remaining_cooldown}秒"
@@ -391,13 +421,13 @@ class DaemonManager:
         获取冷却剩余时间（秒）
 
         Args:
-            cooldown_seconds: 冷却总时长，默认使用 MANUAL_UPDATE_COOLDOWN
+            cooldown_seconds: 冷却总时长，默认使用配置的冷却时间
 
         Returns:
             剩余冷却秒数，若已过期则返回 0
         """
         if cooldown_seconds is None:
-            cooldown_seconds = self.MANUAL_UPDATE_COOLDOWN
+            cooldown_seconds = self._get_cooldown_seconds()
 
         last_fetch = self._get_last_fetch_time()
         if last_fetch <= 0:

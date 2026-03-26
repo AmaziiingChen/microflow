@@ -1,5 +1,6 @@
 # pyright: reportAttributeAccessIssue=false
 # pyright: reportPossiblyUnboundVariable=false
+# pyright: reportOptionalMemberAccess=false
 import webview
 import os
 import sys

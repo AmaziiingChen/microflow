@@ -28,6 +28,7 @@ class AppConfig:
     custom_font_name: str = ""  # 🌟 新增：外部字体原始名称
     subscribed_sources: list = field(default_factory=list)  # 🌟 新增：订阅的来源列表
     polling_interval: int = 900  # 🌟 新增：守护进程轮询间隔（秒），默认 15 分钟
+    update_cooldown: int = 60  # 🌟 新增：手动更新冷却时间（秒），默认 60 秒
     is_locked: bool = False  # 🌟 新增：配置锁定状态（用于防止修改）
     api_balance_ok: bool = True  # 🌟 新增：API 余额状态（默认正常）
     # 🔐 安全字段：防篡改签名
@@ -175,6 +176,7 @@ class ConfigService:
                 custom_font_name=data.get('customFontName', default.custom_font_name),  # 🌟 新增
                 subscribed_sources=data.get('subscribedSources', default.subscribed_sources),  # 🌟 新增
                 polling_interval=data.get('pollingInterval', default.polling_interval),  # 🌟 新增
+                update_cooldown=data.get('updateCooldown', default.update_cooldown),  # 🌟 新增：冷却时间
                 is_locked=is_locked,  # 🔐 使用签名验证后的锁定状态
                 api_balance_ok=data.get('apiBalanceOk', default.api_balance_ok),  # 🌟 新增：API 余额状态
                 # 🔐 安全字段
@@ -254,6 +256,7 @@ class ConfigService:
                 custom_font_name=config_dict.get('customFontName', ''),  # 🌟 新增
                 subscribed_sources=config_dict.get('subscribedSources', []),  # 🌟 新增
                 polling_interval=config_dict.get('pollingInterval', 900),  # 🌟 新增
+                update_cooldown=config_dict.get('updateCooldown', 60),  # 🌟 新增：冷却时间
                 is_locked=config_dict.get('isLocked', False),  # 🌟 新增：配置锁定状态
                 api_balance_ok=config_dict.get('apiBalanceOk', True),  # 🌟 新增：API 余额状态
                 # 🔐 安全字段
@@ -304,6 +307,7 @@ class ConfigService:
             "customFontName": config.custom_font_name,  # 🌟 新增
             "subscribedSources": config.subscribed_sources,  # 🌟 新增
             "pollingInterval": config.polling_interval,  # 🌟 新增
+            "updateCooldown": config.update_cooldown,  # 🌟 新增：冷却时间
             "isLocked": config.is_locked,  # 🌟 新增：配置锁定状态
             "apiBalanceOk": config.api_balance_ok,  # 🌟 新增：API 余额状态
             # 🔐 安全字段
@@ -355,6 +359,7 @@ class ConfigService:
             'customFontName': 'custom_font_name',  # 🌟 新增
             'subscribedSources': 'subscribed_sources',  # 🌟 新增
             'pollingInterval': 'polling_interval',  # 🌟 新增
+            'updateCooldown': 'update_cooldown',  # 🌟 新增：冷却时间
             'isLocked': 'is_locked',  # 🌟 新增：配置锁定状态
             'apiBalanceOk': 'api_balance_ok',  # 🌟 新增：API 余额状态
             # 🔐 安全字段

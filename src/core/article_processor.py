@@ -28,6 +28,7 @@ class ArticleContext:
     detail: Optional[Dict[str, Any]] = None
     category: str = ""
     department: str = ""
+    require_ai_summary: bool = True  # 🌟 是否需要 AI 摘要（动态爬虫可设置为 False）
 
 
 @dataclass
@@ -369,13 +370,16 @@ class ArticleProcessor:
             logger.info(f"[{ctx.source_name}] 任务已取消，跳过 AI 调用: {ctx.title}")
             return False, "cancelled", None
 
-        # 6. 🌟 统计任务总数（包括纯图片内容），并通知前端进度
+        # 6. 🌟 检查是否需要 AI 摘要（动态爬虫可设置 require_ai_summary=False）
+        skip_ai_summary = not ctx.require_ai_summary
+
+        # 7. 🌟 统计任务总数（包括纯图片内容和跳过 AI 的动态内容），并通知前端进度
         with self._stats_lock:
             self._stats["ai_total"] += 1
             ai_completed = self._stats["ai_completed"]
             ai_total = self._stats["ai_total"]
 
-        # 7. 🌟 纯图片内容：跳过 AI 调用，使用图片 HTML 作为摘要
+        # 8. 🌟 纯图片内容：跳过 AI 调用，使用图片 HTML 作为摘要
         if is_pure_image:
             summary = pure_image_html  # 使用图片 HTML
             logger.info(f"[{ctx.source_name}] 纯图片内容，已生成图片摘要: {ctx.title}")
@@ -391,6 +395,19 @@ class ArticleProcessor:
                     logger.info(f"✅ 纯图片进度回调已发送")
                 except Exception as e:
                     logger.warning(f"纯图片进度回调失败: {e}")
+        elif skip_ai_summary:
+            # 🌟 动态爬虫：跳过 AI 调用，使用格式化的动态字段作为摘要
+            summary = self._format_dynamic_summary(detail, raw_text)
+            logger.info(f"[{ctx.source_name}] 动态爬虫跳过 AI，使用字段摘要: {ctx.title}")
+            with self._stats_lock:
+                self._stats["ai_completed"] += 1
+                ai_completed = self._stats["ai_completed"]
+                ai_total = self._stats["ai_total"]
+            if self.on_progress and ai_total > 0:
+                try:
+                    self.on_progress(ai_completed, ai_total, f"[动态] {ctx.title}")
+                except Exception:
+                    pass
         else:
             # 8. 通知前端开始 AI 处理
             if self.on_progress and ai_total > 0:
@@ -620,6 +637,7 @@ class ArticleProcessor:
             section_name=section_name,
             category=article.get("category", ""),
             department=department,
+            require_ai_summary=article.get("require_ai_summary", True),
         )
 
     def get_stats(self) -> Dict[str, int]:
@@ -646,6 +664,38 @@ class ArticleProcessor:
             return True
         except Exception:
             return False
+
+    def _format_dynamic_summary(self, detail: Dict[str, Any], raw_text: str) -> str:
+        """
+        格式化动态爬虫字段为摘要（跳过 AI 调用时使用）
+
+        将动态字段格式化为易读的文本摘要。
+
+        Args:
+            detail: 详情字典（包含 dynamic_fields）
+            raw_text: 原始文本（作为备选）
+
+        Returns:
+            格式化后的摘要字符串
+        """
+        dynamic_fields = detail.get("dynamic_fields", {})
+        if not dynamic_fields:
+            # 如果没有动态字段，返回原始文本（截取前 500 字符）
+            return raw_text[:500] if raw_text else "【动态数据】"
+
+        # 构建易读的摘要
+        lines = ["【动态数据】"]
+        for key, value in dynamic_fields.items():
+            # 跳过空值
+            if not value or (isinstance(value, str) and not value.strip()):
+                continue
+            # 截取过长的值
+            if len(str(value)) > 200:
+                value = str(value)[:200] + "..."
+            # 添加到摘要中
+            lines.append(f"- **{key}**: {value}")
+
+        return "\n".join(lines)
 
     # ==================== 📧 邮件推送功能 ====================
 
