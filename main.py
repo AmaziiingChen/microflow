@@ -49,7 +49,8 @@ from src.api import Api
 def get_main_module():
     """获取主模块引用（解决 __main__ 模块名问题）"""
     import sys
-    return sys.modules.get('__main__')
+
+    return sys.modules.get("__main__")
 
 
 # ================= 托盘状态管理 =================
@@ -100,7 +101,9 @@ def update_tray_status(unread: int = None, sync_time: str = None):  # type:ignor
         return
 
     # 🔍 调试日志
-    print(f"📊 [DEBUG] update_tray_status 被调用: unread={unread}, sync_time={sync_time}")
+    print(
+        f"📊 [DEBUG] update_tray_status 被调用: unread={unread}, sync_time={sync_time}"
+    )
 
     if unread is not None:
         main_mod._unread_count = unread
@@ -207,7 +210,9 @@ def clear_tray_alert():
     """清除托盘图标上的红点提醒"""
     main_mod = get_main_module()
 
-    print(f"📊 [DEBUG] clear_tray_alert 被调用, _status_item={main_mod._status_item if main_mod else 'N/A'}, _base_image={main_mod._base_image if main_mod else 'N/A'}")
+    print(
+        f"📊 [DEBUG] clear_tray_alert 被调用, _status_item={main_mod._status_item if main_mod else 'N/A'}, _base_image={main_mod._base_image if main_mod else 'N/A'}"
+    )
 
     def do_clear_alert():
         if main_mod is None:
@@ -215,7 +220,9 @@ def clear_tray_alert():
         print(f"📊 [DEBUG] do_clear_alert 开始执行, HAS_PYOBJC={HAS_PYOBJC}")
         if HAS_PYOBJC:
             if main_mod._status_item is None or main_mod._base_image is None:
-                print(f"📊 [DEBUG] 提前返回: _status_item={main_mod._status_item}, _base_image={main_mod._base_image}")
+                print(
+                    f"📊 [DEBUG] 提前返回: _status_item={main_mod._status_item}, _base_image={main_mod._base_image}"
+                )
                 return
             try:
                 main_mod._status_item.button().setImage_(main_mod._base_image)
@@ -693,7 +700,7 @@ if __name__ == "__main__":
         title="Microflow",
         url=html_url,
         js_api=api,
-        width=475,
+        width=480,
         height=750,
         min_size=(470, 750),
         frameless=False,

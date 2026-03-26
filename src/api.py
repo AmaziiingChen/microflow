@@ -827,7 +827,15 @@ class Api:
             return {"status": "error", "message": str(e)}
 
     def diagnose_email_push(self) -> dict:
-        """诊断邮件推送配置"""
+        """
+        诊断邮件推送配置 - 包含真实 SMTP 连通性探测
+
+        Returns:
+            {"status": "success/error", "canSend": bool, "message": str, "checks": dict, "issues": list}
+        """
+        import smtplib
+        import socket
+
         try:
             # 检查配置服务
             if not self.article_processor.config_service:
@@ -841,32 +849,130 @@ class Api:
             enabled = self.config_service.get('emailNotifyEnabled', False)
             subscriber_list = self.config_service.get('subscriberList', [])
             smtp_host = self.config_service.get('smtpHost', '')
+            smtp_port = self.config_service.get('smtpPort', 465)
             smtp_user = self.config_service.get('smtpUser', '')
             smtp_password = self.config_service.get('smtpPassword', '')
 
-            # 刣找问题
+            # ========== 第一步：基础配置检查 ==========
             issues = []
+            config_issues = []  # 仅配置问题，不阻止连通性测试
+
             if not enabled:
-                issues.append("邮件通知未启用 (emailNotifyEnabled=False)")
+                issues.append("邮件通知未启用")
             if len(subscriber_list) == 0:
-                issues.append("订阅者列表为空 (subscriberList=[])"  )
+                issues.append("订阅者列表为空")
             if not smtp_host:
-                issues.append("SMTP 服务器未配置 (smtpHost='')"  )
+                config_issues.append("SMTP 服务器未配置")
             if not smtp_user:
-                issues.append("SMTP 用户未配置 (smtpUser='')"  )
+                config_issues.append("SMTP 用户未配置")
             if not smtp_password:
-                issues.append("SMTP 密码未配置 (smtpPassword='')"  )
+                config_issues.append("SMTP 密码未配置")
 
-            # 判断是否可以发送
-            can_send = all([
-                enabled,
-                len(subscriber_list) > 0,
-                smtp_host,
-                smtp_user,
-                smtp_password
-            ])
+            # ========== 第二步：端口范围检查 ==========
+            try:
+                smtp_port_int = int(smtp_port)
+                if not (1 <= smtp_port_int <= 65535):
+                    config_issues.append(f"端口号无效 ({smtp_port})，应在 1-65535 范围内")
+            except (ValueError, TypeError):
+                config_issues.append(f"端口号格式错误 ({smtp_port})")
+                smtp_port_int = 465  # 使用默认值继续
 
-            logger.info(f"📧 邮件推送诊断: enabled={enabled}, subscribers={len(subscriber_list)}, host={smtp_host}, user={smtp_user}, hasPassword={bool(smtp_password)}")
+            issues.extend(config_issues)
+
+            # 如果基础配置缺失，直接返回
+            if config_issues:
+                logger.info(f"📧 邮件推送诊断: 基础配置缺失，跳过连通性测试")
+                return {
+                    "status": "success",
+                    "canSend": False,
+                    "checks": {
+                        "emailNotifyEnabled": enabled,
+                        "subscriberList": subscriber_list,
+                        "smtpHost": smtp_host,
+                        "smtpPort": smtp_port_int if 'smtp_port_int' in dir() else smtp_port,
+                        "smtpUser": smtp_user,
+                        "hasPassword": bool(smtp_password),
+                        "connectionTest": "skipped"
+                    },
+                    "issues": issues,
+                    "message": f"配置问题: {', '.join(config_issues)}"
+                }
+
+            # ========== 第三步：真实 SMTP 连通性测试 ==========
+            connection_result = None
+            try:
+                logger.info(f"📧 SMTP 连通性测试: {smtp_host}:{smtp_port_int}")
+
+                if smtp_port_int == 465:
+                    # SSL 连接
+                    server = smtplib.SMTP_SSL(smtp_host, smtp_port_int, timeout=5)
+                else:
+                    # 普通连接后升级 TLS
+                    server = smtplib.SMTP(smtp_host, smtp_port_int, timeout=5)
+                    server.starttls()
+
+                # 尝试登录验证
+                server.login(smtp_user, smtp_password)
+                server.quit()
+
+                connection_result = "success"
+                logger.info(f"📧 SMTP 连通性测试成功")
+
+            except smtplib.SMTPAuthenticationError as e:
+                connection_result = "auth_failed"
+                error_detail = str(e)
+                if "535" in error_detail or "authentication failed" in error_detail.lower():
+                    issues.append("SMTP 认证失败：用户名或授权码错误")
+                else:
+                    issues.append(f"SMTP 认证失败：{error_detail}")
+                logger.warning(f"📧 SMTP 认证失败: {e}")
+
+            except smtplib.SMTPConnectError as e:
+                connection_result = "connect_failed"
+                issues.append(f"无法连接 SMTP 服务器：请检查服务器地址")
+                logger.warning(f"📧 SMTP 连接失败: {e}")
+
+            except socket.timeout:
+                connection_result = "timeout"
+                issues.append(f"连接超时：服务器 {smtp_host}:{smtp_port_int} 无响应")
+                logger.warning(f"📧 SMTP 连接超时")
+
+            except socket.gaierror as e:
+                connection_result = "dns_failed"
+                issues.append(f"DNS 解析失败：无法解析服务器地址 {smtp_host}")
+                logger.warning(f"📧 DNS 解析失败: {e}")
+
+            except ConnectionRefusedError:
+                connection_result = "refused"
+                issues.append(f"连接被拒绝：端口 {smtp_port_int} 可能未开放")
+                logger.warning(f"📧 SMTP 连接被拒绝")
+
+            except Exception as e:
+                connection_result = "error"
+                error_msg = str(e)
+                if "SSL" in error_msg or "certificate" in error_msg.lower():
+                    issues.append(f"SSL/TLS 错误：请检查端口配置或服务器证书")
+                else:
+                    issues.append(f"连接异常：{error_msg}")
+                logger.warning(f"📧 SMTP 连接异常: {e}")
+
+            # ========== 第四步：汇总结果 ==========
+            # 基础配置完整且连通性测试成功才认为可以发送
+            can_send = (
+                enabled and
+                len(subscriber_list) > 0 and
+                connection_result == "success"
+            )
+
+            # 生成消息
+            if can_send:
+                message = "邮件推送配置正常，SMTP 连接测试成功"
+            elif connection_result and connection_result != "success":
+                message = issues[-1] if issues else "SMTP 连接测试失败"
+            else:
+                message = f"问题: {', '.join(issues)}"
+
+            logger.info(f"📧 邮件推送诊断完成: canSend={can_send}, connectionResult={connection_result}")
 
             return {
                 "status": "success",
@@ -875,11 +981,13 @@ class Api:
                     "emailNotifyEnabled": enabled,
                     "subscriberList": subscriber_list,
                     "smtpHost": smtp_host,
+                    "smtpPort": smtp_port_int,
                     "smtpUser": smtp_user,
                     "hasPassword": bool(smtp_password),
+                    "connectionTest": connection_result
                 },
                 "issues": issues,
-                "message": "邮件推送配置正常" if can_send else f"问题: {', '.join(issues)}"
+                "message": message
             }
 
         except Exception as e:

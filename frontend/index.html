@@ -1203,6 +1203,60 @@
         --app-color: #7c3aed;
       } /* 紫 */
 
+      /* 🌟 编辑模式的取消和保存按钮样式 */
+      .badge-action {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 28px;
+        min-width: 28px;
+        padding: 0 12px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        user-select: none;
+        transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+
+      .badge-cancel {
+        --app-color: #8e8e93;
+        background-color: rgba(0, 0, 0, 0.06);
+        color: #8e8e93;
+      }
+
+      .badge-cancel:hover {
+        background-color: rgba(0, 0, 0, 0.1) !important;
+        color: #3c3c43 !important;
+        transform: translateY(-2px) scale(1.02);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      }
+
+      .badge-cancel:active {
+        transform: translateY(0) scale(0.96);
+        background-color: rgba(0, 0, 0, 0.12) !important;
+        transition: transform 0.1s ease;
+      }
+
+      .badge-save {
+        --app-color: #34c759;
+        background-color: rgba(52, 199, 89, 0.12);
+        color: #34c759;
+      }
+
+      .badge-save:hover {
+        background-color: rgba(52, 199, 89, 0.2) !important;
+        color: #28a745 !important;
+        transform: translateY(-2px) scale(1.02);
+        box-shadow: 0 4px 12px rgba(52, 199, 89, 0.2);
+      }
+
+      .badge-save:active {
+        transform: translateY(0) scale(0.96);
+        background-color: rgba(52, 199, 89, 0.25) !important;
+        transition: transform 0.1s ease;
+      }
+
       /* ============================================================
          🌈 交互状态：悬浮 (Hover) -> 浅色水彩浸染
          ============================================================ */
@@ -1442,8 +1496,20 @@
       /* 灰色详情框 (部门、类别、时间) - 统一灰色 */
       .meta-badges {
         display: flex;
+        justify-content: space-between;
+        align-items: center;
         flex-wrap: wrap;
         gap: 6px;
+      }
+      .meta-badges-left {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+      }
+      .meta-badges-right {
+        display: flex;
+        gap: 8px;
         align-items: center;
       }
       .meta-badge {
@@ -4144,28 +4210,31 @@
           opacity 0.3s ease-out;
       }
 
-      /* 入场起点：从上方 -60px 掉落，轻微压缩（使用 !important 确保覆盖基础样式） */
-      .toast-enter-from {
+      /* 入场起点：从上方 -50px 掉落（使用组合选择器提高优先级） */
+      .apple-toast.toast-enter-from {
         opacity: 0 !important;
-        transform: translateY(-60px) scale(0.92) !important;
+        transform: translateY(-50px) scale(0.95) !important;
       }
 
       /* 入场终点：归位到原位 */
-      .toast-enter-to {
+      .apple-toast.toast-enter-to {
         opacity: 1 !important;
         transform: translateY(0) scale(1) !important;
       }
 
-      /* 退场动画：优雅滑出并淡出 */
+      /* 退场动画：向上滑出并淡出 */
       .toast-leave-active {
-        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        transition:
+          opacity 0.35s ease-out,
+          transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
       }
-      .toast-leave-to {
+      /* 🌟 使用组合选择器提高优先级，确保退场动画生效 */
+      .apple-toast.toast-leave-to {
         opacity: 0 !important;
-        transform: translateY(-20px) scale(0.96) !important;
+        transform: translateY(-20px) scale(0.95) !important;
       }
 
-      /* 通知悬浮池：全局遮罩层，挂载在 #app 内部的最顶层 */
+      /* 通知悬浮池：全局遮罩层 */
       .notification-pool {
         position: fixed;
         top: 0;
@@ -4174,8 +4243,24 @@
         display: flex;
         justify-content: center;
         padding-top: 16px;
-        z-index: 10001; /* 必须大于你详情页的 z-index 100 */
-        pointer-events: none; /* 穿透点击，绝不影响下方公文列表 */
+        z-index: 10001;
+        pointer-events: none;
+      }
+
+      /* 🌟 堆叠容器：垂直排列 */
+      .toast-stack {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        position: relative;
+        width: 100%;
+        max-width: 400px;
+      }
+
+      /* 🌟 move 动画：当元素位置变化时的平滑过渡 */
+      .toast-move {
+        transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
       }
 
       /* 横幅本体：继承你现有的高级毛玻璃体系 */
@@ -4423,6 +4508,13 @@
       .diagnose-email-btn:active,
       .push-test-btn:active {
         transform: scale(0.96);
+      }
+
+      .diagnose-email-btn:disabled,
+      .push-test-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
       }
 
       /* System Prompt 预览卡片 */
@@ -4897,15 +4989,11 @@
       style="display: flex; flex-direction: column; height: 100%"
     >
       <div class="notification-pool">
-        <transition name="toast">
-          <div
-            class="apple-toast"
-            v-if="toastState.isVisible"
-            :key="toastState.id"
-          >
-            <div class="toast-icon" :class="toastState.type">
+        <transition-group name="toast" tag="div" class="toast-stack">
+          <div v-for="toast in toastList" :key="toast.id" class="apple-toast">
+            <div class="toast-icon" :class="toast.type">
               <svg
-                v-if="toastState.type === 'success'"
+                v-if="toast.type === 'success'"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -4917,7 +5005,7 @@
               </svg>
 
               <svg
-                v-else-if="toastState.type === 'warning'"
+                v-else-if="toast.type === 'warning'"
                 viewBox="0 0 22 20"
                 fill="currentColor"
               >
@@ -4927,7 +5015,7 @@
               </svg>
 
               <svg
-                v-else-if="toastState.type === 'error'"
+                v-else-if="toast.type === 'error'"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -4940,7 +5028,7 @@
               </svg>
 
               <svg
-                v-else-if="toastState.type === 'info'"
+                v-else-if="toast.type === 'info'"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -4954,7 +5042,7 @@
               </svg>
 
               <svg
-                v-else-if="toastState.type === 'favorite'"
+                v-else-if="toast.type === 'favorite'"
                 viewBox="0 0 24 24"
                 fill="currentColor"
               >
@@ -4965,11 +5053,11 @@
             </div>
 
             <div class="toast-content">
-              <span class="toast-title">{{ toastState.title }}</span>
-              <span class="toast-message">{{ toastState.message }}</span>
+              <span class="toast-title">{{ toast.title }}</span>
+              <span class="toast-message">{{ toast.message }}</span>
             </div>
           </div>
-        </transition>
+        </transition-group>
       </div>
       <div
         v-show="currentView === 'list'"
@@ -5624,7 +5712,7 @@
               @click.stop
               v-if="config.emailNotifyEnabled"
             >
-              <div class="settings-card-title">订阅者邮箱</div>
+              <div class="settings-card-title">收件人邮箱</div>
               <div style="display: flex; gap: 8px; margin-bottom: 8px">
                 <input
                   type="email"
@@ -5785,15 +5873,115 @@
                     </div>
                   </template>
                 </button>
-                <button class="diagnose-email-btn" @click="diagnoseEmailPush">
-                  诊断配置
+                <button
+                  class="diagnose-email-btn"
+                  @click="diagnoseEmailPush"
+                  :disabled="isDiagnosing"
+                >
+                  {{ isDiagnosing ? '诊断中...' : '诊断配置' }}
                 </button>
                 <button
                   class="push-test-btn"
                   @click="testEmailPushWithArticle"
                   :disabled="isTestingPush"
+                  style="display: inline-flex; align-items: center; gap: 8px"
                 >
-                  {{ isTestingPush ? '推送中...' : '试推送最新公文' }}
+                  <template v-if="isTestingPush">
+                    <div class="connection-status testing" style="margin: 0">
+                      <svg
+                        class="icon-antenna"
+                        viewBox="0 0 23 19"
+                        fill="currentColor"
+                        style="width: 16px; height: 16px"
+                      >
+                        <path
+                          class="wave-outer"
+                          d="M0 7.05773C0 9.60255 0.862072 11.9774 2.46764 13.6824C2.95053 14.1919 3.58435 14.1609 3.94343 13.7281C4.29009 13.3206 4.18312 12.8058 3.7974 12.3712C2.55402 10.9907 1.85886 9.11076 1.85886 7.05773C1.85886 5.00781 2.54781 3.13101 3.7974 1.75046C4.18623 1.31591 4.2963 0.801028 3.94343 0.393568C3.58125-0.0360787 2.94432-0.0764489 2.46764 0.439291C0.905547 2.11636 0 4.52222 0 7.05773ZM17.8045 13.7281C18.1635 14.1609 18.7974 14.1919 19.2803 13.6824C20.8858 11.9774 21.7479 9.60255 21.7479 7.05773C21.7479 4.52222 20.8423 2.11636 19.2803 0.439291C18.8036-0.0764489 18.1666-0.0360787 17.8045 0.393568C17.4516 0.801028 17.5617 1.31591 17.9505 1.75046C19.2001 3.13101 19.889 5.00781 19.889 7.05773C19.889 9.11076 19.1939 10.9907 17.9505 12.3712C17.5648 12.8058 17.4578 13.3206 17.8045 13.7281Z"
+                        />
+                        <path
+                          class="wave-inner"
+                          d="M4.24797 7.05773C4.24797 8.51501 4.7083 9.87775 5.53928 10.861C5.97423 11.3754 6.66265 11.3595 7.01908 10.9201C7.35021 10.5157 7.22947 10.0203 6.89833 9.56937C6.39624 8.93056 6.10683 7.9833 6.10683 7.05773C6.10683 6.13216 6.41622 5.20798 6.89833 4.54608C7.2197 4.08534 7.35021 3.59976 7.01908 3.19851C6.66265 2.7591 5.97423 2.73691 5.53928 3.25445C4.7083 4.23771 4.24797 5.60044 4.24797 7.05773ZM14.7288 10.9201C15.0852 11.3595 15.7737 11.3754 16.2086 10.861C17.0396 9.87775 17.4999 8.51501 17.4999 7.05773C17.4999 5.60044 17.0396 4.23771 16.2086 3.25445C15.7737 2.73691 15.0852 2.7591 14.7288 3.19851C14.3977 3.59976 14.5282 4.08534 14.8496 4.54608C15.3317 5.20798 15.6411 6.13216 15.6411 7.05773C15.6411 7.9833 15.3516 8.93056 14.8496 9.56937C14.5184 10.0203 14.3977 10.5157 14.7288 10.9201Z"
+                        />
+                        <path
+                          class="tower"
+                          d="M8.89277 7.05773C8.89277 7.82296 9.318 8.48433 9.96073 8.81056L9.96073 17.4066C9.96073 18.0165 10.3349 18.439 10.8804 18.439C11.4449 18.439 11.7965 18.0325 11.7965 17.4066L11.7965 8.81056C12.4294 8.48433 12.8613 7.8163 12.8613 7.05773C12.8613 5.95695 11.9812 5.06346 10.8804 5.06346C9.77294 5.06346 8.89277 5.95695 8.89277 7.05773Z"
+                        />
+                      </svg>
+                      <span class="status-text">推送中</span>
+                    </div>
+                  </template>
+                  <template v-else-if="pushSendStatus === 'success'">
+                    <div class="connection-status success" style="margin: 0">
+                      <svg
+                        class="icon-antenna"
+                        viewBox="0 0 23 19"
+                        fill="currentColor"
+                        style="width: 16px; height: 16px"
+                      >
+                        <path
+                          class="wave-outer"
+                          d="M0 7.05773C0 9.60255 0.862072 11.9774 2.46764 13.6824C2.95053 14.1919 3.58435 14.1609 3.94343 13.7281C4.29009 13.3206 4.18312 12.8058 3.7974 12.3712C2.55402 10.9907 1.85886 9.11076 1.85886 7.05773C1.85886 5.00781 2.54781 3.13101 3.7974 1.75046C4.18623 1.31591 4.2963 0.801028 3.94343 0.393568C3.58125-0.0360787 2.94432-0.0764489 2.46764 0.439291C0.905547 2.11636 0 4.52222 0 7.05773ZM17.8045 13.7281C18.1635 14.1609 18.7974 14.1919 19.2803 13.6824C20.8858 11.9774 21.7479 9.60255 21.7479 7.05773C21.7479 4.52222 20.8423 2.11636 19.2803 0.439291C18.8036-0.0764489 18.1666-0.0360787 17.8045 0.393568C17.4516 0.801028 17.5617 1.31591 17.9505 1.75046C19.2001 3.13101 19.889 5.00781 19.889 7.05773C19.889 9.11076 19.1939 10.9907 17.9505 12.3712C17.5648 12.8058 17.4578 13.3206 17.8045 13.7281Z"
+                        />
+                        <path
+                          class="wave-inner"
+                          d="M4.24797 7.05773C4.24797 8.51501 4.7083 9.87775 5.53928 10.861C5.97423 11.3754 6.66265 11.3595 7.01908 10.9201C7.35021 10.5157 7.22947 10.0203 6.89833 9.56937C6.39624 8.93056 6.10683 7.9833 6.10683 7.05773C6.10683 6.13216 6.41622 5.20798 6.89833 4.54608C7.2197 4.08534 7.35021 3.59976 7.01908 3.19851C6.66265 2.7591 5.97423 2.73691 5.53928 3.25445C4.7083 4.23771 4.24797 5.60044 4.24797 7.05773ZM14.7288 10.9201C15.0852 11.3595 15.7737 11.3754 16.2086 10.861C17.0396 9.87775 17.4999 8.51501 17.4999 7.05773C17.4999 5.60044 17.0396 4.23771 16.2086 3.25445C15.7737 2.73691 15.0852 2.7591 14.7288 3.19851C14.3977 3.59976 14.5282 4.08534 14.8496 4.54608C15.3317 5.20798 15.6411 6.13216 15.6411 7.05773C15.6411 7.9833 15.3516 8.93056 14.8496 9.56937C14.5184 10.0203 14.3977 10.5157 14.7288 10.9201Z"
+                        />
+                        <path
+                          class="tower"
+                          d="M8.89277 7.05773C8.89277 7.82296 9.318 8.48433 9.96073 8.81056L9.96073 17.4066C9.96073 18.0165 10.3349 18.439 10.8804 18.439C11.4449 18.439 11.7965 18.0325 11.7965 17.4066L11.7965 8.81056C12.4294 8.48433 12.8613 7.8163 12.8613 7.05773C12.8613 5.95695 11.9812 5.06346 10.8804 5.06346C9.77294 5.06346 8.89277 5.95695 8.89277 7.05773Z"
+                        />
+                      </svg>
+                      <span class="status-text">推送成功</span>
+                    </div>
+                  </template>
+                  <template v-else-if="pushSendStatus === 'error'">
+                    <div class="connection-status error" style="margin: 0">
+                      <svg
+                        class="icon-antenna"
+                        viewBox="0 0 23 19"
+                        fill="currentColor"
+                        style="width: 16px; height: 16px"
+                      >
+                        <path
+                          class="wave-outer"
+                          d="M0 7.05773C0 9.60255 0.862072 11.9774 2.46764 13.6824C2.95053 14.1919 3.58435 14.1609 3.94343 13.7281C4.29009 13.3206 4.18312 12.8058 3.7974 12.3712C2.55402 10.9907 1.85886 9.11076 1.85886 7.05773C1.85886 5.00781 2.54781 3.13101 3.7974 1.75046C4.18623 1.31591 4.2963 0.801028 3.94343 0.393568C3.58125-0.0360787 2.94432-0.0764489 2.46764 0.439291C0.905547 2.11636 0 4.52222 0 7.05773ZM17.8045 13.7281C18.1635 14.1609 18.7974 14.1919 19.2803 13.6824C20.8858 11.9774 21.7479 9.60255 21.7479 7.05773C21.7479 4.52222 20.8423 2.11636 19.2803 0.439291C18.8036-0.0764489 18.1666-0.0360787 17.8045 0.393568C17.4516 0.801028 17.5617 1.31591 17.9505 1.75046C19.2001 3.13101 19.889 5.00781 19.889 7.05773C19.889 9.11076 19.1939 10.9907 17.9505 12.3712C17.5648 12.8058 17.4578 13.3206 17.8045 13.7281Z"
+                        />
+                        <path
+                          class="wave-inner"
+                          d="M4.24797 7.05773C4.24797 8.51501 4.7083 9.87775 5.53928 10.861C5.97423 11.3754 6.66265 11.3595 7.01908 10.9201C7.35021 10.5157 7.22947 10.0203 6.89833 9.56937C6.39624 8.93056 6.10683 7.9833 6.10683 7.05773C6.10683 6.13216 6.41622 5.20798 6.89833 4.54608C7.2197 4.08534 7.35021 3.59976 7.01908 3.19851C6.66265 2.7591 5.97423 2.73691 5.53928 3.25445C4.7083 4.23771 4.24797 5.60044 4.24797 7.05773ZM14.7288 10.9201C15.0852 11.3595 15.7737 11.3754 16.2086 10.861C17.0396 9.87775 17.4999 8.51501 17.4999 7.05773C17.4999 5.60044 17.0396 4.23771 16.2086 3.25445C15.7737 2.73691 15.0852 2.7591 14.7288 3.19851C14.3977 3.59976 14.5282 4.08534 14.8496 4.54608C15.3317 5.20798 15.6411 6.13216 15.6411 7.05773C15.6411 7.9833 15.3516 8.93056 14.8496 9.56937C14.5184 10.0203 14.3977 10.5157 14.7288 10.9201Z"
+                        />
+                        <path
+                          class="tower"
+                          d="M8.89277 7.05773C8.89277 7.82296 9.318 8.48433 9.96073 8.81056L9.96073 17.4066C9.96073 18.0165 10.3349 18.439 10.8804 18.439C11.4449 18.439 11.7965 18.0325 11.7965 17.4066L11.7965 8.81056C12.4294 8.48433 12.8613 7.8163 12.8613 7.05773C12.8613 5.95695 11.9812 5.06346 10.8804 5.06346C9.77294 5.06346 8.89277 5.95695 8.89277 7.05773Z"
+                        />
+                      </svg>
+                      <span class="status-text">推送失败</span>
+                    </div>
+                  </template>
+                  <template v-else>
+                    <div class="connection-status idle" style="margin: 0">
+                      <svg
+                        class="icon-antenna"
+                        viewBox="0 0 23 19"
+                        fill="currentColor"
+                        style="width: 16px; height: 16px"
+                      >
+                        <path
+                          class="wave-outer"
+                          d="M0 7.05773C0 9.60255 0.862072 11.9774 2.46764 13.6824C2.95053 14.1919 3.58435 14.1609 3.94343 13.7281C4.29009 13.3206 4.18312 12.8058 3.7974 12.3712C2.55402 10.9907 1.85886 9.11076 1.85886 7.05773C1.85886 5.00781 2.54781 3.13101 3.7974 1.75046C4.18623 1.31591 4.2963 0.801028 3.94343 0.393568C3.58125-0.0360787 2.94432-0.0764489 2.46764 0.439291C0.905547 2.11636 0 4.52222 0 7.05773ZM17.8045 13.7281C18.1635 14.1609 18.7974 14.1919 19.2803 13.6824C20.8858 11.9774 21.7479 9.60255 21.7479 7.05773C21.7479 4.52222 20.8423 2.11636 19.2803 0.439291C18.8036-0.0764489 18.1666-0.0360787 17.8045 0.393568C17.4516 0.801028 17.5617 1.31591 17.9505 1.75046C19.2001 3.13101 19.889 5.00781 19.889 7.05773C19.889 9.11076 19.1939 10.9907 17.9505 12.3712C17.5648 12.8058 17.4578 13.3206 17.8045 13.7281Z"
+                        />
+                        <path
+                          class="wave-inner"
+                          d="M4.24797 7.05773C4.24797 8.51501 4.7083 9.87775 5.53928 10.861C5.97423 11.3754 6.66265 11.3595 7.01908 10.9201C7.35021 10.5157 7.22947 10.0203 6.89833 9.56937C6.39624 8.93056 6.10683 7.9833 6.10683 7.05773C6.10683 6.13216 6.41622 5.20798 6.89833 4.54608C7.2197 4.08534 7.35021 3.59976 7.01908 3.19851C6.66265 2.7591 5.97423 2.73691 5.53928 3.25445C4.7083 4.23771 4.24797 5.60044 4.24797 7.05773ZM14.7288 10.9201C15.0852 11.3595 15.7737 11.3754 16.2086 10.861C17.0396 9.87775 17.4999 8.51501 17.4999 7.05773C17.4999 5.60044 17.0396 4.23771 16.2086 3.25445C15.7737 2.73691 15.0852 2.7591 14.7288 3.19851C14.3977 3.59976 14.5282 4.08534 14.8496 4.54608C15.3317 5.20798 15.6411 6.13216 15.6411 7.05773C15.6411 7.9833 15.3516 8.93056 14.8496 9.56937C14.5184 10.0203 14.3977 10.5157 14.7288 10.9201Z"
+                        />
+                        <path
+                          class="tower"
+                          d="M8.89277 7.05773C8.89277 7.82296 9.318 8.48433 9.96073 8.81056L9.96073 17.4066C9.96073 18.0165 10.3349 18.439 10.8804 18.439C11.4449 18.439 11.7965 18.0325 11.7965 17.4066L11.7965 8.81056C12.4294 8.48433 12.8613 7.8163 12.8613 7.05773C12.8613 5.95695 11.9812 5.06346 10.8804 5.06346C9.77294 5.06346 8.89277 5.95695 8.89277 7.05773Z"
+                        />
+                      </svg>
+                      <span class="status-text">推送最新条目</span>
+                    </div>
+                  </template>
                 </button>
               </div>
             </div>
@@ -6426,18 +6614,32 @@
             </div>
 
             <div class="meta-badges">
-              <span class="meta-badge">
-                {{ activeArticle.source_name === '公文通' ?
-                (activeArticle.department || '未知部门') :
-                activeArticle.source_name }}
-              </span>
-              <span class="meta-badge"
-                >{{ activeArticle.category || '未知类别' }}</span
-              >
-              <span class="meta-badge"
-                >{{ formatDateTime(activeArticle.exact_time ||
-                activeArticle.date) }}</span
-              >
+              <div class="meta-badges-left">
+                <span class="meta-badge">
+                  {{ activeArticle.source_name === '公文通' ?
+                  (activeArticle.department || '未知部门') :
+                  activeArticle.source_name }}
+                </span>
+                <span class="meta-badge"
+                  >{{ activeArticle.category || '未知类别' }}</span
+                >
+                <span class="meta-badge"
+                  >{{ formatDateTime(activeArticle.exact_time ||
+                  activeArticle.date) }}</span
+                >
+              </div>
+              <!-- 🌟 编辑状态时显示的取消和保存按钮 -->
+              <div v-if="isEditingSummary" class="meta-badges-right">
+                <span
+                  class="badge-action badge-cancel"
+                  @click="cancelEditSummary"
+                >
+                  取消
+                </span>
+                <span class="badge-action badge-save" @click="saveSummary">
+                  保存
+                </span>
+              </div>
             </div>
           </div>
 
@@ -6449,17 +6651,6 @@
             <!-- 编辑模式 -->
             <div v-else class="summary-edit-container">
               <textarea id="summary-editor"></textarea>
-              <div class="edit-actions">
-                <button
-                  class="action-btn btn-secondary"
-                  @click="cancelEditSummary"
-                >
-                  取消
-                </button>
-                <button class="action-btn btn-primary" @click="saveSummary">
-                  保存
-                </button>
-              </div>
             </div>
             <div
               v-if="!isEditingSummary && activeArticle.parsedAttachments && activeArticle.parsedAttachments.length > 0"
@@ -7163,12 +7354,7 @@
                 JSON.parse(JSON.stringify(config.value)),
               );
               if (res.status === "success") {
-                showNotification(
-                  "保存成功",
-                  "System Prompt 已更新",
-                  "success",
-                  2000,
-                );
+                showNotification("保存成功", "提示词已更新", "success", 1500);
                 backToList(); // 返回列表（回到设置界面）
               } else {
                 showNotification(
@@ -7201,12 +7387,7 @@
               resetPromptInEditor();
 
               // 3. 显示提示
-              showNotification(
-                "重置成功",
-                "提示词已恢复为默认值",
-                "success",
-                2000,
-              );
+              showNotification("重置成功", "提示词已重置", "success", 1500);
 
               // 4. 0.6秒（动画时长）后恢复状态，允许再次点击
               setTimeout(() => {
@@ -7358,7 +7539,7 @@
                     };
                   }
 
-                  showNotification("保存成功", "摘要已更新", "success", 2000);
+                  showNotification("保存成功", "摘要已更新", "success", 1500);
                   cancelEditSummary();
                 } else {
                   showNotification(
@@ -7385,21 +7566,11 @@
             };
 
             // ============================================================
-            // 📸 消息提醒状态舱 (Toast Engine)
+            // 📸 消息提醒状态舱 (Toast Engine) - 支持堆叠
             // ============================================================
-            const toastState = Vue.reactive({
-              isVisible: false,
-              title: "",
-              message: "",
-              type: "success", // 支持: 'success', 'warning', 'error'
-              id: 0, // 用于 Vue Transition 识别并打断旧动画
-            });
-
-            let toastTimeout = null; // 自动退场计时器
-            let toastEnterTimeout = null; // 入场延迟计时器
-            let toastShowStartTime = 0; // 记录当前 toast 开始展示的时间
-            const MIN_DISPLAY_TIME = 800; // 最小展示时间（毫秒），确保动画充分演示
-            const LEAVE_ANIMATION_TIME = 350; // 退场动画时间（需与 CSS .toast-leave-active 匹配）
+            const toastList = Vue.ref([]);
+            let toastIdCounter = 0;
+            const MAX_TOAST_COUNT = 2; // 最多显示 2 个通知
 
             const showNotification = (
               title,
@@ -7407,55 +7578,32 @@
               type = "success",
               duration = 3000,
             ) => {
-              // 清除所有待处理的计时器
-              clearTimeout(toastTimeout);
-              clearTimeout(toastEnterTimeout);
+              const id = ++toastIdCounter;
+              const toast = { id, title, message, type };
 
-              const now = Date.now();
-              const elapsed = toastState.isVisible
-                ? now - toastShowStartTime
-                : 0;
+              // 添加到列表头部（新通知在上面）
+              toastList.value.unshift(toast);
 
-              // 计算需要等待的时间（确保当前 toast 至少展示 MIN_DISPLAY_TIME）
-              let needWait = 0;
-              if (toastState.isVisible && elapsed < MIN_DISPLAY_TIME) {
-                needWait = MIN_DISPLAY_TIME - elapsed + LEAVE_ANIMATION_TIME;
-              } else if (toastState.isVisible) {
-                needWait = LEAVE_ANIMATION_TIME;
+              // 如果超过最大数量，移除最旧的通知（Vue 会触发退场动画）
+              if (toastList.value.length > MAX_TOAST_COUNT) {
+                toastList.value.pop();
               }
-
-              if (needWait > 0) {
-                // 触发退场
-                toastState.isVisible = false;
-                // 等待退场完成后再入场
-                toastEnterTimeout = setTimeout(() => {
-                  _displayToast(title, message, type, duration);
-                }, needWait);
-              } else {
-                // 直接显示
-                _displayToast(title, message, type, duration);
-              }
-            };
-
-            // 内部函数：立即显示 toast
-            const _displayToast = (title, message, type, duration) => {
-              toastState.title = title;
-              toastState.message = message;
-              toastState.type = type;
-              toastState.id++;
-              toastState.isVisible = true;
-              toastShowStartTime = Date.now();
 
               // 设置自动退场
-              toastTimeout = setTimeout(() => {
-                toastState.isVisible = false;
+              setTimeout(() => {
+                const index = toastList.value.findIndex((t) => t.id === id);
+                if (index !== -1) {
+                  toastList.value.splice(index, 1);
+                }
               }, duration);
             };
 
-            // 主动关闭当前通知
-            const hideNotification = () => {
-              clearTimeout(toastTimeout);
-              toastState.isVisible = false;
+            // 主动关闭指定通知
+            const hideNotification = (id) => {
+              const index = toastList.value.findIndex((t) => t.id === id);
+              if (index !== -1) {
+                toastList.value.splice(index, 1);
+              }
             };
 
             const isCancelledFlag = ref(false); // 🌟 新增：用于拦截迟到的回调和请求结果
@@ -7504,13 +7652,13 @@
                 JSON.parse(JSON.stringify(config.value)),
               );
 
-              // 5. 屏幕底部提示
-              showNotification(
-                "窗口状态",
-                config.value.isPinned ? "窗口已置顶" : "已取消置顶",
-                "success",
-                2000,
-              );
+              // // 5. 屏幕底部提示
+              // showNotification(
+              //   "",
+              //   config.value.isPinned ? "窗口已置顶" : "已取消置顶",
+              //   "success",
+              //   2000,
+              // );
             };
             // 新增：详情页快照生成状态
             const isCapturing = ref(false);
@@ -7844,6 +7992,8 @@
             const isSendingTestEmail = ref(false);
             const emailSendStatus = ref("idle"); // idle, sending, success, error
             const isTestingPush = ref(false);
+            const pushSendStatus = ref("idle"); // idle, sending, success, error
+            const isDiagnosing = ref(false);
 
             // 获取 AI 品牌名称（用于状态提示）
             const aiBrandName = computed(() => {
@@ -8220,16 +8370,23 @@
               const email = newSubscriberEmail.value.trim();
               if (!email) return;
 
-              // 简单的邮箱格式验证
-              const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+              // 工业界标准邮箱格式验证（HTML5 级别严格校验）
+              const emailRegex =
+                /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/;
               if (!emailRegex.test(email)) {
-                showNotification("添加失败", "请输入有效的邮箱地址", "warning");
+                showNotification("添加失败", "邮箱格式不正确", "error");
+                return;
+              }
+
+              // 长度校验（RFC 5321 最大 254 字符）
+              if (email.length > 254) {
+                showNotification("添加失败", "邮箱地址过长", "error");
                 return;
               }
 
               // 检查是否已存在
               if (config.value.subscriberList.includes(email)) {
-                showNotification("添加失败", "该邮箱已在订阅列表中", "warning");
+                showNotification("添加失败", "该邮箱已在订阅列表中", "error");
                 return;
               }
 
@@ -8260,7 +8417,7 @@
                 showNotification(
                   "发送失败",
                   "请先配置 SMTP 服务器信息",
-                  "warning",
+                  "error",
                 );
                 return;
               }
@@ -8306,22 +8463,42 @@
             };
 
             const diagnoseEmailPush = async () => {
+              // 防止重复点击
+              if (isDiagnosing.value) return;
+
               // 🌟 自动保存配置后再诊断
               await pywebview.api.save_config(
                 JSON.parse(JSON.stringify(config.value)),
               );
+
+              isDiagnosing.value = true;
 
               try {
                 const res = await pywebview.api.diagnose_email_push();
                 if (res.status === "success") {
                   if (res.canSend) {
                     showNotification(
-                      "诊断结果",
-                      "邮件推送配置正常，可以发送",
+                      "诊断通过",
+                      res.message || "邮件推送配置正常，SMTP 连接测试成功",
                       "success",
                     );
                   } else {
-                    showNotification("诊断结果", res.message, "warning");
+                    // 根据连接测试结果显示不同类型的提示
+                    const connectionTest = res.checks?.connectionTest;
+                    if (connectionTest === "auth_failed") {
+                      showNotification("认证失败", res.message, "error");
+                    } else if (connectionTest === "timeout") {
+                      showNotification("连接超时", res.message, "warning");
+                    } else if (
+                      connectionTest === "connect_failed" ||
+                      connectionTest === "refused"
+                    ) {
+                      showNotification("连接失败", res.message, "error");
+                    } else if (connectionTest === "dns_failed") {
+                      showNotification("DNS 解析失败", res.message, "error");
+                    } else {
+                      showNotification("配置问题", res.message, "warning");
+                    }
                   }
                   console.log("📧 邮件推送诊断结果:", res);
                 } else {
@@ -8329,6 +8506,8 @@
                 }
               } catch (e) {
                 showNotification("诊断失败", "网络请求失败", "error");
+              } finally {
+                isDiagnosing.value = false;
               }
             };
 
@@ -8339,16 +8518,30 @@
               );
 
               isTestingPush.value = true;
+              pushSendStatus.value = "sending";
               try {
                 const res =
                   await pywebview.api.test_email_push_with_latest_article();
                 if (res.status === "success") {
+                  pushSendStatus.value = "success";
                   showNotification("推送测试", res.message, "success");
+                  // 2秒后重置状态
+                  setTimeout(() => {
+                    pushSendStatus.value = "idle";
+                  }, 2000);
                 } else {
+                  pushSendStatus.value = "error";
                   showNotification("推送测试", res.message, "error");
+                  setTimeout(() => {
+                    pushSendStatus.value = "idle";
+                  }, 2000);
                 }
               } catch (e) {
+                pushSendStatus.value = "error";
                 showNotification("推送测试", "网络请求失败", "error");
+                setTimeout(() => {
+                  pushSendStatus.value = "idle";
+                }, 2000);
               } finally {
                 isTestingPush.value = false;
               }
@@ -8530,7 +8723,12 @@
                   JSON.parse(JSON.stringify(config.value)),
                 );
                 if (res.status === "success") {
-                  showNotification("保存成功", "配置已保存并应用", "success");
+                  showNotification(
+                    "保存成功",
+                    "配置已保存并应用",
+                    "success",
+                    1500,
+                  );
                 } else {
                   showNotification("保存失败", res.message, "error");
                 }
@@ -8585,14 +8783,14 @@
 
               if (res.status === "success") {
                 connectionStatus.value = "success";
-                showNotification("连接成功", "服务器响应正常", "success", 3000);
+                showNotification("连接成功", "服务器响应正常", "success", 1500);
               } else {
                 connectionStatus.value = "error";
                 showNotification(
                   "连接失败",
                   res.message || "未知错误",
                   "error",
-                  4000,
+                  3000,
                 );
               }
             };
@@ -9510,7 +9708,7 @@
               console.log("🔔 收到后台自动执行通知");
               showNotification(
                 "后台巡检",
-                `已自动执行开机后台巡检`,
+                `已自动执行后台巡检`,
                 "success",
                 5000,
               );
@@ -9541,7 +9739,7 @@
                 isLoading.value = false;
                 updatePhase.value = "idle";
                 hasPendingAiTasks.value = false;
-                showNotification("检查完成", "当前已是最新", "success", 4000);
+                showNotification("检查完成", "当前已是最新", "success", 1500);
               }
             };
 
@@ -9593,7 +9791,7 @@
                 showNotification(
                   "只读模式",
                   "服务已暂停，当前为只读模式",
-                  "warning",
+                  "error",
                   3000,
                 );
                 return;
@@ -9618,7 +9816,7 @@
                     "API 余额不足",
                     "请充值后重试",
                     "error",
-                    6000,
+                    4000,
                   );
                   // 进入倒计时状态
                   startCooldown(COOLDOWN_SECONDS);
@@ -9684,7 +9882,7 @@
                       "检查更新",
                       `找到 ${count} 篇新内容`,
                       "success",
-                      3000,
+                      2000,
                     );
                     // 如果任务已完成，直接关闭
                     if (taskCompleted.value) {
@@ -9696,7 +9894,7 @@
                       "检查更新",
                       "当前已是最新",
                       "success",
-                      4000,
+                      1500,
                     );
                     isLoading.value = false;
                   }
@@ -9713,7 +9911,7 @@
                     "服务暂停",
                     "当前为只读模式",
                     "warning",
-                    5000,
+                    4000,
                   );
                   cooldownRemaining = 0;
                   isLoading.value = false;
@@ -10069,7 +10267,7 @@
                     if (res.status === "success") {
                       showNotification(
                         "已保存",
-                        "System Prompt 已更新",
+                        "提示词已更新",
                         "success",
                         2000,
                       );
@@ -10082,7 +10280,7 @@
                       );
                     }
                   } catch (e) {
-                    console.error("保存 System Prompt 失败:", e);
+                    console.error("保存提示词失败:", e);
                     showNotification("保存失败", "网络错误", "error", 3000);
                   }
 
@@ -10377,7 +10575,7 @@
 
             // 🌟 原 takeSnapshot 的重计算逻辑拆分出来 (截图的主凶)
             const processHeavySnapshotTask = async (item) => {
-              showNotification("保存快照", "正在生成快照", "success", 30000);
+              showNotification("保存快照", "正在生成快照", "success", 1000);
 
               const targetView = document.querySelector(".detail-view");
               const scrollContent = document.querySelector(".detail-content");
@@ -10393,12 +10591,7 @@
                 config.value.customFontPath
               ) {
                 try {
-                  showNotification(
-                    "截图",
-                    "正在打包字体资源",
-                    "success",
-                    10000,
-                  );
+                  showNotification("截图", "正在打包字体资源", "success", 2000);
                   const fontUrl = new URL(
                     config.value.customFontPath,
                     window.location.href,
@@ -10487,6 +10680,10 @@
 
                 // 5. 导出并保存
                 const base64image = canvas.toDataURL("image/png");
+
+                // 🌟 截图完成，关闭"正在生成快照"通知（保存对话框会阻塞）
+                hideNotification();
+
                 const res = await window.pywebview.api.save_snapshot(
                   base64image,
                   item.title,
@@ -10506,31 +10703,33 @@
                       "保存成功",
                       "已复制到剪贴板",
                       "success",
-                      3000,
+                      1500,
                     );
                   } else {
                     showNotification(
                       "快照已保存",
                       "但复制到剪贴板失败",
                       "warning",
-                      3000,
+                      1500,
                     );
                   }
                 } else if (res && res.status === "cancelled") {
-                  // 用户取消，关闭正在显示的通知
-                  hideNotification();
+                  // 用户取消，显示取消提示
+                  showNotification("已取消", "快照保存已取消", "warning", 2000);
                 } else {
                   console.error("❌ [Snapshot] 后端保存失败:", res);
                   showNotification(
                     "保存失败",
                     res.message || "未知错误",
                     "error",
-                    4000,
+                    3000,
                   );
                 }
               } catch (error) {
                 console.error("💥 [Snapshot] 前端捕获失败:", error);
-                showNotification("截图失败", error.message, "error", 4000);
+                // 截图过程中失败，关闭"正在生成快照"的通知
+                hideNotification();
+                showNotification("截图失败", error.message, "error", 3000);
               } finally {
                 // 6. 恢复所有原始样式
                 document.body.style.height = origBodyHeight;
@@ -10674,14 +10873,14 @@
                     "生成完成",
                     `${aiBrandName.value} 总结已重新生成`,
                     "success",
-                    2000,
+                    1500,
                   );
                 } else {
                   showNotification(
                     "生成失败",
                     res.message || "请稍后重试",
                     "error",
-                    4000,
+                    3000,
                   );
                 }
               } catch (e) {
@@ -10690,7 +10889,7 @@
                   "请求失败",
                   `${aiBrandName.value} 服务暂不可用`,
                   "error",
-                  4000,
+                  3000,
                 );
               } finally {
                 // 清除刷新状态
@@ -11019,7 +11218,7 @@
               closeSearchUI,
               handleListClick,
               handleTodayClick,
-              toastState,
+              toastList,
               showNotification,
 
               // 设置与置顶
@@ -11057,6 +11256,7 @@
               isSendingTestEmail,
               emailSendStatus,
               isTestingPush,
+              isDiagnosing,
               addSubscriber,
               removeSubscriber,
               sendTestEmail,

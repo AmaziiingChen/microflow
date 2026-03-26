@@ -2,6 +2,7 @@
 
 import logging
 import os
+import re
 import smtplib
 import base64
 import random
@@ -17,6 +18,17 @@ logger = logging.getLogger(__name__)
 
 class EmailService:
     """SMTP 邮件发送服务"""
+
+    # 🔐 邮箱地址校验正则常量（HTML5 级别严格校验）
+    # 支持子域名、严格限制顶级域名长度（至少2位字母）、过滤非法特殊字符
+    EMAIL_REGEX = re.compile(
+        r"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+"
+        r"@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
+        r"(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*"
+        r"\.[a-zA-Z]{2,}$"
+    )
+    # RFC 5321 邮箱最大长度
+    EMAIL_MAX_LENGTH = 254
 
     def __init__(
         self, smtp_host: str, smtp_port: int, smtp_user: str, smtp_password: str
@@ -34,6 +46,49 @@ class EmailService:
         self.smtp_port = smtp_port
         self.smtp_user = smtp_user
         self.smtp_password = smtp_password
+
+    @staticmethod
+    def _is_valid_email(email: str) -> bool:
+        """
+        校验单个邮箱地址是否合法
+
+        Args:
+            email: 邮箱地址字符串
+
+        Returns:
+            bool: 是否合法
+        """
+        if not email or len(email) > EmailService.EMAIL_MAX_LENGTH:
+            return False
+        return bool(EmailService.EMAIL_REGEX.match(email))
+
+    @staticmethod
+    def _filter_valid_emails(emails: List[str]) -> List[str]:
+        """
+        清洗拦截器：过滤并返回合法的邮箱列表
+
+        Args:
+            emails: 原始邮箱列表
+
+        Returns:
+            List[str]: 清洗后的合法邮箱列表
+        """
+        valid_emails = []
+        for email in emails:
+            # 剥离首尾空格
+            cleaned = email.strip() if email else ""
+            # 校验合法性
+            if EmailService._is_valid_email(cleaned):
+                valid_emails.append(cleaned)
+
+        # 记录过滤日志
+        original_count = len(emails)
+        valid_count = len(valid_emails)
+        if original_count != valid_count:
+            filtered_count = original_count - valid_count
+            logger.warning(f"📧 邮箱清洗：过滤了 {filtered_count} 个非法邮箱地址")
+
+        return valid_emails
 
     def _create_html_email(
         self,
@@ -157,6 +212,16 @@ class EmailService:
                 "message": "收件人列表为空",
             }
 
+        # 🛡️ 清洗拦截器：过滤非法邮箱地址
+        valid_addrs = self._filter_valid_emails(to_addrs)
+        if not valid_addrs:
+            return {
+                "success": False,
+                "sent_count": 0,
+                "failed": to_addrs,
+                "message": "所有邮箱地址格式非法，已阻断发送",
+            }
+
         title = article_data.get("title", "未知标题")
         source_name = article_data.get("source_name", "")
         category = article_data.get("category", "")
@@ -165,8 +230,6 @@ class EmailService:
         url = article_data.get("url", "")
 
         # 提取摘要纯文本预览（去除 HTML 标签）
-        import re
-
         summary_text = re.sub(r"<[^>]+>", "", summary)
         summary_preview = summary_text[:200]
 
@@ -190,7 +253,7 @@ class EmailService:
             smtp.login(self.smtp_user, self.smtp_password)
 
             # 逐个发送（带间隔，避免触发反垃圾机制）
-            for i, to_addr in enumerate(to_addrs):
+            for i, to_addr in enumerate(valid_addrs):
                 # 🌟 从第二封开始，每次发送前等待 1-2 秒随机间隔
                 if i > 0:
                     delay = random.uniform(1.0, 2.0)
@@ -268,6 +331,14 @@ class EmailService:
         Returns:
             {"success": bool, "message": str}
         """
+        # 🛡️ 邮箱格式校验
+        cleaned_addr = to_addr.strip() if to_addr else ""
+        if not self._is_valid_email(cleaned_addr):
+            return {
+                "success": False,
+                "message": "邮箱地址格式非法",
+            }
+
         try:
             if self.smtp_port == 465:
                 smtp = smtplib.SMTP_SSL(self.smtp_host, self.smtp_port, timeout=30)
@@ -280,7 +351,7 @@ class EmailService:
             # 创建简单测试邮件
             msg = MIMEMultipart()
             msg["From"] = self.smtp_user
-            msg["To"] = to_addr
+            msg["To"] = cleaned_addr
             msg["Subject"] = "【MicroFlow】邮件配置测试"
 
             html_body = f"""<!DOCTYPE html>
@@ -301,10 +372,10 @@ class EmailService:
 
             msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-            smtp.sendmail(self.smtp_user, to_addr, msg.as_string())
+            smtp.sendmail(self.smtp_user, cleaned_addr, msg.as_string())
             smtp.quit()
 
-            logger.info(f"📧 测试邮件发送成功: {to_addr}")
+            logger.info(f"📧 测试邮件发送成功: {cleaned_addr}")
             return {"success": True, "message": "测试邮件发送成功"}
 
         except smtplib.SMTPAuthenticationError:
