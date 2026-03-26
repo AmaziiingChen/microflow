@@ -45,6 +45,13 @@ setup_logging()
 # 引入我们的"总调度室"
 from src.api import Api
 
+
+def get_main_module():
+    """获取主模块引用（解决 __main__ 模块名问题）"""
+    import sys
+    return sys.modules.get('__main__')
+
+
 # ================= 托盘状态管理 =================
 # 全局变量：存储托盘图标实例和状态
 _status_item = None  # NSStatusItem 实例
@@ -86,7 +93,14 @@ def run_on_main_thread(func):
 
 def update_tray_status(unread: int = None, sync_time: str = None):  # type:ignore
     """更新托盘状态信息（包含红点触发与文本刷新）"""
-    import main as main_mod
+    # 🌟 关键修复：使用 __main__ 获取真正的主模块
+    main_mod = get_main_module()
+    if main_mod is None:
+        print("❌ [DEBUG] 无法获取主模块")
+        return
+
+    # 🔍 调试日志
+    print(f"📊 [DEBUG] update_tray_status 被调用: unread={unread}, sync_time={sync_time}")
 
     if unread is not None:
         main_mod._unread_count = unread
@@ -94,10 +108,14 @@ def update_tray_status(unread: int = None, sync_time: str = None):  # type:ignor
         main_mod._last_sync_time = sync_time
 
     def do_update():
+        print(f"📊 [DEBUG] do_update 开始执行, _unread_count={main_mod._unread_count}")
         if HAS_PYOBJC:
             # 1. 动态刷新菜单栏里的文字
             if hasattr(main_mod, "_unread_item") and main_mod._unread_item:
                 main_mod._unread_item.setTitle_(f"未读: {main_mod._unread_count}")
+                print(f"📊 [DEBUG] 菜单项文字已更新为: 未读: {main_mod._unread_count}")
+            else:
+                print(f"📊 [DEBUG] _unread_item 不存在或为 None")
 
             if hasattr(main_mod, "_sync_item") and main_mod._sync_item:
                 sync_text = (
@@ -106,9 +124,12 @@ def update_tray_status(unread: int = None, sync_time: str = None):  # type:ignor
                 main_mod._sync_item.setTitle_(f"同步: {sync_text}")
 
             # 2. 🌟 核心修复：根据未读数量控制红点显示/隐藏
+            print(f"📊 [DEBUG] 准备更新红点, _unread_count={main_mod._unread_count}")
             if main_mod._unread_count > 0:
+                print(f"📊 [DEBUG] 调用 set_tray_alert()")
                 set_tray_alert()
             else:
+                print(f"📊 [DEBUG] 调用 clear_tray_alert()")
                 clear_tray_alert()
 
             print(
@@ -135,29 +156,29 @@ def update_tray_status(unread: int = None, sync_time: str = None):  # type:ignor
 
 def set_tray_alert():
     """在托盘图标上显示红点提醒"""
-    global _has_alert, _status_item, _base_image
+    main_mod = get_main_module()
 
     def do_set_alert():
-        global _has_alert
+        if main_mod is None:
+            return
         if HAS_PYOBJC:
-            if _status_item is None:
+            if main_mod._status_item is None:
                 return
             try:
                 # 创建带红点的图标
                 alert_image = _create_alert_icon()
                 if alert_image:
-                    _status_item.button().setImage_(alert_image)
-                    _has_alert = True
+                    main_mod._status_item.button().setImage_(alert_image)
+                    main_mod._has_alert = True
                     print("🔴 托盘红点已显示")
             except Exception as e:
                 print(f"❌ 设置托盘红点失败: {e}")
         else:
             # pystray 备选方案
-            global _tray_icon, _base_icon_256
-            if _tray_icon is None or _base_icon_256 is None:
+            if main_mod._tray_icon is None or main_mod._base_icon_256 is None:
                 return
             try:
-                alert_canvas = _base_icon_256.copy()
+                alert_canvas = main_mod._base_icon_256.copy()
                 draw = ImageDraw.Draw(alert_canvas)
                 red_dot_radius = 8
                 canvas_size = alert_canvas.width
@@ -174,8 +195,8 @@ def set_tray_alert():
                     outline="#C62828",
                     width=1,
                 )
-                _tray_icon.icon = alert_canvas
-                _has_alert = True
+                main_mod._tray_icon.icon = alert_canvas
+                main_mod._has_alert = True
             except Exception as e:
                 print(f"❌ 设置托盘红点失败: {e}")
 
@@ -184,26 +205,30 @@ def set_tray_alert():
 
 def clear_tray_alert():
     """清除托盘图标上的红点提醒"""
-    global _has_alert
+    main_mod = get_main_module()
+
+    print(f"📊 [DEBUG] clear_tray_alert 被调用, _status_item={main_mod._status_item if main_mod else 'N/A'}, _base_image={main_mod._base_image if main_mod else 'N/A'}")
 
     def do_clear_alert():
-        global _has_alert
+        if main_mod is None:
+            return
+        print(f"📊 [DEBUG] do_clear_alert 开始执行, HAS_PYOBJC={HAS_PYOBJC}")
         if HAS_PYOBJC:
-            if _status_item is None or _base_image is None:
+            if main_mod._status_item is None or main_mod._base_image is None:
+                print(f"📊 [DEBUG] 提前返回: _status_item={main_mod._status_item}, _base_image={main_mod._base_image}")
                 return
             try:
-                _status_item.button().setImage_(_base_image)
-                _has_alert = False
+                main_mod._status_item.button().setImage_(main_mod._base_image)
+                main_mod._has_alert = False
                 print("⚪ 托盘红点已清除")
             except Exception as e:
                 print(f"❌ 清除托盘红点失败: {e}")
         else:
-            global _tray_icon, _base_icon_256
-            if _tray_icon is None or _base_icon_256 is None:
+            if main_mod._tray_icon is None or main_mod._base_icon_256 is None:
                 return
             try:
-                _tray_icon.icon = _base_icon_256
-                _has_alert = False
+                main_mod._tray_icon.icon = main_mod._base_icon_256
+                main_mod._has_alert = False
             except Exception as e:
                 print(f"❌ 清除托盘红点失败: {e}")
 
@@ -212,16 +237,18 @@ def clear_tray_alert():
 
 def _create_alert_icon():
     """🌟 终极版：支持自定义尺寸和透明度的原生红点图标 (PyObjC)"""
-    global _base_image
-    if _base_image is None:
+    main_mod = get_main_module()
+    if main_mod is None or main_mod._base_image is None:
         return None
+
+    base_image = main_mod._base_image
 
     try:
         from Cocoa import NSImage, NSColor, NSBezierPath  # type: ignore
         from AppKit import NSCompositingOperationSourceOver  # type: ignore
 
         # 1. 获取原始图标尺寸
-        size = _base_image.size()
+        size = base_image.size()
 
         # 2. 创建用于绘制的新图像 (保持透明背景)
         new_image = NSImage.alloc().initWithSize_(size)
@@ -230,7 +257,7 @@ def _create_alert_icon():
         # 3. 先把基础图标画上去
         from Cocoa import NSZeroRect, NSZeroPoint  # type: ignore
 
-        _base_image.drawAtPoint_fromRect_operation_fraction_(
+        base_image.drawAtPoint_fromRect_operation_fraction_(
             NSZeroPoint, NSZeroRect, NSCompositingOperationSourceOver, 1.0
         )
 
@@ -280,12 +307,15 @@ def _create_alert_icon():
 
     except Exception as e:
         print(f"❌ 绘制原生自定义红点失败: {e}")
-        return _base_image  # 失败时回退到无红点图标
+        return base_image  # 失败时回退到无红点图标
 
 
 def has_tray_alert() -> bool:
     """检查当前是否有红点提醒"""
-    return _has_alert
+    main_mod = get_main_module()
+    if main_mod is None:
+        return False
+    return main_mod._has_alert
 
 
 # ================================================
@@ -406,7 +436,7 @@ if HAS_PYOBJC:
 
             # 🌟 修复：严格保证只有 (self, sender) 两个参数
             def onShowWindow_(self, sender):
-                import main as main_mod
+                main_mod = get_main_module()
                 import threading
 
                 def do_show():
@@ -426,7 +456,7 @@ if HAS_PYOBJC:
                 threading.Thread(target=do_show, daemon=True).start()
 
             def onForceCheck_(self, sender):
-                import main as main_mod
+                main_mod = get_main_module()
                 import threading
                 from datetime import datetime
 
@@ -445,7 +475,7 @@ if HAS_PYOBJC:
                 threading.Thread(target=do_check, daemon=True).start()
 
             def onToggleMute_(self, sender):
-                import main as main_mod
+                main_mod = get_main_module()
                 import threading
                 from Cocoa import NSOnState, NSOffState  # type: ignore
 
@@ -478,7 +508,7 @@ if HAS_PYOBJC:
                 threading.Thread(target=notify_frontend, daemon=True).start()
 
             def onOpenSettings_(self, sender):
-                import main as main_mod
+                main_mod = get_main_module()
                 import threading
 
                 def do_open():
@@ -497,7 +527,7 @@ if HAS_PYOBJC:
                 threading.Thread(target=do_open, daemon=True).start()
 
             def onQuitApp_(self, sender):
-                import main as main_mod
+                main_mod = get_main_module()
                 import os
 
                 if main_mod._api_instance:
@@ -511,7 +541,7 @@ def create_native_menu(api, window):
     if not HAS_PYOBJC:
         return None, None, None, None, None
 
-    import main as main_mod
+    main_mod = get_main_module()
 
     # 创建菜单代理
     delegate = TrayMenuDelegate.alloc().init()
@@ -585,7 +615,7 @@ def run_native_tray(api, window):
     """运行原生 macOS 状态栏"""
     global _status_item, _menu_delegate, _unread_item, _sync_item, _mute_item
 
-    import main as main_mod
+    main_mod = get_main_module()
 
     # 确保 NSApplication 存在
     app = NSApplication.sharedApplication()
@@ -676,7 +706,7 @@ if __name__ == "__main__":
     api.window = window
 
     # 保存全局引用
-    import main as main_module
+    main_module = get_main_module()
 
     main_module._api_instance = api
     main_module._window_instance = window
@@ -701,24 +731,24 @@ if __name__ == "__main__":
 
         # pystray 菜单回调函数
         def get_unread_text(item):
-            import main as main_mod
+            main_mod = get_main_module()
 
             count = main_mod._unread_count or 0
             return f"未读: {count}"
 
         def get_sync_time_text(item):
-            import main as main_mod
+            main_mod = get_main_module()
 
             sync_time = main_mod._last_sync_time
             return f"同步: {sync_time}" if sync_time else "同步: --"
 
         def mute_checked(item):
-            import main as main_mod
+            main_mod = get_main_module()
 
             return main_mod._mute_mode or False
 
         def on_show_window(icon, item):
-            import main as main_mod
+            main_mod = get_main_module()
 
             def do_show():
                 try:
@@ -737,7 +767,7 @@ if __name__ == "__main__":
             threading.Thread(target=do_show, daemon=True).start()
 
         def on_force_check(icon, item):
-            import main as main_mod
+            main_mod = get_main_module()
             import threading
 
             def do_check():
@@ -753,7 +783,7 @@ if __name__ == "__main__":
             threading.Thread(target=do_check, daemon=True).start()
 
         def on_toggle_mute(icon, item):
-            import main as main_mod
+            main_mod = get_main_module()
 
             main_mod._mute_mode = not main_mod._mute_mode
             if main_mod._api_instance:
@@ -778,7 +808,7 @@ if __name__ == "__main__":
             threading.Thread(target=notify_frontend, daemon=True).start()
 
         def on_open_settings(icon, item):
-            import main as main_mod
+            main_mod = get_main_module()
 
             def do_open():
                 try:

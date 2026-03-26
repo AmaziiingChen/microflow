@@ -575,21 +575,40 @@ class Api:
             debug_mode=debug_mode
         )
 
-    def _refresh_tray_status(self):
-        """刷新托盘状态（未读数量和同步时间）"""
+    def _refresh_tray_status(self, count: int = None):
+        """刷新托盘状态（未读数量和同步时间）
+
+        Args:
+            count: 可选的未读数量，如果不传则从数据库重新计算
+        """
         try:
-            import main
+            import sys
+            # 🌟 关键修复：使用 __main__ 获取真正的主模块，而不是 import main
+            # 当 main.py 作为入口点运行时，它的模块名是 __main__，不是 main
+            main_mod = sys.modules.get('__main__')
+            if main_mod is None:
+                logger.warning("无法获取主模块")
+                return
+
             from datetime import datetime
-            # 获取未读数量
-            subscribed_sources = self.config_service.get('subscribedSources', None)
-            count = db.get_unread_count(source_names=subscribed_sources)
+            # 如果没有传入 count，则从数据库获取
+            if count is None:
+                subscribed_sources = self.config_service.get('subscribedSources', None)
+                count = db.get_unread_count(source_names=subscribed_sources)
             # 获取当前时间
             sync_time = datetime.now().strftime("%H:%M")
+            # 🔍 调试：打印更新前的状态
+            logger.info(f"📊 [DEBUG] _refresh_tray_status 被调用: count={count}, sync_time={sync_time}")
+            logger.info(f"📊 [DEBUG] 当前 main._unread_count={getattr(main_mod, '_unread_count', 'N/A')}")
+            logger.info(f"📊 [DEBUG] 当前 main._status_item={getattr(main_mod, '_status_item', 'N/A')}")
+            logger.info(f"📊 [DEBUG] 当前 main._base_image={getattr(main_mod, '_base_image', 'N/A')}")
             # 更新托盘
-            main.update_tray_status(unread=count, sync_time=sync_time)
-            logger.debug(f"📊 托盘状态已更新: 未读 {count}, 同步 {sync_time}")
+            main_mod.update_tray_status(unread=count, sync_time=sync_time)
+            logger.info(f"📊 [DEBUG] update_tray_status 调用完成")
         except Exception as e:
-            logger.warning(f"刷新托盘状态失败: {e}")
+            logger.error(f"❌ [DEBUG] 刷新托盘状态失败: {e}")
+            import traceback
+            traceback.print_exc()
 
     def download_attachment(self, url: str, filename: str) -> dict:
         """下载附件（支持后缀智能补全）"""
@@ -995,6 +1014,24 @@ class Api:
             # 从数据库直接统计未读数量
             count = db.get_unread_count(source_names=filter_sources)
             logger.info(f"📊 未读数量统计结果: {count}")
+
+            # 🌟 同步更新状态栏图标（直接传入已计算的 count，避免重复计算）
+            # 注意：状态栏始终显示订阅来源的总未读数，而不是当前筛选的未读数
+            if filter_sources == subscribed_sources or filter_sources is None:
+                # 当前筛选的就是订阅来源，直接更新
+                try:
+                    import threading
+                    threading.Thread(target=self._refresh_tray_status, args=(count,), daemon=True).start()
+                except Exception:
+                    pass
+            else:
+                # 当前筛选的是单个部门，需要重新计算订阅来源的总未读数
+                try:
+                    import threading
+                    threading.Thread(target=self._refresh_tray_status, daemon=True).start()
+                except Exception:
+                    pass
+
             return {"status": "success", "count": count}
         except Exception as e:
             logger.error(f"获取未读数量失败: {e}", exc_info=True)

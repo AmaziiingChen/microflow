@@ -916,36 +916,84 @@
         transform: scale(0.95);
       }
 
-      /* 编辑按钮 - 紫色系 */
+      /* ============================================================
+   ✏️ 编辑按钮 - 紫色系 Apple 级激活动画方案 (修正版)
+   ============================================================ */
+      /* ============================================================
+   ✏️ 终极方案：紫色系「灵动画笔」Apple 级激活动画 (Pen Action)
+   ============================================================ */
+      /* 1. 基础卡片容器样式 (保持你原有的紫色设定，增加过渡属性) */
       .badge-edit {
         display: inline-flex;
         align-items: center;
         justify-content: center;
         width: 28px;
         height: 28px;
-        color: #7c3aed;
-        background: #f3e8ff;
+        color: #7c3aed; /* 🌟 默认紫色 */
+        background: #f3e8ff; /* 淡紫色底 */
         padding: 4px;
         border-radius: 7px;
-        border: 1px solid #ddd6fe;
+        border: 1px solid #ddd6fe; /* 浅紫色边框 */
         cursor: pointer;
         position: relative;
-        transition: all 0.2s;
+        /* 🌟 核心：确保背景、边框、颜色都应用最扎实、优雅的无极缓动曲线 */
+        transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+        /* 🌟 Apple 级细节：默认状态下带有一点点微妙的阴影，增加实体感 */
+        box-shadow: 0 1px 2px rgba(124, 58, 237, 0.05);
       }
-      .badge-edit:hover {
+
+      /* Hover 时的轻微悬浮反馈 */
+      .badge-edit:hover:not(.is-editing) {
         background: #ede9fe;
-        border-color: #c4b5fd;
+        box-shadow: 0 2px 5px rgba(124, 58, 237, 0.1);
       }
-      .badge-edit:active {
-        transform: scale(0.95);
+
+      /* 2. 定义 SVG 内部元素的精密过渡 */
+
+      /* 选择第一个 path（底部的方框/纸张） */
+      .badge-edit .icon-svg g path:first-child {
+        transition: all 0.25s cubic-bezier(0.23, 1, 0.32, 1);
+        transform-origin: center;
       }
+
+      /* 选择第二个 path（右上角的画笔部分） */
+      .badge-edit .icon-svg g path:last-child {
+        /* 🌟 终极优雅：画笔应用最精密的 Apple 级缓动曲线，制造丝滑位移 */
+        transition: all 0.35s cubic-bezier(0.23, 1, 0.32, 1);
+        transform-origin: top right; /* 确保是从右上方开始精密位移 */
+      }
+
+      /* 🌟 3. 激活状态 (is-editing) - 注入“灵动魔法” */
+
       .badge-edit.is-editing {
-        background: #7c3aed;
-        color: #fff;
-        border-color: #7c3aed;
+        color: #7c3aed !important; /* 强制锁定紫色 */
+        background: #ffffff; /* 🌟 激活时背景变为纯白，制造“纸张”感 */
+        border-color: #ddd6fe;
+        /* 🌟 高级光影：给卡片增加一个弥散、昂贵的紫色发光底座 (Glow) */
+        box-shadow:
+          0 0 10px rgba(124, 58, 237, 0.1),
+          0 0 1px rgba(124, 58, 237, 0.2);
       }
-      .badge-edit.is-editing:hover {
-        background: #6d28d9;
+
+      /* 🌟 方框（纸张）部分：产生极其微弱的物理按压感（配合画笔落笔） */
+      .badge-edit.is-editing .icon-svg g path:first-child {
+        transform: scale(0.98) translate(0.5px, 0.5px); /* 微弱的右下按压 */
+        opacity: 0.8; /* 稍微变淡，制造虚化背景感 */
+      }
+
+      /* 🌟 画笔部分：产生精密、丝滑的“落笔即书”位移交互 */
+      .badge-edit.is-editing .icon-svg g path:last-child {
+        /* X轴左移 3.5px，Y轴下移 3.5px */
+        /* 笔尖瞬间划过卡片，触碰底部的方框边缘 */
+        transform: translate(-3.5px, 3.5px) rotate(-3deg);
+        /* 微微的光晕，制造画笔被聚焦的实体感 */
+        filter: drop-shadow(0 0 2px rgba(124, 58, 237, 0.25));
+      }
+
+      /* 4. 🖱️ 按下时的物理反馈 (Active State) */
+      .badge-edit:active:not(.is-editing) .icon-svg {
+        transform: scale(0.9); /* 按下时整体缩小，制造物理凹陷感 */
+        transition: transform 0.1s ease;
       }
 
       /* 清空按钮 - 红色系 */
@@ -1123,6 +1171,11 @@
           color 0.25s ease-in-out,
           filter 0.25s ease-in-out !important;
         display: block;
+      }
+      /* 编辑图标稍微大一点 */
+      .top-actions .badge-edit .icon-svg {
+        width: 16px !important;
+        height: 16px !important;
       }
 
       /* ============================================================
@@ -2227,6 +2280,22 @@
         overflow: hidden;
         position: relative;
         padding-top: 10px; /* 给拉手留出空间 */
+        transform-origin: var(--origin-x, center) var(--origin-y, center);
+        animation: growFromPoint 0.4s cubic-bezier(0.34, 1.2, 0.64, 1);
+      }
+
+      @keyframes growFromPoint {
+        0% {
+          opacity: 0;
+          transform: scale(0.2);
+        }
+        40% {
+          transform: scale(1.02);
+        }
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
       }
 
       /* 模态框顶部的小拉手 (暗示可滑动/抽屉感) */
@@ -4068,32 +4137,32 @@
          🌟 新增：Apple 级优雅消息提醒引擎 (基于现有的 #app)
          ============================================================ */
 
-      /* 入场：Q弹重力下坠 */
+      /* 入场动画：从上方掉落 + 果冻弹跳 */
       .toast-enter-active {
         transition:
-          transform 0.65s cubic-bezier(0.34, 1.56, 0.64, 1),
-          opacity 0.4s ease-out;
-        will-change: transform, opacity;
-      }
-
-      /* 退场：丝滑加速溜走 (绝不能Q弹，否则会抽搐) */
-      .toast-leave-active {
-        position: absolute;
-        transition:
-          transform 0.4s cubic-bezier(0.3, 0, 0.8, 0.15),
+          transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1),
           opacity 0.3s ease-out;
       }
 
-      /* 入场起点：从上方 40px 处开始 */
+      /* 入场起点：从上方 -60px 掉落，轻微压缩（使用 !important 确保覆盖基础样式） */
       .toast-enter-from {
-        opacity: 0;
-        transform: translateY(-40px) scale(0.9);
+        opacity: 0 !important;
+        transform: translateY(-60px) scale(0.92) !important;
       }
 
-      /* 退场终点：回到上方消失 */
+      /* 入场终点：归位到原位 */
+      .toast-enter-to {
+        opacity: 1 !important;
+        transform: translateY(0) scale(1) !important;
+      }
+
+      /* 退场动画：优雅滑出并淡出 */
+      .toast-leave-active {
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      }
       .toast-leave-to {
-        opacity: 0;
-        transform: translateY(-30px) scale(0.95);
+        opacity: 0 !important;
+        transform: translateY(-20px) scale(0.96) !important;
       }
 
       /* 通知悬浮池：全局遮罩层，挂载在 #app 内部的最顶层 */
@@ -4115,20 +4184,20 @@
         align-items: center;
         gap: 12px;
         padding: 10px 20px 10px 12px;
-        border-radius: 100px;
+        border-radius: 32px; /* 更圆润 */
         pointer-events: auto;
 
-        background: rgba(255, 255, 255, 0.75);
-        backdrop-filter: blur(24px) saturate(200%);
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(25px) saturate(180%);
         -webkit-backdrop-filter: blur(24px) saturate(200%);
 
         box-shadow:
-          inset 0 0 0 1px rgba(255, 255, 255, 1),
-          0 8px 24px rgba(0, 0, 0, 0.06),
-          0 2px 6px rgba(0, 0, 0, 0.02);
+          0 8px 28px rgba(0, 0, 0, 0.12),
+          0 0 0 0.5px rgba(0, 0, 0, 0.02),
+          inset 0 0.5px 0 rgba(255, 255, 255, 0.6);
 
-        /* 入场动画的目标状态 */
-        transform: translateY(0) scale(1) rotate(0deg);
+        /* 默认状态（非动画时的最终状态） */
+        transform: translateY(0) scale(1);
         opacity: 1;
 
         /* 提前创建合成层，防止过渡闪烁 */
@@ -6097,38 +6166,6 @@
 
               <div class="top-actions">
                 <!-- 编辑摘要按钮 -->
-                <span
-                  class="badge-edit"
-                  :class="{ 'is-editing': isEditingSummary }"
-                  @click="startEditSummary"
-                  :data-tooltip="isEditingSummary ? '编辑中' : '编辑摘要'"
-                >
-                  <svg
-                    class="icon-svg"
-                    version="1.1"
-                    xmlns="http://www.w3.org/2000/svg"
-                    xmlns:xlink="http://www.w3.org/1999/xlink"
-                    viewBox="0 0 24.2213 23.8364"
-                  >
-                    <g>
-                      <rect
-                        height="23.8364"
-                        opacity="0"
-                        width="24.2213"
-                        x="0"
-                        y="0"
-                      />
-                      <path
-                        d="M17.0972 3.41676L14.9485 5.5654L7.42176 5.5654C6.02826 5.5654 5.24117 6.3556 5.24117 7.7491L5.24117 16.7593C5.24117 18.1595 6.02826 18.943 7.42176 18.943L16.4382 18.943C17.8383 18.943 18.6157 18.1595 18.6157 16.7593L18.6157 9.30545L20.7732 7.14445C20.787 7.31256 20.7935 7.48655 20.7935 7.6657L20.7935 16.8494C20.7935 19.5912 19.267 21.1177 16.5251 21.1177L7.33481 21.1177C4.59962 21.1177 3.06645 19.5912 3.06645 16.8494L3.06645 7.6657C3.06645 4.92385 4.59962 3.39069 7.33481 3.39069L16.5251 3.39069C16.7228 3.39069 16.9141 3.39865 17.0972 3.41676Z"
-                        fill="currentColor"
-                      />
-                      <path
-                        d="M10.1689 14.448L12.2191 13.5993L20.98 4.84507L19.3719 3.25344L10.6208 12.0045L9.73883 14.0082C9.62965 14.2705 9.91502 14.5479 10.1689 14.448ZM21.743 4.08871L22.4089 3.40642C22.8186 2.98343 22.8341 2.39668 22.4306 2.00609L22.1501 1.72203C21.7946 1.37272 21.1919 1.43352 20.7951 1.82365L20.135 2.4802Z"
-                        fill="currentColor"
-                      />
-                    </g>
-                  </svg>
-                </span>
 
                 <span
                   v-if="activeArticle.parsedAttachments && activeArticle.parsedAttachments.length > 0"
@@ -6159,6 +6196,39 @@
                     </g>
                   </svg>
                   {{ activeArticle.parsedAttachments.length }}
+                </span>
+
+                <span
+                  class="badge-edit"
+                  :class="{ 'is-editing': isEditingSummary }"
+                  @click="startEditSummary"
+                  :data-tooltip="isEditingSummary ? '编辑中' : '编辑摘要'"
+                >
+                  <svg
+                    class="icon-svg"
+                    version="1.1"
+                    xmlns="http://www.w3.org/2000/svg"
+                    xmlns:xlink="http://www.w3.org/1999/xlink"
+                    viewBox="0 0 25.0262 24.5841"
+                  >
+                    <g>
+                      <rect
+                        height="24.5841"
+                        opacity="0"
+                        width="25.0262"
+                        x="0"
+                        y="0"
+                      />
+                      <path
+                        d="M17.1068 3.49972L14.0923 6.51418L7.91133 6.51418C6.80963 6.51418 6.1924 7.13888 6.1924 8.24057L6.1924 17.0678C6.1924 18.1718 6.80963 18.7942 7.91133 18.7942L16.7535 18.7942C17.8575 18.7942 18.465 18.1718 18.465 17.0678L18.465 10.9546L21.4885 7.92741C21.4919 7.95874 21.4921 7.99254 21.4921 8.02652L21.4921 17.2842C21.4921 20.1872 19.8654 21.8139 16.9624 21.8139L7.70243 21.8139C4.80173 21.8139 3.17275 20.1872 3.17275 17.2842L3.17275 8.02652C3.17275 5.12352 4.80173 3.49454 7.70243 3.49454L16.9624 3.49454C17.0119 3.49454 17.061 3.49501 17.1068 3.49972Z"
+                        fill="currentColor"
+                      />
+                      <path
+                        d="M10.9503 14.6651L13.2052 13.7902L21.4609 5.53689L19.4739 3.56199L11.228 11.8079L10.3416 14.0467C10.1889 14.444 10.6006 14.7954 10.9503 14.6651ZM22.2805 4.71955L22.8941 4.09388C23.4127 3.57072 23.45 2.81847 22.9463 2.33207L22.5874 1.97832C22.1579 1.56367 21.3809 1.65496 20.8796 2.15398L20.2935 2.74519Z"
+                        fill="currentColor"
+                      />
+                    </g>
+                  </svg>
                 </span>
 
                 <span
@@ -7130,7 +7200,15 @@
               // 2. 执行重置逻辑
               resetPromptInEditor();
 
-              // 3. 0.6秒（动画时长）后恢复状态，允许再次点击
+              // 3. 显示提示
+              showNotification(
+                "重置成功",
+                "提示词已恢复为默认值",
+                "success",
+                2000,
+              );
+
+              // 4. 0.6秒（动画时长）后恢复状态，允许再次点击
               setTimeout(() => {
                 isResettingPrompt.value = false;
               }, 600);
@@ -8394,7 +8472,7 @@
 ## 视觉与排版铁律 (Markdown规范)
 - 禁用代码块：输出内容严禁使用 \`\`\` 包裹为代码块。
 - 标题层级：正文一级板块必须使用 \### (三级标题) 开头。
-- 列表化表达：凡涉及多个并列项，一律使用无序列表 \- 或有序列表 1. 。
+- 列表化表达：凡涉及多个并列项，一律使用无序列表 \- 或有序列表 1. 。列表禁止使用任何emoji表情符号。
 - 高亮强调：对关键信息需进行加粗强调。注意：加粗符号与其前后的非加粗文字之间必须保留一个半角空格（例如：地点设在 ** \<loc\>大礼堂\</loc\> ** 举行）。
 - 信息缺失处理：若原文未提及时间/地点，请忽略或备注"详见原文"，绝对禁止编造。
 
@@ -8420,27 +8498,23 @@
 {raw_text}
 `;
 
-            // 🌟 开启设置面板 (卡片化模式)
-            const openSettings = async () => {
-              // 🌟 修改：不再支持点击退出，点击就是进入设置
-              // 如果已打开，不做任何操作（避免与托盘菜单冲突）
-              if (isSettingsOpen.value) {
-                return;
-              }
+            // 打开设置时，记录触发按钮位置
+            const openSettings = (event) => {
+              const btn = event.currentTarget;
+              const rect = btn.getBoundingClientRect();
 
+              // 添加 CSS 变量作为动画起点
+              document.documentElement.style.setProperty(
+                "--origin-x",
+                rect.left + rect.width / 2 + "px",
+              );
+              document.documentElement.style.setProperty(
+                "--origin-y",
+                rect.top + rect.height / 2 + "px",
+              );
+
+              // 触发缩放生长动画
               isSettingsOpen.value = true;
-
-              // 🌟 神奇魔法：自动滚动到顶部，让用户亲眼看到这张卡片顺滑地"挤"出来
-              setTimeout(() => {
-                const listView = document.querySelector(".list-view");
-                if (listView) listView.scrollTo({ top: 0, behavior: "smooth" });
-              }, 50);
-
-              // 呼叫后端加载配置
-              const res = await pywebview.api.load_config();
-              if (res.status === "success") {
-                config.value = { ...config.value, ...res.data };
-              }
             };
 
             // 🌟 新增：关闭设置面板
@@ -9544,7 +9618,7 @@
                     "API 余额不足",
                     "请充值后重试",
                     "error",
-                    4000,
+                    6000,
                   );
                   // 进入倒计时状态
                   startCooldown(COOLDOWN_SECONDS);
@@ -9557,6 +9631,9 @@
 
               isCancelledFlag.value = false; // 🌟 2. 每次重新开始更新时，重置拦截标记
               taskCompleted.value = false; // 🌟 重置任务完成标志
+
+              // 显示检查提示
+              showNotification("执行更新", "正在获取最新内容", "info", 2000);
 
               // 🌟 清除之前的取消标志，为新任务做准备
               try {
