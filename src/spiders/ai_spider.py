@@ -62,7 +62,7 @@ class AiSpider(BaseSpider):
             response = self._safe_get(target_url)
             if not response: continue
 
-            soup = BeautifulSoup(response.text, 'html.parser')
+            soup = BeautifulSoup(response.text, 'lxml')
 
             container = soup.find('div', class_='havePictureList_list') or \
                         soup.find('div', class_='news_list') or \
@@ -112,7 +112,7 @@ class AiSpider(BaseSpider):
                 date_str = time_more.get_text(strip=True)
 
         # 🌟 核心防御网：解决 html.parser 暴力切开 <a> 和 <div> 的 Bug！
-        # 如果 a 标签内是空的，我们就顺藤摸瓜去找它隔壁的“兄弟节点”
+        # 如果 a 标签内是空的，我们就顺藤摸瓜去找它隔壁的"兄弟节点"
         if not title or not date_str:
             next_sibling = a_tag.find_next_sibling()
             info_plate = None
@@ -123,7 +123,7 @@ class AiSpider(BaseSpider):
             elif next_sibling and 'info_plate' in next_sibling.get('class', []):
                 info_plate = next_sibling
 
-            # 如果找到了跑出来的“兄弟节点”，从中抓取丢失的标题和时间
+            # 如果找到了跑出来的"兄弟节点"，从中抓取丢失的标题和时间
             if info_plate:
                 if not title:
                     h4 = info_plate.find('h4', class_='text_single_lines')
@@ -153,7 +153,7 @@ class AiSpider(BaseSpider):
     def _normalize_date(self, date_str: str) -> str:
         """
         🔥 降维打击时间清洗：放弃字符串替换，直接强制抠取数字。
-        无视不可见字符、乱码前缀、以及结尾的“日”字。
+        无视不可见字符、乱码前缀、以及结尾的"日"字。
         """
         if not date_str: return ""
         

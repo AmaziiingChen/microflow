@@ -89,7 +89,7 @@ class CepSpider(BaseSpider):
 
             logger.debug(f"[{self.SOURCE_NAME}] HTML 长度: {len(html_content)}")
 
-            soup = BeautifulSoup(html_content, 'html.parser')
+            soup = BeautifulSoup(html_content, 'lxml')
 
             # 🔧 核心：精准锁定右侧新闻列表区域
             container = soup.select_one('.main_list.fr')
@@ -219,7 +219,7 @@ class CepSpider(BaseSpider):
         if not response:
             return None
 
-        soup = BeautifulSoup(response.text, 'html.parser')
+        soup = BeautifulSoup(response.text, 'lxml')
 
         title = ""
         title_tag = soup.find('h1') or soup.find('title')

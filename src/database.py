@@ -178,11 +178,13 @@ class WriteWorker:
     - 单连接，避免 SQLite 写锁冲突
     - 异步提交，不阻塞调用线程
     - 同步等待结果（可选）
+    - 🌟 队列满时自动重试（默认 3 次）
     """
 
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, queue_size: int = 500):
         self._db_path = db_path
-        self._task_queue: queue.Queue[WriteTask] = queue.Queue(maxsize=100)
+        self._task_queue: queue.Queue[WriteTask] = queue.Queue(maxsize=queue_size)
+        self._queue_size = queue_size
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._conn: Optional[sqlite3.Connection] = None
@@ -266,7 +268,7 @@ class WriteWorker:
                 pass
         logger.info("写入线程已停止")
 
-    def submit(self, operation: Callable[[sqlite3.Cursor], Any], wait: bool = True, timeout: float = 10.0) -> Any:
+    def submit(self, operation: Callable[[sqlite3.Cursor], Any], wait: bool = True, timeout: float = 10.0, retries: int = 3) -> Any:
         """
         提交写操作
 
@@ -274,6 +276,7 @@ class WriteWorker:
             operation: 接收 cursor 的操作函数
             wait: 是否等待结果
             timeout: 等待超时时间
+            retries: 队列满时的重试次数（每次间隔 0.1 秒）
 
         Returns:
             操作结果（如果 wait=True）
@@ -286,12 +289,21 @@ class WriteWorker:
             result_event=threading.Event()
         )
 
-        try:
-            self._task_queue.put(task, block=False)
-        except queue.Full:
-            with self._stats_lock:
-                self._stats['queue_full'] += 1
-            raise RuntimeError("写队列已满，请稍后重试")
+        # 🌟 重试机制：队列满时自动重试
+        for attempt in range(retries):
+            try:
+                self._task_queue.put(task, block=False)
+                break  # 成功入队，退出重试循环
+            except queue.Full:
+                with self._stats_lock:
+                    self._stats['queue_full'] += 1
+                if attempt == retries - 1:
+                    # 最后一次重试仍失败，抛出异常
+                    logger.error(f"写队列已满，重试 {retries} 次后仍失败")
+                    raise RuntimeError("写队列已满，请稍后重试")
+                # 等待 0.1 秒后重试
+                import time
+                time.sleep(0.1)
 
         if wait:
             # 等待结果
@@ -389,6 +401,8 @@ class DatabaseManager:
                     raw_text TEXT,
                     raw_hash TEXT NOT NULL,
                     is_read INTEGER DEFAULT 0,
+                    is_favorite INTEGER DEFAULT 0,
+                    is_deleted INTEGER DEFAULT 0,
                     source_name TEXT DEFAULT '公文通',
                     created_at TIMESTAMP DEFAULT (datetime('now', 'localtime'))
                 )
@@ -415,6 +429,12 @@ class DatabaseManager:
                 logger.info("正在执行 is_favorite 字段迁移...")
                 cursor.execute("ALTER TABLE articles ADD COLUMN is_favorite INTEGER DEFAULT 0")
                 logger.info("is_favorite 字段迁移完成")
+
+            # 🌟 新增：is_deleted 字段迁移（软删除标记）
+            if 'is_deleted' not in columns:
+                logger.info("正在执行 is_deleted 字段迁移...")
+                cursor.execute("ALTER TABLE articles ADD COLUMN is_deleted INTEGER DEFAULT 0")
+                logger.info("is_deleted 字段迁移完成")
 
             return True
 
@@ -539,6 +559,9 @@ class DatabaseManager:
             conditions = []
             params = []
 
+            # 🌟 软删除过滤：只显示未删除的文章
+            conditions.append("is_deleted = 0")
+
             # 收藏筛选
             if favorites_only:
                 conditions.append("is_favorite = 1")
@@ -597,14 +620,14 @@ class DatabaseManager:
 
             if source_names is None:
                 # None: 不过滤
-                cursor.execute("SELECT COUNT(*) FROM articles WHERE is_read = 0")
+                cursor.execute("SELECT COUNT(*) FROM articles WHERE is_read = 0 AND is_deleted = 0")
             elif len(source_names) == 0:
                 # 空列表: 返回 0
                 return 0
             else:
                 # 有内容: 统计指定来源
                 placeholders = ','.join('?' * len(source_names))
-                query = f"SELECT COUNT(*) FROM articles WHERE is_read = 0 AND source_name IN ({placeholders})"
+                query = f"SELECT COUNT(*) FROM articles WHERE is_read = 0 AND is_deleted = 0 AND source_name IN ({placeholders})"
                 cursor.execute(query, tuple(source_names))
 
             row = cursor.fetchone()
@@ -633,7 +656,7 @@ class DatabaseManager:
                 # None: 不过滤
                 cursor.execute("""
                     SELECT * FROM articles
-                    WHERE is_read = 0
+                    WHERE is_read = 0 AND is_deleted = 0
                     ORDER BY COALESCE(NULLIF(exact_time, ''), date || ' 00:00:00') DESC
                     LIMIT 1
                 """)
@@ -642,7 +665,7 @@ class DatabaseManager:
                 placeholders = ','.join('?' * len(source_names))
                 query = f"""
                     SELECT * FROM articles
-                    WHERE is_read = 0 AND source_name IN ({placeholders})
+                    WHERE is_read = 0 AND is_deleted = 0 AND source_name IN ({placeholders})
                     ORDER BY COALESCE(NULLIF(exact_time, ''), date || ' 00:00:00') DESC
                     LIMIT 1
                 """
@@ -731,7 +754,7 @@ class DatabaseManager:
                 base_condition = "(" + " OR ".join(sql_or_conditions) + ")"
 
             # 🌟 构建额外条件
-            extra_conditions = []
+            extra_conditions = ["is_deleted = 0"]  # 🌟 软删除过滤
             if source_name:
                 extra_conditions.append("source_name = ?")
                 params.append(source_name)
@@ -1021,13 +1044,43 @@ class DatabaseManager:
             logger.error(f"更新摘要失败: {e}")
             return False
 
+    def delete_article(self, article_id: int, hard_delete: bool = False) -> bool:
+        """
+        删除文章
+
+        Args:
+            article_id: 文章 ID
+            hard_delete: True 为物理删除（清除记录，允许重新抓取），
+                        False 为软删除（屏蔽，不再抓取）
+
+        Returns:
+            是否删除成功
+        """
+        def do_delete(cursor: sqlite3.Cursor):
+            if hard_delete:
+                cursor.execute("DELETE FROM articles WHERE id = ?", (article_id,))
+                logger.info(f"硬删除文章: id={article_id}")
+            else:
+                cursor.execute("UPDATE articles SET is_deleted = 1 WHERE id = ?", (article_id,))
+                logger.info(f"软删除文章: id={article_id}")
+            return cursor.rowcount > 0
+
+        try:
+            return self._write_worker.submit(do_delete, wait=True, timeout=5.0)
+        except Exception as e:
+            logger.error(f"删除文章失败: {e}")
+            return False
+
     # ==================== 管理 ====================
 
     def get_stats(self) -> Dict[str, Any]:
         """获取统计信息"""
+        write_stats = self._write_worker.get_stats()
         return {
-            'write_stats': self._write_worker.get_stats(),
-            'write_queue_size': self._write_worker.get_queue_size()
+            'write_stats': write_stats,
+            'write_queue_size': self._write_worker.get_queue_size(),
+            'write_queue_max_size': self._write_worker._queue_size,
+            'queue_full_count': write_stats.get('queue_full', 0)
         }
 
     def close(self):

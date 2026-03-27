@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Apple Style Dynamic Dock</title>
+    <style>
+      :root {
+        --bg-color: #f3f4f6;
+        --glass-bg: rgba(255, 255, 255, 0.65);
+        --btn-bg: rgba(0, 0, 0, 0.06);
+        /* Apple 级经典物理弹簧曲线：前段极速，中段过冲，尾段柔和收敛 */
+        --apple-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+        /* 丝滑过渡曲线，用于非弹跳的属性变化 */
+        --apple-smooth: cubic-bezier(0.32, 0.72, 0, 1);
+      }
+
+      body {
+        margin: 0;
+        height: 100vh;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        background: var(--bg-color);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        padding-bottom: 50px;
+      }
+
+      /* 底部高透玻璃容器 */
+      .dynamic-dock {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px;
+        background: var(--glass-bg);
+        backdrop-filter: blur(20px) saturate(180%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
+        border-radius: 30px;
+        box-shadow:
+          0 16px 40px rgba(0, 0, 0, 0.08),
+          inset 0 1px 1px rgba(255, 255, 255, 0.4);
+        width: 400px;
+        transition: all 0.6s var(--apple-smooth);
+      }
+
+      /* === 左侧：搜索容器 === */
+      .search-container {
+        position: relative;
+        height: 44px;
+        background: var(--btn-bg);
+        border-radius: 22px;
+        width: 44px; /* 初始状态是圆形 */
+        flex-grow: 0;
+        transition:
+          width 0.7s var(--apple-spring),
+          flex-grow 0.7s var(--apple-spring),
+          background 0.4s ease;
+        overflow: hidden;
+        cursor: pointer;
+      }
+
+      /* 激活态：霸占空间 */
+      .dynamic-dock.is-searching .search-container {
+        width: 100%;
+        flex-grow: 1;
+        background: rgba(0, 0, 0, 0.04);
+        cursor: default;
+      }
+
+      .search-input {
+        width: 100%;
+        height: 100%;
+        border: none;
+        background: transparent;
+        outline: none;
+        padding: 0 44px 0 16px;
+        font-size: 14px;
+        font-weight: 600;
+        opacity: 0;
+        transform: translateX(10px);
+        transition:
+          opacity 0.4s ease,
+          transform 0.6s var(--apple-smooth);
+      }
+
+      .dynamic-dock.is-searching .search-input {
+        opacity: 1;
+        transform: translateX(0);
+      }
+
+      .icon-search {
+        position: absolute;
+        right: 0;
+        top: 0;
+        width: 44px;
+        height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none; /* 让点击穿透到父容器 */
+      }
+
+      /* === 右侧：被挤压的按钮组 === */
+      .action-group {
+        display: flex;
+        gap: 8px;
+        flex-shrink: 0;
+        /* 强制开启硬件加速，防止形变时掉帧 */
+        will-change: transform;
+      }
+
+      .btn-circle {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: var(--btn-bg);
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #111;
+        transition:
+          background 0.2s ease,
+          transform 0.2s ease;
+      }
+
+      .btn-circle:hover {
+        background: rgba(0, 0, 0, 0.1);
+        transform: scale(1.05);
+      }
+
+      .btn-circle:active {
+        transform: scale(0.92);
+      }
+
+      /* =========================================
+       ✨ 核心魔法：物理碰撞与回弹动画 
+       ========================================= */
+
+      /* 1. 展开时的撞击挤压 (由于搜索框在 0.7s 内展开，撞击发生在约 0.2s 处) */
+      .dynamic-dock.is-searching .action-group {
+        animation: squish-hit 0.8s var(--apple-spring) forwards;
+      }
+
+      /* 2. 收起时的真空回拉 */
+      .dynamic-dock:not(.is-searching) .action-group {
+        animation: vacuum-pull 0.7s var(--apple-spring) forwards;
+      }
+
+      /* 撞击挤压关键帧：遵循体积守恒原则 (X轴压缩，Y轴就必须拉长) */
+      @keyframes squish-hit {
+        0% {
+          transform: scale(1) translateX(0);
+        }
+        15% {
+          transform: scale(1) translateX(0);
+        } /* 前期等待搜索框冲过来 */
+        35% {
+          transform: scaleX(0.85) scaleY(1.08) translateX(6px);
+        } /* 被狠狠撞击，变扁，向右位移 */
+        60% {
+          transform: scaleX(1.04) scaleY(0.96) translateX(-2px);
+        } /* 弹性反弹，略微拉伸 */
+        85% {
+          transform: scaleX(0.98) scaleY(1.02) translateX(1px);
+        } /* 余震 */
+        100% {
+          transform: scale(1) translateX(0);
+        } /* 恢复平静 */
+      }
+
+      /* 真空回拉关键帧：搜索框缩回，产生向左的拉力 */
+      @keyframes vacuum-pull {
+        0% {
+          transform: scale(1) translateX(0);
+        }
+        30% {
+          transform: scaleX(1.06) scaleY(0.94) translateX(-5px);
+        } /* 被向左吸扯拉长 */
+        55% {
+          transform: scaleX(0.95) scaleY(1.03) translateX(2px);
+        } /* 弹回 */
+        80% {
+          transform: scaleX(1.01) scaleY(0.99) translateX(-1px);
+        } /* 余震 */
+        100% {
+          transform: scale(1) translateX(0);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="dynamic-dock" id="dock">
+      <div class="search-container" id="searchBtn">
+        <input
+          type="text"
+          class="search-input"
+          placeholder="搜索公文..."
+          id="searchInput"
+        />
+        <div class="icon-search">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+        </div>
+      </div>
+
+      <div class="action-group">
+        <button class="btn-circle">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <circle cx="12" cy="12" r="3"></circle>
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+            ></path>
+          </svg>
+        </button>
+        <button class="btn-circle">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+            <path d="M21 3v5h-5"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <script>
+      const dock = document.getElementById("dock");
+      const searchBtn = document.getElementById("searchBtn");
+      const searchInput = document.getElementById("searchInput");
+
+      // 点击搜索框区域展开
+      searchBtn.addEventListener("click", (e) => {
+        if (!dock.classList.contains("is-searching")) {
+          dock.classList.add("is-searching");
+          setTimeout(() => searchInput.focus(), 300); // 留出形变时间
+        }
+      });
+
+      // 点击空白处收起
+      document.addEventListener("click", (e) => {
+        if (!dock.contains(e.target)) {
+          dock.classList.remove("is-searching");
+          searchInput.value = ""; // 收起时清空
+        }
+      });
+
+      // 按 Esc 收起
+      searchInput.addEventListener("keyup", (e) => {
+        if (e.key === "Escape") {
+          dock.classList.remove("is-searching");
+          searchInput.value = "";
+          searchInput.blur();
+        }
+      });
+    </script>
+  </body>
+</html>

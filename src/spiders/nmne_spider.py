@@ -82,7 +82,7 @@ class NmneSpider(BaseSpider):
             if not response:
                 continue
 
-            soup = BeautifulSoup(response.text, 'html.parser')
+            soup = BeautifulSoup(response.text, 'lxml')
 
             # 查找所有文章条目（<li id="line_u9_0"> 格式）
             li_tags = soup.find_all('li', id=re.compile(r'line_u9_\d+'))

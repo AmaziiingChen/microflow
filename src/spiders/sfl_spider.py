@@ -68,7 +68,7 @@ class SflSpider(BaseSpider):
             if not response:
                 continue
 
-            soup = BeautifulSoup(response.text, 'html.parser')
+            soup = BeautifulSoup(response.text, 'lxml')
 
             # SFL 列表通常在 ul.news_fly 中
             ul_tags = soup.find_all('ul', class_='news_fly')

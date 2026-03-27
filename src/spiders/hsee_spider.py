@@ -57,7 +57,7 @@ class HseeSpider(BaseSpider):
                 continue
 
             response.encoding = response.apparent_encoding or 'utf-8'
-            soup = BeautifulSoup(response.text, 'html.parser')
+            soup = BeautifulSoup(response.text, 'lxml')
             page_articles = []
 
             # 🌟 核心修复：根据板块采用异构解析逻辑

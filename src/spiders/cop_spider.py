@@ -84,7 +84,7 @@ class CopSpider(BaseSpider):
 
             logger.debug(f"[{self.SOURCE_NAME}] HTML 长度: {len(html_content)}")
 
-            soup = BeautifulSoup(html_content, 'html.parser')
+            soup = BeautifulSoup(html_content, 'lxml')
 
             items = soup.find_all('li')
             logger.info(f"[{self.SOURCE_NAME}] 找到 {len(items)} 个 li 元素")

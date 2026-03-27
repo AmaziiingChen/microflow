@@ -2058,6 +2058,178 @@
         transform: rotate(90deg);
       }
 
+      /* 🗑️ 删除按钮（黑色，默认透明，悬停显示） */
+      .btn-delete {
+        background: transparent;
+        opacity: 0;
+        transition: all 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+      }
+      .btn-delete:hover {
+        background: rgba(0, 0, 0, 0.85);
+        opacity: 1;
+      }
+      .btn-delete:active {
+        background: rgba(0, 0, 0, 0.95);
+      }
+
+      /* 父容器悬停时删除按钮浅浅显示 */
+      .btn-group:hover .btn-delete {
+        opacity: 0.35;
+      }
+      .btn-group:hover .btn-delete:hover {
+        opacity: 1;
+      }
+
+      /* 🗑️ 垃圾桶盖子动画（延迟 0.1s 让用户先看到完整图标） */
+      .trash-icon .lid {
+        transition: transform 0.4s cubic-bezier(0.19, 1, 0.22, 1) 0.3s;
+        transform-origin: 10.96px 6.32px;
+      }
+
+      /* 🗑️ 垃圾桶桶身动画（延迟 0.1s） */
+      .trash-icon .body {
+        transition: transform 0.4s cubic-bezier(0.19, 1, 0.22, 1) 0.1s;
+        transform-origin: center center;
+      }
+
+      /* 悬停时盖子抬起（延迟 0.1s） */
+      .btn-delete:hover .trash-icon .lid {
+        transform: translateY(-4px) rotate(-8deg);
+      }
+
+      /* 悬停时桶身微拉伸（延迟 0.1s） */
+      .btn-delete:hover .trash-icon .body {
+        transform: scaleY(1.01);
+      }
+
+      /* 点击时盖子高高跳起（无延迟，响应迅速） */
+      .btn-delete:active .trash-icon .lid {
+        transform: translateY(-24px) rotate(-20deg);
+        transition: transform 0.2s cubic-bezier(0.1, 0.9, 0.2, 1) 0s;
+      }
+
+      /* 点击时桶身收缩（无延迟） */
+      .btn-delete:active .trash-icon .body {
+        transform: scale(0.9) translateY(4px);
+        transition: transform 0.2s cubic-bezier(0.1, 0.9, 0.2, 1) 0s;
+      }
+
+      /* 🗑️ 删除确认弹窗 */
+      .delete-confirm-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        animation: fade-in 0.2s ease;
+      }
+
+      .delete-confirm-modal {
+        background: var(--card-bg, #ffffff);
+        border-radius: 16px;
+        padding: 24px;
+        max-width: 320px;
+        width: 90%;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        animation: scale-in 0.2s ease;
+      }
+
+      @keyframes fade-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+
+      @keyframes scale-in {
+        from { transform: scale(0.9); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+      }
+
+      .delete-confirm-header {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+
+      .delete-confirm-icon {
+        width: 48px;
+        height: 48px;
+        color: #666;
+        margin-bottom: 8px;
+      }
+
+      .delete-confirm-header h3 {
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text-primary, #333);
+        margin: 0;
+      }
+
+      .delete-confirm-message {
+        text-align: center;
+        color: var(--text-secondary, #999);
+        font-size: 13px;
+        margin-bottom: 20px;
+      }
+
+      .delete-confirm-options {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .delete-option {
+        padding: 14px 18px;
+        border: none;
+        border-radius: 12px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s ease;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+        text-align: left;
+      }
+
+      /* 🟢 重新抓取 - 绿色（推荐） */
+      .delete-option-hard {
+        background: #e8f5e9;
+        color: #2e7d32;
+      }
+      .delete-option-hard:hover {
+        background: #c8e6c9;
+      }
+
+      /* 🔴 屏蔽此文 - 红色（警告） */
+      .delete-option-soft {
+        background: #ffebee;
+        color: #c62828;
+      }
+      .delete-option-soft:hover {
+        background: #ffcdd2;
+      }
+
+      .delete-option .option-title {
+        font-weight: 600;
+        font-size: 15px;
+        line-height: 1.3;
+      }
+
+      .delete-option .option-desc {
+        font-size: 12px;
+        opacity: 0.7;
+        font-weight: 400;
+        line-height: 1.4;
+      }
+
+      /* 移除旧的取消按钮样式 */
+
       /* 🌟 收藏按钮 (金色) */
       .btn-favorite {
         background: #b8860b;
@@ -2244,7 +2416,7 @@
         align-items: center;
       }
       .form-group {
-        margin-bottom: 20px;
+        margin-bottom: 8px;
       }
       .form-label {
         display: block;
@@ -4435,6 +4607,28 @@
         gap: 10px;
       }
 
+      /* 🌟 订阅管理网格布局（公文通单独一行，其余两列） */
+      .subs-grid-container {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .subs-row-first {
+        display: flex;
+        width: 100%;
+      }
+
+      .subs-row-first .subs-chip {
+        flex: 1;
+      }
+
+      .subs-grid-columns {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+      }
+
       .subscriber-tags {
         display: flex;
         flex-wrap: wrap;
@@ -4540,7 +4734,7 @@
         font-size: 13px;
         color: #6b7280;
         line-height: 1.5;
-        max-height: 80px;
+        max-height: 25px;
         overflow: hidden;
         text-overflow: ellipsis;
         display: -webkit-box;
@@ -4874,6 +5068,150 @@
         font-size: 13px;
       }
 
+      /* ============================================================
+         备选模型配置卡片样式
+         ============================================================ */
+      .secondary-models-card {
+        overflow: hidden;
+      }
+
+      .secondary-models-content {
+        overflow: hidden;
+        transition: all 0.3s ease;
+      }
+
+      .secondary-models-list {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .secondary-model-item {
+        background: #f5f5f7;
+        border-radius: 10px;
+        padding: 14px;
+        border: 1px solid #e9e9ef;
+      }
+
+      .model-item-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+
+      .model-index {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-main);
+      }
+
+      .btn-remove-model {
+        background: transparent;
+        border: none;
+        color: #86868b;
+        cursor: pointer;
+        padding: 4px;
+        border-radius: 6px;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .btn-remove-model:hover {
+        background: #ff3b30;
+        color: white;
+      }
+
+      .model-field {
+        margin-bottom: 10px;
+      }
+
+      .model-field:last-of-type {
+        margin-bottom: 0;
+      }
+
+      .model-field label {
+        display: block;
+        font-size: 12px;
+        color: #86868b;
+        margin-bottom: 4px;
+        font-weight: 500;
+      }
+
+      .model-field .settings-input {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #e9e9ef;
+        border-radius: 6px;
+        font-size: 13px;
+        background: white;
+        transition: all 0.2s;
+      }
+
+      .model-field .settings-input:focus {
+        outline: none;
+        border-color: #007aff;
+        box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+      }
+
+      .model-field .input-with-toggle {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .model-field .input-with-toggle .settings-input {
+        flex: 1;
+      }
+
+      .model-test-row {
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid #e9e9ef;
+        display: flex;
+        justify-content: flex-end;
+      }
+
+      .btn-add-secondary-model {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        width: 100%;
+        padding: 12px;
+        background: #f5f5f7;
+        border: 1px dashed #d1d1d6;
+        border-radius: 8px;
+        color: #007aff;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        margin-top: 8px;
+      }
+
+      .btn-add-secondary-model:hover {
+        background: #e8f4fd;
+        border-color: #007aff;
+      }
+
+      .model-count-hint {
+        color: #86868b;
+        font-weight: 400;
+      }
+
+      .model-limit-hint {
+        text-align: center;
+        color: #86868b;
+        font-size: 12px;
+        margin-top: 12px;
+        padding: 8px;
+        background: #f5f5f7;
+        border-radius: 6px;
+      }
+
       /* 规则向导弹窗 */
       .custom-rule-modal {
         max-width: 560px;
@@ -4889,7 +5227,7 @@
       .form-group {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 2px;
       }
 
       .form-label {
@@ -4998,6 +5336,139 @@
         word-break: break-all;
       }
 
+      /* 选择器微调面板 */
+      .selector-tuning-panel {
+        margin-top: 16px;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        overflow: hidden;
+        background: #fff;
+      }
+
+      .tuning-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 16px;
+        background: #f9fafb;
+        cursor: pointer;
+        user-select: none;
+        transition: background 0.2s ease;
+      }
+
+      .tuning-header:hover {
+        background: #f3f4f6;
+      }
+
+      .tuning-header svg {
+        color: #6b7280;
+      }
+
+      .tuning-header span {
+        flex: 1;
+        font-size: 13px;
+        font-weight: 500;
+        color: #374151;
+      }
+
+      .tuning-header .chevron {
+        transition: transform 0.2s ease;
+      }
+
+      .tuning-header .chevron.rotated {
+        transform: rotate(180deg);
+      }
+
+      .tuning-content {
+        padding: 16px;
+        border-top: 1px solid #e5e7eb;
+      }
+
+      .tuning-hint {
+        font-size: 12px;
+        color: #6b7280;
+        margin-bottom: 12px;
+        padding: 8px 12px;
+        background: #fef3c7;
+        border-radius: 6px;
+        border: 1px solid #fcd34d;
+      }
+
+      .selector-inputs {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .selector-group {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .selector-group label {
+        font-size: 12px;
+        font-weight: 500;
+        color: #374151;
+      }
+
+      .selector-group input {
+        padding: 8px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 13px;
+        font-family: 'SF Mono', 'Consolas', monospace;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      .selector-group input:focus {
+        outline: none;
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+      }
+
+      .selector-group input::placeholder {
+        color: #9ca3af;
+      }
+
+      .selector-inputs .divider {
+        height: 1px;
+        background: #e5e7eb;
+        margin: 4px 0;
+      }
+
+      .btn-retest {
+        margin-top: 16px;
+        width: 100%;
+        padding: 10px 16px;
+        background: linear-gradient(135deg, #3b82f6, #2563eb);
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      .btn-retest:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+      }
+
+      .btn-retest:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .btn-retest .spinner {
+        animation: spin 1s linear infinite;
+      }
+
       /* 自定义爬虫规则弹窗中的按钮图标样式 */
       .custom-rule-modal .btn-icon {
         display: flex;
@@ -5015,6 +5486,41 @@
 
       .custom-rule-modal .btn-icon:hover {
         background: #f3f4f6;
+      }
+
+      /* 专属 AI 提示词输入框 */
+      .custom-prompt-group {
+        padding: 12px;
+        background: #f9fafb;
+        border-radius: 8px;
+        border: 1px solid #e5e7eb;
+      }
+
+      .custom-prompt-group label {
+        font-size: 13px;
+        font-weight: 500;
+        color: #374151;
+      }
+
+      .custom-prompt-group .form-textarea {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 13px;
+        line-height: 1.5;
+        resize: vertical;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      .custom-prompt-group .form-textarea:focus {
+        outline: none;
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+      }
+
+      .custom-prompt-group .form-textarea::placeholder {
+        color: #9ca3af;
       }
 
       .custom-rule-modal .btn-icon.btn-danger:hover {
@@ -5725,7 +6231,6 @@
 
             <!-- 5. 测试 API 连接卡片 -->
             <div class="list-card settings-card" @click.stop>
-              <div class="settings-card-title">API 连接测试</div>
               <div
                 class="settings-card-actions"
                 style="justify-content: center; margin-top: 0"
@@ -5836,6 +6341,287 @@
               </div>
             </div>
 
+            <!-- 备选模型配置卡片 -->
+            <div
+              class="list-card settings-card secondary-models-card"
+              @click.stop
+            >
+              <div
+                class="settings-card-title"
+                style="cursor: pointer"
+                @click="toggleSecondaryModelsExpanded"
+              >
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <path
+                      d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
+                    />
+                  </svg>
+                  <span>备选模型</span>
+                </div>
+                <svg
+                  :style="{
+                    transform: secondaryModelsExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.3s ease'
+                  }"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </div>
+
+              <!-- 可展开的内容区域 -->
+              <div
+                class="secondary-models-content"
+                :style="{
+                  maxHeight: secondaryModelsExpanded ? '800px' : '0',
+                  opacity: secondaryModelsExpanded ? '1' : '0',
+                  padding: secondaryModelsExpanded ? '16px 0' : '0'
+                }"
+              >
+                <div class="settings-hint" style="margin-bottom: 12px">
+                  配置多个 AI 模型，用于自定义数据源规则生成时的多模型投票，提高准确率。建议配置 1-3 个备选模型。
+                </div>
+
+                <!-- 备选模型列表 -->
+                <div class="secondary-models-list">
+                  <div
+                    v-for="(model, index) in config.secondaryModels"
+                    :key="index"
+                    class="secondary-model-item"
+                  >
+                    <div class="model-item-header">
+                      <span class="model-index">模型 {{ index + 1 }}</span>
+                      <button
+                        class="btn-remove-model"
+                        @click="removeSecondaryModel(index)"
+                        title="移除此模型"
+                      >
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                        >
+                          <path d="M18 6L6 18M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    <div class="model-field">
+                      <label>Base URL</label>
+                      <input
+                        type="text"
+                        v-model="model.baseUrl"
+                        placeholder="https://api.openai.com/v1"
+                        class="settings-input"
+                      />
+                    </div>
+
+                    <div class="model-field">
+                      <label>API Key</label>
+                      <div class="settings-input-area" style="position: relative">
+                        <input
+                          :type="model.showApiKey ? 'text' : 'password'"
+                          v-model="model.apiKey"
+                          placeholder="sk-..."
+                          class="settings-input"
+                          :class="{ 'password-masked': !model.showApiKey }"
+                        />
+                        <button
+                          @click="model.showApiKey = !model.showApiKey"
+                          class="toggle-visibility-btn icon-only"
+                          type="button"
+                        >
+                          <!-- 睁眼图标 -->
+                          <svg
+                            v-if="!model.showApiKey"
+                            class="eye-icon"
+                            viewBox="0 0 26.6197 16.8374"
+                            fill="currentColor"
+                          >
+                            <path
+                              d="M13.3098 16.8213C21.3019 16.8213 26.6195 10.3876 26.6195 8.40883C26.6195 6.42631 21.2948-1.77636e-15 13.3098-1.77636e-15C5.43223-1.77636e-15-2.22045e-16 6.42631-2.22045e-16 8.40883C-2.22045e-16 10.3876 5.42796 16.8213 13.3098 16.8213ZM13.3134 13.6957C10.392 13.6957 8.02277 11.3339 8.02277 8.41246C8.02277 5.49103 10.392 3.12919 13.3134 3.12919C16.2349 3.12919 18.5967 5.49103 18.5967 8.41246C18.5967 11.3339 16.2349 13.6957 13.3134 13.6957ZM13.3134 10.4357C14.4336 10.4357 15.3366 9.53408 15.3366 8.41246C15.3366 7.29084 14.4336 6.38926 13.3134 6.38926C12.1918 6.38926 11.2902 7.29084 11.2902 8.41246C11.2902 9.53408 12.1918 10.4357 13.3134 10.4357Z"
+                            />
+                          </svg>
+                          <!-- 闭眼图标 -->
+                          <svg
+                            v-else
+                            class="eye-icon"
+                            viewBox="0 0 26.9912 21.0923"
+                            fill="currentColor"
+                          >
+                            <path
+                              d="M8.49127 8.38311C8.19258 9.04032 8.02853 9.77137 8.02853 10.5413C8.02853 13.4559 10.3954 15.8295 13.3167 15.8295C14.0874 15.8295 14.8201 15.6639 15.479 15.3626L18.2207 18.1012C16.7436 18.6313 15.095 18.9507 13.3136 18.9507C5.43373 18.9507 0 12.5139 0 10.5382C0 9.39596 1.80951 6.77052 4.8621 4.75818ZM26.6299 10.5382C26.6299 11.6476 24.9523 14.1638 22.0647 16.1567L18.2752 12.3693C18.4924 11.8013 18.608 11.1845 18.608 10.5413C18.608 7.61686 16.2345 5.25309 13.3167 5.25309C12.6722 5.25309 12.0548 5.36813 11.4865 5.5846L8.76719 2.8669C10.1549 2.40149 11.6818 2.1256 13.3136 2.1256C21.3031 2.1256 26.6299 8.55886 26.6299 10.5382ZM13.8547 13.7402C13.6806 13.7731 13.5004 13.7883 13.3167 13.7883C11.5238 13.7883 10.0697 12.3341 10.0697 10.5413C10.0697 10.3589 10.0847 10.18 10.1172 10.0071ZM16.5638 10.5413L16.5581 10.6533L13.2029 7.29997C13.24 7.2949 13.2783 7.29423 13.3167 7.29423C15.1127 7.29423 16.5638 8.7453 16.5638 10.5413Z"
+                            />
+                            <path
+                              d="M21.1859 19.2938C21.4975 19.612 22.0004 19.6254 22.3125 19.2938C22.6409 18.9622 22.6241 18.4855 22.3125 18.1672L5.61478 1.47931C5.30629 1.16771 4.79006 1.16771 4.47846 1.47931C4.17973 1.78114 4.17973 2.30714 4.47846 2.60587Z"
+                            />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="model-field">
+                      <label>Model Name</label>
+                      <input
+                        type="text"
+                        v-model="model.modelName"
+                        placeholder="gpt-4o-mini"
+                        class="settings-input"
+                      />
+                    </div>
+
+                    <!-- 单个模型测试按钮 -->
+                    <div class="model-test-row">
+                      <button
+                        class="test-connection-btn"
+                        @click="testSecondaryModelConnection(index)"
+                        :disabled="model.isTesting"
+                        style="display: inline-flex; align-items: center; gap: 6px"
+                      >
+                        <template v-if="model.isTesting">
+                          <div class="connection-status testing" style="margin: 0">
+                            <svg
+                              class="icon-antenna"
+                              viewBox="0 0 23 19"
+                              fill="currentColor"
+                              style="width: 14px; height: 14px"
+                            >
+                              <path
+                                class="wave-outer"
+                                d="M0 7.05773C0 9.60255 0.862072 11.9774 2.46764 13.6824C2.95053 14.1919 3.58435 14.1609 3.94343 13.7281C4.29009 13.3206 4.18312 12.8058 3.7974 12.3712C2.55402 10.9907 1.85886 9.11076 1.85886 7.05773C1.85886 5.00781 2.54781 3.13101 3.7974 1.75046C4.18623 1.31591 4.2963 0.801028 3.94343 0.393568C3.58125-0.0360787 2.94432-0.0764489 2.46764 0.439291C0.905547 2.11636 0 4.52222 0 7.05773ZM17.8045 13.7281C18.1635 14.1609 18.7974 14.1919 19.2803 13.6824C20.8858 11.9774 21.7479 9.60255 21.7479 7.05773C21.7479 4.52222 20.8423 2.11636 19.2803 0.439291C18.8036-0.0764489 18.1666-0.0360787 17.8045 0.393568C17.4516 0.801028 17.5617 1.31591 17.9505 1.75046C19.2001 3.13101 19.889 5.00781 19.889 7.05773C19.889 9.11076 19.1939 10.9907 17.9505 12.3712C17.5648 12.8058 17.4578 13.3206 17.8045 13.7281Z"
+                              />
+                              <path
+                                class="wave-inner"
+                                d="M4.24797 7.05773C4.24797 8.51501 4.7083 9.87775 5.53928 10.861C5.97423 11.3754 6.66265 11.3595 7.01908 10.9201C7.35021 10.5157 7.22947 10.0203 6.89833 9.56937C6.39624 8.93056 6.10683 7.9833 6.10683 7.05773C6.10683 6.13216 6.41622 5.20798 6.89833 4.54608C7.2197 4.08534 7.35021 3.59976 7.01908 3.19851C6.66265 2.7591 5.97423 2.73691 5.53928 3.25445C4.7083 4.23771 4.24797 5.60044 4.24797 7.05773ZM14.7288 10.9201C15.0852 11.3595 15.7737 11.3754 16.2086 10.861C17.0396 9.87775 17.4999 8.51501 17.4999 7.05773C17.4999 5.60044 17.0396 4.23771 16.2086 3.25445C15.7737 2.73691 15.0852 2.7591 14.7288 3.19851C14.3977 3.59976 14.5282 4.08534 14.8496 4.54608C15.3317 5.20798 15.6411 6.13216 15.6411 7.05773C15.6411 7.9833 15.3516 8.93056 14.8496 9.56937C14.5184 10.0203 14.3977 10.5157 14.7288 10.9201Z"
+                              />
+                              <path
+                                class="tower"
+                                d="M8.89277 7.05773C8.89277 7.82296 9.318 8.48433 9.96073 8.81056L9.96073 17.4066C9.96073 18.0165 10.3349 18.439 10.8804 18.439C11.4449 18.439 11.7965 18.0325 11.7965 17.4066L11.7965 8.81056C12.4294 8.48433 12.8613 7.8163 12.8613 7.05773C12.8613 5.95695 11.9812 5.06346 10.8804 5.06346C9.77294 5.06346 8.89277 5.95695 8.89277 7.05773Z"
+                              />
+                            </svg>
+                            <span class="status-text">测试中</span>
+                          </div>
+                        </template>
+                        <template v-else-if="model.connectionStatus === 'success'">
+                          <div class="connection-status success" style="margin: 0">
+                            <svg
+                              class="icon-antenna"
+                              viewBox="0 0 23 19"
+                              fill="currentColor"
+                              style="width: 14px; height: 14px"
+                            >
+                              <path
+                                class="wave-outer"
+                                d="M0 7.05773C0 9.60255 0.862072 11.9774 2.46764 13.6824C2.95053 14.1919 3.58435 14.1609 3.94343 13.7281C4.29009 13.3206 4.18312 12.8058 3.7974 12.3712C2.55402 10.9907 1.85886 9.11076 1.85886 7.05773C1.85886 5.00781 2.54781 3.13101 3.7974 1.75046C4.18623 1.31591 4.2963 0.801028 3.94343 0.393568C3.58125-0.0360787 2.94432-0.0764489 2.46764 0.439291C0.905547 2.11636 0 4.52222 0 7.05773ZM17.8045 13.7281C18.1635 14.1609 18.7974 14.1919 19.2803 13.6824C20.8858 11.9774 21.7479 9.60255 21.7479 7.05773C21.7479 4.52222 20.8423 2.11636 19.2803 0.439291C18.8036-0.0764489 18.1666-0.0360787 17.8045 0.393568C17.4516 0.801028 17.5617 1.31591 17.9505 1.75046C19.2001 3.13101 19.889 5.00781 19.889 7.05773C19.889 9.11076 19.1939 10.9907 17.9505 12.3712C17.5648 12.8058 17.4578 13.3206 17.8045 13.7281Z"
+                              />
+                              <path
+                                class="wave-inner"
+                                d="M4.24797 7.05773C4.24797 8.51501 4.7083 9.87775 5.53928 10.861C5.97423 11.3754 6.66265 11.3595 7.01908 10.9201C7.35021 10.5157 7.22947 10.0203 6.89833 9.56937C6.39624 8.93056 6.10683 7.9833 6.10683 7.05773C6.10683 6.13216 6.41622 5.20798 6.89833 4.54608C7.2197 4.08534 7.35021 3.59976 7.01908 3.19851C6.66265 2.7591 5.97423 2.73691 5.53928 3.25445C4.7083 4.23771 4.24797 5.60044 4.24797 7.05773ZM14.7288 10.9201C15.0852 11.3595 15.7737 11.3754 16.2086 10.861C17.0396 9.87775 17.4999 8.51501 17.4999 7.05773C17.4999 5.60044 17.0396 4.23771 16.2086 3.25445C15.7737 2.73691 15.0852 2.7591 14.7288 3.19851C14.3977 3.59976 14.5282 4.08534 14.8496 4.54608C15.3317 5.20798 15.6411 6.13216 15.6411 7.05773C15.6411 7.9833 15.3516 8.93056 14.8496 9.56937C14.5184 10.0203 14.3977 10.5157 14.7288 10.9201Z"
+                              />
+                              <path
+                                class="tower"
+                                d="M8.89277 7.05773C8.89277 7.82296 9.318 8.48433 9.96073 8.81056L9.96073 17.4066C9.98073 18.0165 10.3349 18.439 10.8804 18.439C11.4449 18.439 11.7965 18.0325 11.7965 17.4066L11.7965 8.81056C12.4294 8.48433 12.8613 7.8163 12.8613 7.05773C12.8613 5.95695 11.9812 5.06346 10.8804 5.06346C9.77294 5.06346 8.89277 5.95695 8.89277 7.05773Z"
+                              />
+                            </svg>
+                            <span class="status-text">已连接</span>
+                          </div>
+                        </template>
+                        <template v-else-if="model.connectionStatus === 'error'">
+                          <div class="connection-status error" style="margin: 0">
+                            <svg
+                              class="icon-antenna"
+                              viewBox="0 0 23 19"
+                              fill="currentColor"
+                              style="width: 14px; height: 14px"
+                            >
+                              <path
+                                class="wave-outer"
+                                d="M0 7.05773C0 9.60255 0.862072 11.9774 2.46764 13.6824C2.95053 14.1919 3.58435 14.1609 3.94343 13.7281C4.29009 13.3206 4.18312 12.8058 3.7974 12.3712C2.55402 10.9907 1.85886 9.11076 1.85886 7.05773C1.85886 5.00781 2.54781 3.13101 3.7974 1.75046C4.18623 1.31591 4.2963 0.801028 3.94343 0.393568C3.58125-0.0360787 2.94432-0.0764489 2.46764 0.439291C0.905547 2.11636 0 4.52222 0 7.05773ZM17.8045 13.7281C18.1635 14.1609 18.7974 14.1919 19.2803 13.6824C20.8858 11.9774 21.7479 9.60255 21.7479 7.05773C21.7479 4.52222 20.8423 2.11636 19.2803 0.439291C18.8036-0.0764489 18.1666-0.0360787 17.8045 0.393568C17.4516 0.801028 17.5617 1.31591 17.9505 1.75046C19.2001 3.13101 19.889 5.00781 19.889 7.05773C19.889 9.11076 19.1939 10.9907 17.9505 12.3712C17.5648 12.8058 17.4578 13.3206 17.8045 13.7281Z"
+                              />
+                              <path
+                                class="wave-inner"
+                                d="M4.24797 7.05773C4.24797 8.51501 4.7083 9.87775 5.53928 10.861C5.97423 11.3754 6.66265 11.3595 7.01908 10.9201C7.35021 10.5157 7.22947 10.0203 6.89833 9.56937C6.39624 8.93056 6.10683 7.9833 6.10683 7.05773C6.10683 6.13216 6.41622 5.20798 6.89833 4.54608C7.2197 4.08534 7.35021 3.59976 7.01908 3.19851C6.66265 2.7591 5.97423 2.73691 5.53928 3.25445C4.7083 4.23771 4.24797 5.60044 4.24797 7.05773ZM14.7288 10.9201C15.0852 11.3595 15.7737 11.3754 16.2086 10.861C17.0396 9.87775 17.4999 8.51501 17.4999 7.05773C17.4999 5.60044 17.0396 4.23771 16.2086 3.25445C15.7737 2.73691 15.0852 2.7591 14.7288 3.19851C14.3977 3.59976 14.5282 4.08534 14.8496 4.54608C15.3317 5.20798 15.6411 6.13216 15.6411 7.05773C15.6411 7.9833 15.3516 8.93056 14.8496 9.56937C14.5184 10.0203 14.3977 10.5157 14.7288 10.9201Z"
+                              />
+                              <path
+                                class="tower"
+                                d="M8.89277 7.05773C8.89277 7.82296 9.318 8.48433 9.96073 8.81056L9.96073 17.4066C9.96073 18.0165 10.3349 18.439 10.8804 18.439C11.4449 18.439 11.7965 18.0325 11.7965 17.4066L11.7965 8.81056C12.4294 8.48433 12.8613 7.8163 12.8613 7.05773C12.8613 5.95695 11.9812 5.06346 10.8804 5.06346C9.77294 5.06346 8.89277 5.95695 8.89277 7.05773Z"
+                              />
+                            </svg>
+                            <span class="status-text">失败</span>
+                          </div>
+                        </template>
+                        <template v-else>
+                          <div class="connection-status idle" style="margin: 0">
+                            <svg
+                              class="icon-antenna"
+                              viewBox="0 0 23 19"
+                              fill="currentColor"
+                              style="width: 14px; height: 14px"
+                            >
+                              <path
+                                class="wave-outer"
+                                d="M0 7.05773C0 9.60255 0.862072 11.9774 2.46764 13.6824C2.95053 14.1919 3.58435 14.1609 3.94343 13.7281C4.29009 13.3206 4.18312 12.8058 3.7974 12.3712C2.55402 10.9907 1.85886 9.11076 1.85886 7.05773C1.85886 5.00781 2.54781 3.13101 3.7974 1.75046C4.18623 1.31591 4.2963 0.801028 3.94343 0.393568C3.58125-0.0360787 2.94432-0.0764489 2.46764 0.439291C0.905547 2.11636 0 4.52222 0 7.05773ZM17.8045 13.7281C18.1635 14.1609 18.7974 14.1919 19.2803 13.6824C20.8858 11.9774 21.7479 9.60255 21.7479 7.05773C21.7479 4.52222 20.8423 2.11636 19.2803 0.439291C18.8036-0.0764489 18.1666-0.0360787 17.8045 0.393568C17.4516 0.801028 17.5617 1.31591 17.9505 1.75046C19.2001 3.13101 19.889 5.00781 19.889 7.05773C19.889 9.11076 19.1939 10.9907 17.9505 12.3712C17.5648 12.8058 17.4578 13.3206 17.8045 13.7281Z"
+                              />
+                              <path
+                                class="wave-inner"
+                                d="M4.24797 7.05773C4.24797 8.51501 4.7083 9.87775 5.53928 10.861C5.97423 11.3754 6.66265 11.3595 7.01908 10.9201C7.35021 10.5157 7.22947 10.0203 6.89833 9.56937C6.39624 8.93056 6.10683 7.9833 6.10683 7.05773C6.10683 6.13216 6.41622 5.20798 6.89833 4.54608C7.2197 4.08534 7.35021 3.59976 7.01908 3.19851C6.66265 2.7591 5.97423 2.73691 5.53928 3.25445C4.7083 4.23771 4.24797 5.60044 4.24797 7.05773ZM14.7288 10.9201C15.0852 11.3595 15.7737 11.3754 16.2086 10.861C17.0396 9.87775 17.4999 8.51501 17.4999 7.05773C17.4999 5.60044 17.0396 4.23771 16.2086 3.25445C15.7737 2.73691 15.0852 2.7591 14.7288 3.19851C14.3977 3.59976 14.5282 4.08534 14.8496 4.54608C15.3317 5.20798 15.6411 6.13216 15.6411 7.05773C15.6411 7.9833 15.3516 8.93056 14.8496 9.56937C14.5184 10.0203 14.3977 10.5157 14.7288 10.9201Z"
+                              />
+                              <path
+                                class="tower"
+                                d="M8.89277 7.05773C8.89277 7.82296 9.318 8.48433 9.96073 8.81056L9.96073 17.4066C9.96073 18.0165 10.3349 18.439 10.8804 18.439C11.4449 18.439 11.7965 18.0325 11.7965 17.4066L11.7965 8.81056C12.4294 8.48433 12.8613 7.8163 12.8613 7.05773C12.8613 5.95695 11.9812 5.06346 10.8804 5.06346C9.77294 5.06346 8.89277 5.95695 8.89277 7.05773Z"
+                              />
+                            </svg>
+                            <span class="status-text">测试连接</span>
+                          </div>
+                        </template>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 添加模型按钮 -->
+                <button
+                  v-if="config.secondaryModels.length < 3"
+                  class="btn-add-secondary-model"
+                  @click="addSecondaryModel"
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                  <span>添加备选模型</span>
+                  <span class="model-count-hint"
+                    >({{ config.secondaryModels.length }}/3)</span
+                  >
+                </button>
+                <div v-else class="model-limit-hint">
+                  最多支持 3 个备选模型
+                </div>
+              </div>
+            </div>
+
             <!-- 模块2：阅读与行为偏好 -->
             <div class="settings-section-divider">
               <span class="divider-text">阅读与行为偏好</span>
@@ -5845,24 +6631,21 @@
             <div class="list-card settings-card" @click.stop>
               <div class="settings-card-title">阅读字体</div>
               <div class="list-row-group">
-                <div
-                  class="list-row-item"
-                  :class="{ active: config.fontFamily === 'sans-serif' }"
-                  @click="config.fontFamily = 'sans-serif'"
-                >
-                  <span style="font-weight: 600; font-size: 15px; color: #111"
+                <div class="list-row-item">
+                  <span style="font-weight:400; font-size: 15px; color: #111"
                     >现代黑体</span
                   >
-                  <span class="row-check">✓</span>
+                  <input
+                    type="checkbox"
+                    class="ios-toggle"
+                    :checked="config.fontFamily === 'sans-serif'"
+                    @change="config.fontFamily = 'sans-serif'"
+                  />
                 </div>
-                <div
-                  class="list-row-item"
-                  :class="{ active: config.fontFamily === 'serif' }"
-                  @click="config.fontFamily = 'serif'"
-                >
+                <div class="list-row-item">
                   <span
                     style="
-                      font-weight: 600;
+                      font-weight: 400;
                       font-size: 15px;
                       color: #111;
                       font-family:
@@ -5871,24 +6654,25 @@
                     "
                     >经典宋体</span
                   >
-                  <span class="row-check">✓</span>
+                  <input
+                    type="checkbox"
+                    class="ios-toggle"
+                    :checked="config.fontFamily === 'serif'"
+                    @change="config.fontFamily = 'serif'"
+                  />
                 </div>
-                <div
-                  class="list-row-item"
-                  :class="{ active: config.fontFamily === 'custom' }"
-                  @click="config.fontFamily = 'custom'"
-                >
+                <div class="list-row-item">
                   <div
                     style="
                       display: flex;
                       align-items: center;
                       gap: 12px;
-                      width: 100%;
+                      flex: 1;
                     "
                   >
                     <span
                       style="
-                        font-weight: 600;
+                        font-weight: 400;
                         font-size: 15px;
                         color: #111;
                         font-family: &quot;UserCustomFont&quot;, sans-serif;
@@ -5899,7 +6683,6 @@
                       style="
                         font-size: 12px;
                         color: #9ca3af;
-                        flex: 1;
                         white-space: nowrap;
                         overflow: hidden;
                         text-overflow: ellipsis;
@@ -5913,10 +6696,30 @@
                       style="margin: 0"
                       @click.stop="importCustomFont"
                     >
-                      {{ config.customFontName ? '更换' : '导入' }}
+                      <template v-if="config.customFontName">
+                        <svg
+                          version="1.1"
+                          xmlns="http://www.w3.org/2000/svg"
+                          xmlns:xlink="http://www.w3.org/1999/xlink"
+                          viewBox="0 0 37.8418 29.834"
+                          style="width: 16px; height: 12px"
+                          fill="currentColor"
+                        >
+                          <g>
+                            <path d="M30.2539 18.0078L30.2539 20.8887C30.2539 22.9004 29.2383 23.916 27.1875 23.916L10.2832 23.916C8.25195 23.916 7.22656 22.9102 7.22656 20.8887L7.22656 18.0078C7.22656 17.5 7.50977 17.2168 8.00781 17.2168C8.50586 17.2168 8.79883 17.5 8.79883 18.0078L8.79883 20.8105C8.79883 21.8262 9.33594 22.3438 10.3125 22.3438L27.168 22.3438C28.125 22.3438 28.6816 21.8262 28.6816 20.8105L28.6816 18.0078C28.6816 17.5 28.9551 17.2168 29.4629 17.2168C29.9707 17.2168 30.2539 17.5 30.2539 18.0078ZM9.27734 14.668C9.27734 15.3711 8.71094 15.9473 8.00781 15.9473C7.31445 15.9473 6.73828 15.3711 6.73828 14.668C6.73828 13.9746 7.31445 13.4082 8.00781 13.4082C8.71094 13.4082 9.27734 13.9746 9.27734 14.668ZM30.7324 14.668C30.7324 15.3711 30.1562 15.9473 29.4629 15.9473C28.7598 15.9473 28.1934 15.3711 28.1934 14.668C28.1934 13.9648 28.7598 13.4082 29.4629 13.4082C30.1562 13.4082 30.7324 13.9746 30.7324 14.668ZM22.9199 6.55273C22.9199 6.90499 23.0212 7.23424 23.2013 7.50977L10.3125 7.50977C9.33594 7.50977 8.79883 8.02734 8.79883 9.04297L8.79883 11.3574C8.79883 11.8652 8.50586 12.1582 8.00781 12.1582C7.50977 12.1582 7.22656 11.8652 7.22656 11.3574L7.22656 8.96484C7.22656 6.94336 8.25195 5.9375 10.2832 5.9375L23.0299 5.9375C22.9582 6.12877 22.9199 6.33611 22.9199 6.55273Z" fill-opacity="0.85"/>
+                            <path d="M15.5371 19.5117C15.8887 19.5117 16.1328 19.3457 16.2793 18.8867L16.9922 16.8066L20.4883 16.8066L21.2012 18.8867C21.3477 19.3359 21.6016 19.5117 21.9531 19.5117C22.3828 19.5117 22.6758 19.2285 22.6758 18.8379C22.6758 18.6816 22.6465 18.5449 22.5684 18.3301L19.834 10.957C19.6387 10.4492 19.2676 10.1855 18.7305 10.1855C18.2031 10.1855 17.8418 10.4492 17.6562 10.957L14.9121 18.3301C14.8438 18.5449 14.8047 18.6816 14.8047 18.8281C14.8047 19.2383 15.0977 19.5117 15.5371 19.5117ZM17.3926 15.6348L18.6914 11.8555L18.7988 11.8555L20.0977 15.6348ZM29.4727 11.7773C29.707 11.7773 29.8633 11.6211 29.8926 11.3965C30.4004 8.08594 30.8398 7.45117 34.2969 6.98242C34.5312 6.95312 34.6973 6.78711 34.6973 6.5625C34.6973 6.33789 34.5312 6.17188 34.2969 6.14258C30.8301 5.67383 30.5273 5.03906 29.8926 1.71875C29.8535 1.49414 29.6875 1.33789 29.4727 1.33789C29.248 1.33789 29.082 1.50391 29.0527 1.72852C28.5547 4.99023 28.1055 5.67383 24.6484 6.14258C24.4141 6.17188 24.248 6.33789 24.248 6.5625C24.248 6.78711 24.4141 6.95312 24.6484 6.98242C28.1152 7.45117 28.3984 8.08594 29.0527 11.4062C29.0918 11.6211 29.248 11.7773 29.4727 11.7773ZM33.8867 13.75C34.0723 13.75 34.1797 13.623 34.2188 13.4375C34.5508 11.7969 34.4238 11.7578 36.1914 11.4746C36.3867 11.4453 36.5039 11.3184 36.5039 11.1426C36.5039 10.9766 36.3867 10.8398 36.2109 10.8105C34.4238 10.5078 34.5508 10.4492 34.2188 8.83789C34.1797 8.65234 34.0625 8.53516 33.8867 8.53516C33.7109 8.53516 33.584 8.66211 33.5547 8.83789C33.2324 10.4492 33.3594 10.5078 31.5625 10.8105C31.377 10.8398 31.2695 10.9766 31.2695 11.1426C31.2695 11.2988 31.377 11.4453 31.5625 11.4746C33.3594 11.7578 33.2324 11.7969 33.5547 13.4668C33.584 13.6328 33.7207 13.75 33.8867 13.75Z" fill-opacity="0.85"/>
+                          </g>
+                        </svg>
+                      </template>
+                      <template v-else>导入</template>
                     </button>
-                    <span class="row-check" style="margin-left: 4px">✓</span>
                   </div>
+                  <input
+                    type="checkbox"
+                    class="ios-toggle"
+                    :checked="config.fontFamily === 'custom'"
+                    @change="config.fontFamily = 'custom'"
+                  />
                 </div>
               </div>
             </div>
@@ -5997,35 +6800,33 @@
               <span class="divider-text">数据订阅管理</span>
             </div>
 
-            <!-- 10. 订阅管理卡片 -->
+            <!-- 10. 订阅管理卡片（两列布局） -->
             <div class="list-card settings-card" @click.stop>
-              <div class="subs-list">
-                <label
-                  v-for="(source, index) in allAvailableSources"
-                  :key="source"
-                  class="subs-chip"
-                  :class="(config.subscribedSources || []).includes(source) ? 'subs-chip-active' : ''"
-                  :style="(config.subscribedSources || []).includes(source) ? { backgroundColor: getSubsChipColor(source), color: '#ffffff' } : {}"
-                >
-                  <div style="display: flex; align-items: center; gap: 10px">
-                    <div
-                      class="subs-icon"
-                      :style="(config.subscribedSources || []).includes(source) ? { backgroundColor: 'rgba(255,255,255,0.25)' } : { backgroundColor: getSubsChipColor(source) }"
-                      v-html="getSubsIcon(source)"
-                    ></div>
-                    <span style="font-size: 14px">{{ source }}</span>
-                  </div>
-                  <input
-                    type="checkbox"
-                    :value="source"
-                    v-model="config.subscribedSources"
-                  />
-                  <span
-                    v-show="(config.subscribedSources || []).includes(source)"
-                    class="subs-check-mark"
-                    >✓</span
-                  >
-                </label>
+              <div class="subs-grid-container">
+                <!-- 两列布局：所有学院统一排列 -->
+                <div class="subs-grid-columns">
+                  <template v-for="(source, index) in allAvailableSources" :key="source">
+                    <label
+                      class="subs-chip"
+                      :class="(config.subscribedSources || []).includes(source) ? 'subs-chip-active' : ''"
+                      :style="getSubsChipStyle(source, (config.subscribedSources || []).includes(source))"
+                    >
+                      <div style="display: flex; align-items: center; gap: 10px">
+                        <div
+                          class="subs-icon"
+                          :style="getSubsIconStyle(source, (config.subscribedSources || []).includes(source))"
+                          v-html="getSubsIcon(source)"
+                        ></div>
+                        <span style="font-size: 14px">{{ source }}</span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        :value="source"
+                        v-model="config.subscribedSources"
+                      />
+                    </label>
+                  </template>
+                </div>
               </div>
             </div>
 
@@ -6177,9 +6978,6 @@
                   class="settings-input-area"
                   style="flex-direction: row; gap: 12px; align-items: center"
                 >
-                  <span class="settings-hint" style="margin: 0"
-                    >信息入库后自动发送邮件通知</span
-                  >
                   <input
                     type="checkbox"
                     class="ios-toggle"
@@ -6584,7 +7382,6 @@
                       type="text"
                       v-model="ruleForm.task_name"
                       class="form-input"
-                      placeholder="例如：科技新闻、商品列表"
                     />
                   </div>
 
@@ -6595,26 +7392,64 @@
                       type="text"
                       v-model="ruleForm.task_purpose"
                       class="form-input"
-                      placeholder="例如：新闻、公告、产品信息"
                     />
-                    <span class="settings-hint" style="margin-top: 4px; display: block">
-                      用于分类归档，映射到数据库的"类别"字段
-                    </span>
+                  </div>
+
+
+                  <!-- 🌟 数据源类型切换 -->
+                  <div class="form-group">
+                    <label class="form-label">数据源类型</label>
+                    <div class="source-type-tabs" style="display: flex; gap: 8px; margin-top: 8px;">
+                      <button
+                        type="button"
+                        :class="['tab-btn', { active: ruleForm.source_type === 'html' }]"
+                        @click="ruleForm.source_type = 'html'"
+                        style="flex: 1; padding: 10px 16px; border-radius: 8px; border: 1px solid var(--border-color); background: transparent; cursor: pointer; transition: all 0.2s;"
+                        :style="{ background: ruleForm.source_type === 'html' ? 'var(--accent-color)' : 'transparent', color: ruleForm.source_type === 'html' ? 'white' : 'inherit', borderColor: ruleForm.source_type === 'html' ? 'var(--accent-color)' : 'var(--border-color)' }"
+                      >
+                        🌐 网页提取
+                      </button>
+                      <button
+                        type="button"
+                        :class="['tab-btn', { active: ruleForm.source_type === 'rss' }]"
+                        @click="ruleForm.source_type = 'rss'"
+                        style="flex: 1; padding: 10px 16px; border-radius: 8px; border: 1px solid var(--border-color); background: transparent; cursor: pointer; transition: all 0.2s;"
+                        :style="{ background: ruleForm.source_type === 'rss' ? 'var(--accent-color)' : 'transparent', color: ruleForm.source_type === 'rss' ? 'white' : 'inherit', borderColor: ruleForm.source_type === 'rss' ? 'var(--accent-color)' : 'var(--border-color)' }"
+                      >
+                        📡 RSS 订阅
+                      </button>
+                    </div>
                   </div>
 
                   <!-- 目标 URL -->
                   <div class="form-group">
-                    <label class="form-label">目标网页 URL</label>
+                    <label class="form-label">{{ ruleForm.source_type === 'rss' ? 'RSS 订阅地址' : '目标网页 URL' }}</label>
                     <input
                       type="text"
                       v-model="ruleForm.url"
                       class="form-input"
-                      placeholder="https://example.com/news"
+                      :placeholder="ruleForm.source_type === 'rss' ? 'https://example.com/feed.xml' : 'https://example.com/news'"
                     />
                   </div>
 
-                  <!-- 动态字段配置区 -->
+                  <!-- 🌟 最大抓取条数（HTML 和 RSS 均可用） -->
                   <div class="form-group">
+                    <label class="form-label">最大抓取条数（可选）</label>
+                    <input
+                      type="number"
+                      v-model.number="ruleForm.max_items"
+                      class="form-input"
+                      placeholder="留空则使用默认值（HTML:10, RSS:50）"
+                      min="1"
+                      max="500"
+                    />
+                    <span class="settings-hint" style="margin-top: 4px; display: block;">
+                      限制每次抓取的最大文章数量
+                    </span>
+                  </div>
+
+                  <!-- 🌟 动态字段配置区（仅 HTML 模式显示） -->
+                  <div v-if="ruleForm.source_type === 'html'" class="form-group">
                     <label class="form-label">提取字段</label>
                     <div class="dynamic-fields">
                       <div
@@ -6665,6 +7500,29 @@
                     </div>
                   </div>
 
+                  <!-- 🌟 正文来源字段（仅 HTML 模式显示） -->
+                  <div v-if="ruleForm.source_type === 'html' && ruleForm.target_fields.filter(f => f.trim()).length > 0" class="form-group">
+                    <label class="form-label">正文来源字段（可选）</label>
+                    <select v-model="ruleForm.body_field" class="form-input">
+                      <option value="">自动（拼接所有字段）</option>
+                      <option v-for="field in ruleForm.target_fields.filter(f => f.trim())" :key="field" :value="field">{{ field }}</option>
+                    </select>
+                    <span class="settings-hint" style="margin-top: 4px; display: block;">
+                      选择后，文章正文将使用该字段内容，而非拼接所有字段
+                    </span>
+                  </div>
+
+                  <!-- 🌟 跳过详情页抓取（仅 HTML 模式显示） -->
+                  <div v-if="ruleForm.source_type === 'html'" class="form-group">
+                    <div class="settings-row" style="margin: 0">
+                      <span class="settings-label">跳过详情页抓取</span>
+                      <input type="checkbox" class="ios-toggle" v-model="ruleForm.skip_detail" />
+                    </div>
+                    <span class="settings-hint" style="margin-top: 8px; display: block;">
+                      当列表页已包含所需全部字段时，开启可提升抓取速度
+                    </span>
+                  </div>
+
                   <!-- AI 摘要开关 -->
                   <div class="form-group">
                     <div class="settings-row" style="margin: 0">
@@ -6681,6 +7539,27 @@
                     >
                       关闭后，抓取的数据将直接以字段列表形式展示
                     </span>
+
+                    <!-- 🌟 专属 AI 提示词 -->
+                    <div
+                      v-if="ruleForm.require_ai_summary"
+                      class="custom-prompt-group"
+                      style="margin-top: 12px"
+                    >
+                      <label class="settings-label" style="margin-bottom: 6px">
+                        专属 AI 提示词
+                      </label>
+                      <textarea
+                        v-model="ruleForm.custom_summary_prompt"
+                        rows="3"
+                        class="form-textarea"
+                        placeholder="（可选）定制 AI 摘要的输出格式，例如：&#10;- 请提取文章核心观点，用 Markdown 排版&#10;- 重点标注日期和来源信息"
+                        style="font-size: 13px; resize: vertical"
+                      ></textarea>
+                      <span class="settings-hint" style="margin-top: 4px">
+                        留空则使用默认提示词
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -6696,7 +7575,6 @@
                       type="text"
                       v-model="ruleForm.task_name"
                       class="form-input"
-                      placeholder="例如：科技新闻、商品列表"
                     />
                   </div>
 
@@ -6707,26 +7585,63 @@
                       type="text"
                       v-model="ruleForm.task_purpose"
                       class="form-input"
-                      placeholder="例如：新闻、公告、产品信息"
                     />
-                    <span class="settings-hint" style="margin-top: 4px; display: block">
-                      用于分类归档，映射到数据库的"类别"字段
-                    </span>
+                  </div>
+
+                  <!-- 🌟 数据源类型切换 -->
+                  <div class="form-group">
+                    <label class="form-label">数据源类型</label>
+                    <div class="source-type-tabs" style="display: flex; gap: 8px; margin-top: 8px;">
+                      <button
+                        type="button"
+                        :class="['tab-btn', { active: ruleForm.source_type === 'html' }]"
+                        @click="ruleForm.source_type = 'html'"
+                        style="flex: 1; padding: 10px 16px; border-radius: 8px; border: 1px solid var(--border-color); background: transparent; cursor: pointer; transition: all 0.2s;"
+                        :style="{ background: ruleForm.source_type === 'html' ? 'var(--accent-color)' : 'transparent', color: ruleForm.source_type === 'html' ? 'white' : 'inherit', borderColor: ruleForm.source_type === 'html' ? 'var(--accent-color)' : 'var(--border-color)' }"
+                      >
+                        🌐 网页提取
+                      </button>
+                      <button
+                        type="button"
+                        :class="['tab-btn', { active: ruleForm.source_type === 'rss' }]"
+                        @click="ruleForm.source_type = 'rss'"
+                        style="flex: 1; padding: 10px 16px; border-radius: 8px; border: 1px solid var(--border-color); background: transparent; cursor: pointer; transition: all 0.2s;"
+                        :style="{ background: ruleForm.source_type === 'rss' ? 'var(--accent-color)' : 'transparent', color: ruleForm.source_type === 'rss' ? 'white' : 'inherit', borderColor: ruleForm.source_type === 'rss' ? 'var(--accent-color)' : 'var(--border-color)' }"
+                      >
+                        📡 RSS 订阅
+                      </button>
+                    </div>
                   </div>
 
                   <!-- 目标 URL -->
                   <div class="form-group">
-                    <label class="form-label">目标网页 URL</label>
+                    <label class="form-label">{{ ruleForm.source_type === 'rss' ? 'RSS 订阅地址' : '目标网页 URL' }}</label>
                     <input
                       type="text"
                       v-model="ruleForm.url"
                       class="form-input"
-                      placeholder="https://example.com/news"
+                      :placeholder="ruleForm.source_type === 'rss' ? 'https://example.com/feed.xml' : 'https://example.com/news'"
                     />
                   </div>
 
-                  <!-- 动态字段配置区 -->
+                  <!-- 🌟 最大抓取条数（HTML 和 RSS 均可用） -->
                   <div class="form-group">
+                    <label class="form-label">最大抓取条数（可选）</label>
+                    <input
+                      type="number"
+                      v-model.number="ruleForm.max_items"
+                      class="form-input"
+                      placeholder="留空则使用默认值（HTML:10, RSS:50）"
+                      min="1"
+                      max="500"
+                    />
+                    <span class="settings-hint" style="margin-top: 4px; display: block;">
+                      限制每次抓取的最大文章数量
+                    </span>
+                  </div>
+
+                  <!-- 🌟 动态字段配置区（仅 HTML 模式显示） -->
+                  <div v-if="ruleForm.source_type === 'html'" class="form-group">
                     <label class="form-label">提取字段</label>
                     <div class="dynamic-fields">
                       <div
@@ -6777,6 +7692,29 @@
                     </div>
                   </div>
 
+                  <!-- 🌟 正文来源字段（仅 HTML 模式显示） -->
+                  <div v-if="ruleForm.source_type === 'html' && ruleForm.target_fields.filter(f => f.trim()).length > 0" class="form-group">
+                    <label class="form-label">正文来源字段（可选）</label>
+                    <select v-model="ruleForm.body_field" class="form-input">
+                      <option value="">自动（拼接所有字段）</option>
+                      <option v-for="field in ruleForm.target_fields.filter(f => f.trim())" :key="field" :value="field">{{ field }}</option>
+                    </select>
+                    <span class="settings-hint" style="margin-top: 4px; display: block;">
+                      选择后，文章正文将使用该字段内容，而非拼接所有字段
+                    </span>
+                  </div>
+
+                  <!-- 🌟 跳过详情页抓取（仅 HTML 模式显示） -->
+                  <div v-if="ruleForm.source_type === 'html'" class="form-group">
+                    <div class="settings-row" style="margin: 0">
+                      <span class="settings-label">跳过详情页抓取</span>
+                      <input type="checkbox" class="ios-toggle" v-model="ruleForm.skip_detail" />
+                    </div>
+                    <span class="settings-hint" style="margin-top: 8px; display: block;">
+                      当列表页已包含所需全部字段时，开启可提升抓取速度
+                    </span>
+                  </div>
+
                   <!-- AI 摘要开关 -->
                   <div class="form-group">
                     <div class="settings-row" style="margin: 0">
@@ -6793,6 +7731,27 @@
                     >
                       关闭后，抓取的数据将直接以字段列表形式展示
                     </span>
+
+                    <!-- 🌟 专属 AI 提示词 -->
+                    <div
+                      v-if="ruleForm.require_ai_summary"
+                      class="custom-prompt-group"
+                      style="margin-top: 12px"
+                    >
+                      <label class="settings-label" style="margin-bottom: 6px">
+                        ⚙️ 专属 AI 提示词 (Pro)
+                      </label>
+                      <textarea
+                        v-model="ruleForm.custom_summary_prompt"
+                        rows="3"
+                        class="form-textarea"
+                        placeholder="（可选）定制 AI 摘要的输出格式，例如：&#10;- 请提取文章核心观点，用 Markdown 排版&#10;- 重点标注日期和来源信息"
+                        style="font-size: 13px; resize: vertical"
+                      ></textarea>
+                      <span class="settings-hint" style="margin-top: 4px">
+                        留空则使用默认摘要模板
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -6838,6 +7797,111 @@
                       </div>
                     </div>
                   </div>
+
+                  <!-- ⚙️ 手动微调选择器面板 -->
+                  <div
+                    v-if="generatedRuleCache"
+                    class="selector-tuning-panel"
+                  >
+                    <div
+                      class="tuning-header"
+                      @click="showSelectorPanel = !showSelectorPanel"
+                    >
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                      >
+                        <path
+                          d="M12 15a3 3 0 100-6 3 3 0 000 6z"
+                        />
+                        <path
+                          d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"
+                        />
+                      </svg>
+                      <span>⚙️ 手动微调选择器 (Pro)</span>
+                      <svg
+                        :class="{ rotated: showSelectorPanel }"
+                        class="chevron"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                      >
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </div>
+
+                    <div v-show="showSelectorPanel" class="tuning-content">
+                      <div class="tuning-hint">
+                        💡 提示：AI 生成的选择器可能不准确，您可以手动修改后重新测试
+                      </div>
+
+                      <div class="selector-inputs">
+                        <div class="selector-group">
+                          <label>列表容器</label>
+                          <input
+                            v-model="generatedRuleCache.list_container"
+                            type="text"
+                            placeholder="如: ul.news-list"
+                          />
+                        </div>
+
+                        <div class="selector-group">
+                          <label>列表项选择器</label>
+                          <input
+                            v-model="generatedRuleCache.item_selector"
+                            type="text"
+                            placeholder="如: li"
+                          />
+                        </div>
+
+                        <div class="divider"></div>
+
+                        <div
+                          v-for="(selector, fieldName) in generatedRuleCache.field_selectors"
+                          :key="fieldName"
+                          class="selector-group"
+                        >
+                          <label>{{ fieldName }} 字段</label>
+                          <input
+                            v-model="generatedRuleCache.field_selectors[fieldName]"
+                            type="text"
+                            :placeholder="`如: span.${fieldName}::text`"
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        class="btn btn-retest"
+                        @click="handleManualRetest"
+                        :disabled="isRetestingRule"
+                      >
+                        <svg
+                          v-if="isRetestingRule"
+                          class="spinner"
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            fill="none"
+                          />
+                        </svg>
+                        <span v-else>🧪 用此规则重新测试</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -6856,7 +7920,35 @@
                   <button class="btn btn-ghost" @click="closeCustomRuleModal">
                     取消
                   </button>
+                  <!-- 🌟 RSS 模式：直接保存 -->
                   <button
+                    v-if="ruleForm.source_type === 'rss'"
+                    class="btn btn-primary"
+                    @click="validateAndSaveRssRule"
+                    :disabled="isGeneratingRule"
+                  >
+                    <svg
+                      v-if="isGeneratingRule"
+                      class="spinner"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        fill="none"
+                        stroke-dasharray="30 70"
+                      />
+                    </svg>
+                    <span v-else>💾 保存 RSS 规则</span>
+                  </button>
+                  <!-- 🌟 HTML 模式: AI 分析 -->
+                  <button
+                    v-else
                     class="btn btn-primary"
                     @click="generateAndTestRule"
                     :disabled="isGeneratingRule"
@@ -6878,7 +7970,7 @@
                         stroke-dasharray="30 70"
                       />
                     </svg>
-                    <span v-else>AI 智能分析并测试</span>
+                    <span v-else>🤖 AI 智能分析并测试</span>
                   </button>
                 </template>
                 <!-- 生成后按钮 -->
@@ -7818,6 +8910,32 @@
               </span>
             </div>
             <div class="btn-group">
+              <!-- 🗑️ 删除按钮 -->
+              <button
+                class="action-btn btn-delete"
+                data-tooltip="删除"
+                @click="handleDeleteArticle(activeArticle, activeArticleIndex)"
+              >
+                <svg
+                  class="btn-icon trash-icon"
+                  viewBox="0 0 19.6139 23.8449"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <!-- 桶身 -->
+                  <path
+                    class="body"
+                    d="M0.864252 5.55526L18.3963 5.55526C18.8775 5.55526 19.2525 5.17304 19.2525 4.69179C19.2525 4.21406 18.8775 3.83984 18.3963 3.83984L0.864252 3.83984C0.391014 3.83984 0 4.21406 0 4.69179C0 5.18104 0.391014 5.55526 0.864252 5.55526ZM5.14218 22.0363L14.1184 22.0363C15.6133 22.0363 16.5842 21.1211 16.6543 19.6244L17.3256 5.35194L1.92695 5.35194L2.60625 19.6324C2.67812 21.1291 3.63125 22.0363 5.14218 22.0363ZM6.63281 19.0078C6.21328 19.0078 5.93925 18.7516 5.91797 18.3383L5.62324 7.71991C5.60996 7.31288 5.88222 7.04862 6.31503 7.04862C6.72206 7.04862 7.00585 7.30487 7.01737 7.71014L7.32987 18.3348C7.3414 18.7418 7.06112 19.0078 6.63281 19.0078ZM9.62714 19.0078C9.2041 19.0078 8.91582 18.7453 8.91582 18.34L8.91582 7.71639C8.91582 7.31112 9.2041 7.04862 9.62714 7.04862C10.0484 7.04862 10.3447 7.31112 10.3447 7.71639L10.3447 18.34C10.3447 18.7453 10.0484 19.0078 9.62714 19.0078ZM12.6277 19.0078C12.1994 19.0078 11.9191 18.7418 11.9307 18.3348L12.2352 7.71815C12.2484 7.30487 12.5305 7.04862 12.9375 7.04862C13.3703 7.04862 13.6426 7.31288 13.6293 7.71991L13.3346 18.3383C13.3133 18.7516 13.0392 19.0078 12.6277 19.0078Z"
+                    fill="currentColor"
+                  />
+                  <!-- 盖子 -->
+                  <path
+                    class="lid"
+                    d="M5.19062 4.49277L6.99296 4.49277L6.99296 2.46445C6.99296 1.95878 7.34667 1.63437 7.89042 1.63437L11.3461 1.63437C11.8898 1.63437 12.2436 1.95878 12.2436 2.46445L12.2436 4.49277L14.0459 4.49277L14.0459 2.37382C14.0459 0.880468 13.0928 0 11.4746 0L7.76191 0C6.14375 0 5.19062 0.880468 5.19062 2.37382Z"
+                    fill="currentColor"
+                  />
+                </svg>
+              </button>
+
               <button
                 ref="copyBtnRef"
                 class="action-btn btn-copy"
@@ -7897,8 +9015,59 @@
             </div>
           </div>
         </div>
+      </transition>
 
-        <!-- Prompt 编辑详情页 -->
+      <!-- 🗑️ 删除确认弹窗（全局弹窗，独立于 transition） -->
+      <div
+        v-if="deleteConfirmVisible && currentView === 'detail'"
+        class="delete-confirm-overlay"
+        @click.self="cancelDeleteArticle"
+      >
+        <div class="delete-confirm-modal">
+          <div class="delete-confirm-header">
+            <svg
+              class="delete-confirm-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"
+                stroke="currentColor"
+                stroke-width="2"
+              />
+              <path
+                d="M12 8V12M12 16H12.01"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              />
+            </svg>
+            <h3>确认删除</h3>
+          </div>
+          <p class="delete-confirm-message">
+            点击空白区域可取消
+          </p>
+          <div class="delete-confirm-options">
+            <button
+              class="delete-option delete-option-hard"
+              @click="confirmDeleteArticle('hard')"
+            >
+              <span class="option-title">🔄 重新抓取</span>
+              <span class="option-desc">清除记录，修改提示词后可重新抓取</span>
+            </button>
+            <button
+              class="delete-option delete-option-soft"
+              @click="confirmDeleteArticle('soft')"
+            >
+              <span class="option-title">🚫 屏蔽此文</span>
+              <span class="option-desc">隐藏文章，以后不再抓取</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Prompt 编辑详情页 -->
         <div
           v-if="currentView === 'prompt_editor'"
           class="detail-view"
@@ -8026,7 +9195,7 @@
                 id="prompt-editor"
                 v-model="tempPromptContent"
                 class="form-input"
-                rows="18"
+                rows="10"
                 style="
                   font-family: monospace;
                   font-size: 13px;
@@ -8066,7 +9235,13 @@
         "rgb(44,44,46)",
         "rgb(162,132,94)",
         "rgb(50,173,230)",
+        "rgb(234,83,107)", 
       ];
+
+      // 🌟 特殊渐变色配置（用于音乐学院等）
+      const SPECIAL_GRADIENT_COLORS = {
+        "音乐学院": "linear-gradient(135deg, #EC5A73 100%, #EB3745 100%)", // 粉红色渐变（Apple Music 风格）
+      };
 
       const SOURCE_ICON_CATALOG = [
         {
@@ -8120,6 +9295,10 @@
         {
           name: "外国语学院",
           svg: '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 20.2832 19.9316">\n<g>\n<rect height="19.9316" opacity="0" width="20.2832" x="0" y="0"/>\n<path d="M2.23633 14.2676C3.71094 13.1543 3.66211 11.2793 4.21875 11.2793C4.52148 11.2793 4.82422 11.543 5.35156 12.2168C6.25 13.3789 6.8457 13.9551 7.45117 13.9551C8.01758 13.9551 8.71094 13.125 8.71094 12.4609C8.71094 12.1484 8.125 11.748 8.125 11.5137C8.125 11.377 8.26172 11.3086 8.45703 11.3086C9.83398 11.3086 11.0449 10.1562 11.0449 9.23828C11.0449 8.58398 9.98047 7.97852 9.98047 7.55859C9.98047 7.38281 10.127 7.26562 10.3027 7.26562C10.4199 7.26562 10.5566 7.31445 10.7324 7.44141C11.7969 8.28125 12.2949 7.8418 12.3926 7.30469C12.4316 7.08008 12.5586 6.8457 13.1152 6.57227C14.2773 5.95703 15.0977 5.11719 15.0977 4.46289C15.0977 3.73047 13.7695 3.10547 13.7695 2.82227C13.7695 2.66602 14.0137 2.5293 14.6582 2.33398C13.6523 1.41602 12.0508 0.742188 9.95117 0.742188C4.43359 0.957031 0.849609 4.90234 0.820312 9.96094C0.810547 11.543 1.30859 13.1152 2.23633 14.2676ZM14.3164 18.2129C16.2305 16.9922 17.6367 15.5078 18.5352 13.7891C18.3691 12.5391 17.7734 11.8164 16.9336 11.8164C16.709 11.8164 16.4258 11.8555 16.1719 11.9434C15.8301 12.0508 15.7617 12.0312 15.4883 11.7188C15.0977 11.2695 14.7559 11.1133 14.2188 11.1133C13.2031 11.1133 12.6172 11.6406 12.1777 12.959C12.0508 13.3594 11.875 13.4961 11.1914 13.7598L10.7812 13.9062C10.0195 14.1992 9.82422 14.7461 10.0879 15.8984C10.3223 16.9141 10.8105 17.4316 11.5039 17.4316C12.1289 17.4316 12.5098 17.207 12.9395 17.207C13.5645 17.1875 13.877 17.5977 14.3164 18.2129ZM12.3145 9.36523C12.9492 9.36523 13.2324 8.79883 13.9453 8.58398C14.4141 8.44727 14.668 7.96875 14.668 7.55859C14.668 7.22656 14.502 6.94336 14.1406 6.94336C13.7598 6.94336 13.4082 7.23633 13.1738 7.73438C13.0469 8.01758 12.832 8.1543 12.3145 8.30078C11.9043 8.42773 11.7578 8.57422 11.7578 8.88672C11.7578 9.21875 12.0215 9.36523 12.3145 9.36523ZM9.48242 13.877C10.0391 13.877 10.5859 13.2324 10.5859 12.6562C10.5859 11.9434 10.293 11.6113 9.95117 11.6113C9.58008 11.6113 9.3457 12.0508 9.3457 12.7148C9.3457 13.0957 9.01367 13.1055 9.01367 13.4863C9.01367 13.7207 9.19922 13.877 9.48242 13.877ZM7.77344 15.6641C8.20312 15.6641 8.4668 15.4395 8.4668 15.0879C8.4668 14.8145 8.26172 14.6387 7.96875 14.6387C6.78711 14.6387 6.73828 13.9746 6.17188 13.9746C5.85938 13.9746 5.64453 14.1602 5.64453 14.4336C5.64453 14.6484 5.85938 14.8145 6.15234 14.8145C6.77734 14.8145 6.48438 15.6641 7.77344 15.6641ZM9.96094 19.9219C15.459 19.9219 19.9219 15.459 19.9219 9.96094C19.9219 4.46289 15.459 0 9.96094 0C4.46289 0 0 4.46289 0 9.96094C0 15.459 4.46289 19.9219 9.96094 19.9219ZM9.96094 18.5938C5.19531 18.5938 1.32812 14.7266 1.32812 9.96094C1.32812 5.19531 5.19531 1.32812 9.96094 1.32812C14.7266 1.32812 18.5938 5.19531 18.5938 9.96094C18.5938 14.7266 14.7266 18.5938 9.96094 18.5938Z" fill="black" fill-opacity="0.85"/>\n</g>\n</svg>',
+        },
+        {
+          name: "音乐学院",
+          svg: '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 13.4318 20.8443">\n<g>\n<rect height="20.8443" opacity="0" width="13.4318" x="0" y="0"/>\n<path d="M13.0705 5.19101L13.0705 1.57136C13.0705 0.762811 12.3969 0.214419 11.6153 0.379221L6.53612 1.48789C5.68729 1.66938 5.21867 2.16785 5.21867 2.91616L5.22328 13.6039C5.24226 13.8959 5.12956 14.0443 4.90131 14.0949L3.30382 14.4246C1.11941 14.8721 0 16.0472 0 17.8128C0 19.6128 1.34632 20.8443 3.28077 20.8443C5.42508 20.8443 7.37954 19.2002 7.37954 16.5748L7.37954 7.58698C7.37954 7.38275 7.43243 7.29771 7.61537 7.25974L12.2051 6.2608C12.7311 6.14767 13.0705 5.72217 13.0705 5.19101Z" fill="black" fill-opacity="0.85"/>\n</g>\n</svg>',
         },
       ];
 
@@ -8194,6 +9373,51 @@
         return svgToUse
           .replace(/fill="black"/g, 'fill="currentColor"')
           .replace(/fill-opacity="0\.85"/g, "");
+      };
+
+      // 🌟 新增：获取订阅管理中的卡片样式（支持渐变色）
+      const getSubsChipStyle = (sourceName, isActive) => {
+        if (!isActive) return {};
+
+        // 检查是否有特殊渐变色
+        if (SPECIAL_GRADIENT_COLORS[sourceName]) {
+          return {
+            background: SPECIAL_GRADIENT_COLORS[sourceName],
+            color: '#ffffff'
+          };
+        }
+
+        // 默认使用普通颜色
+        const color = getSubsChipColor(sourceName);
+        return {
+          backgroundColor: color,
+          color: '#ffffff'
+        };
+      };
+
+      // 🌟 新增：获取订阅管理中的图标样式
+      const getSubsIconStyle = (sourceName, isActive) => {
+        if (isActive) {
+          return {
+            backgroundColor: 'rgba(255,255,255,0.25)',
+            color: '#ffffff'
+          };
+        }
+
+        // 未选中时，检查是否是特殊渐变色
+        if (SPECIAL_GRADIENT_COLORS[sourceName]) {
+          return {
+            background: SPECIAL_GRADIENT_COLORS[sourceName],
+            color: '#ffffff'
+          };
+        }
+
+        // 默认使用普通颜色
+        const color = getSubsChipColor(sourceName);
+        return {
+          backgroundColor: color,
+          color: sourceName === '创意设计学院' ? '#ffffff' : undefined
+        };
       };
 
       try {
@@ -8610,6 +9834,8 @@
             const pendingReadUrls = ref([]); // 待更新普通公文队列
             const pendingNoticeVersion = ref(null); // 待更新公告队列
             const activeArticle = ref(null);
+            const activeArticleIndex = ref(-1); // 🌟 当前查看文章在列表中的索引（用于删除操作）
+            const deleteConfirmVisible = ref(false); // 🌟 删除确认弹窗状态
             const lastArticle = ref(null); // 🌟 新增：记录最后一次查看的文章，用于前进键
             const isNavigatingBack = ref(false); // 🌟 新增：控制返回动画状态
             const articles = ref([]);
@@ -8928,7 +10154,41 @@
               smtpUser: "",
               smtpPassword: "",
               subscriberList: [],
+              // 🤖 多模型配置（用于 AI 爬虫多模型投票）
+              secondaryModels: [], // 备选模型列表 [{baseUrl, apiKey, modelName}]
             });
+
+            // 🌟 监听勿扰模式变化，立即同步到状态栏
+            watch(
+              () => config.value.muteMode,
+              async (newVal, oldVal) => {
+                // 跳过初始化时的触发
+                if (oldVal === undefined) return;
+                if (newVal === oldVal) return;
+
+                console.log("🔔 勿扰模式变化:", oldVal, "->", newVal);
+                try {
+                  // 1. 保存配置到后端
+                  const res = await pywebview.api.save_config(
+                    JSON.parse(JSON.stringify(config.value)),
+                  );
+                  if (res.status === "success") {
+                    // 2. 通知后端更新状态栏图标
+                    if (pywebview.api.refresh_tray_mute_status) {
+                      await pywebview.api.refresh_tray_mute_status(newVal);
+                    }
+                    showNotification(
+                      "勿扰模式",
+                      newVal ? "已开启" : "已关闭",
+                      "success",
+                      1500,
+                    );
+                  }
+                } catch (e) {
+                  console.error("同步勿扰模式失败:", e);
+                }
+              },
+            );
 
             // 🕷️ 自定义爬虫规则相关状态
             const customRules = ref([]); // 现有规则列表
@@ -8937,12 +10197,19 @@
             const isGeneratingRule = ref(false); // AI 生成中的 loading 态
             const previewData = ref(null); // 沙盒测试样本数据
             const generatedRuleCache = ref(null); // 暂存后端生成的规则
+            const showSelectorPanel = ref(false); // 选择器微调面板展开状态
+            const isRetestingRule = ref(false); // 重新测试中的 loading 态
             const ruleForm = ref({
+              source_type: "html", // 🌟 数据源类型：html 或 rss
               url: "",
               task_name: "",
               task_purpose: "", // 任务目的/类别（映射到数据库 category 字段）
               target_fields: [""], // 动态字段数组
               require_ai_summary: false, // 默认不需要 AI 摘要
+              custom_summary_prompt: "", // 🌟 专属 AI 提示词
+              max_items: null, // 🌟 单次抓取最大条目数
+              body_field: "", // 🌟 正文来源字段（仅 HTML）
+              skip_detail: false, // 🌟 跳过详情页抓取（仅 HTML）
             });
 
             // 📧 邮件推送相关状态
@@ -9586,15 +10853,22 @@
             // 重置规则表单
             const resetRuleForm = () => {
               ruleForm.value = {
+                source_type: "html", // 🌟 重置数据源类型
                 url: "",
                 task_name: "",
                 task_purpose: "",
                 target_fields: [""],
                 require_ai_summary: false,
+                custom_summary_prompt: "",
+                max_items: null, // 🌟 重置最大抓取条数
+                body_field: "", // 🌟 重置正文来源字段
+                skip_detail: false, // 🌟 重置跳过详情页
               };
               previewData.value = null;
               generatedRuleCache.value = null;
               editingRuleId.value = null; // 清除编辑状态
+              showSelectorPanel.value = false; // 折叠选择器面板
+              isRetestingRule.value = false; // 重置测试状态
             };
 
             // 打开新增规则向导
@@ -9609,18 +10883,100 @@
               resetRuleForm();
             };
 
-            // AI 智能分析并测试
-            const generateAndTestRule = async () => {
+            // 🌟 验证并保存 RSS 规则（独立方法）
+            const validateAndSaveRssRule = async () => {
               // 表单校验
               if (!ruleForm.value.url.trim()) {
-                showNotification("表单校验", "请输入目标网页 URL", "warning");
+                showNotification("表单校验", "请输入 RSS 订阅地址", "warning");
                 return;
               }
               if (!ruleForm.value.task_name.trim()) {
                 showNotification("表单校验", "请输入任务名称", "warning");
                 return;
               }
-              // 过滤空字段
+
+              isGeneratingRule.value = true;
+              try {
+                const ruleDict = {
+                  rule_id: `rule_rss_${Date.now()}`,
+                  task_id: `task_${Date.now()}`,
+                  task_name: ruleForm.value.task_name.trim(),
+                  task_purpose: ruleForm.value.task_purpose.trim(),
+                  url: ruleForm.value.url.trim(),
+                  source_type: 'rss',
+                  require_ai_summary: ruleForm.value.require_ai_summary,
+                  custom_summary_prompt: ruleForm.value.custom_summary_prompt.trim(),
+                  max_items: ruleForm.value.max_items || null, // 🌟 最大抓取条数
+                };
+                const res = await pywebview.api.validate_and_save_rss_rule(ruleDict);
+                if (res.status === "success") {
+                  showNotification(
+                    "保存成功",
+                    `📡 RSS 规则「${ruleDict.task_name}」已保存`,
+                    "success"
+                  );
+                  closeCustomRuleModal();
+                  await fetchCustomRules();
+                } else {
+                  showNotification("保存失败", res.message || "RSS 验证失败", "error");
+                }
+              } catch (e) {
+                showNotification("保存失败", "网络请求失败", "error");
+                console.error("保存 RSS 规则失败:", e);
+              } finally {
+                isGeneratingRule.value = false;
+              }
+            };
+
+            // AI 智能分析并测试
+            const generateAndTestRule = async () => {
+              // 表单校验
+              if (!ruleForm.value.url.trim()) {
+                showNotification("表单校验", ruleForm.value.source_type === 'rss' ? "请输入 RSS 订阅地址" : "请输入目标网页 URL", "warning");
+                return;
+              }
+              if (!ruleForm.value.task_name.trim()) {
+                showNotification("表单校验", "请输入任务名称", "warning");
+                return;
+              }
+
+              // 🌟 RSS 模式：直接验证并保存
+              if (ruleForm.value.source_type === 'rss') {
+                isGeneratingRule.value = true;
+                try {
+                  const ruleDict = {
+                    rule_id: `rule_rss_${Date.now()}`,
+                    task_id: `task_${Date.now()}`,
+                    task_name: ruleForm.value.task_name.trim(),
+                    task_purpose: ruleForm.value.task_purpose.trim(),
+                    url: ruleForm.value.url.trim(),
+                    source_type: 'rss',
+                    require_ai_summary: ruleForm.value.require_ai_summary,
+                    custom_summary_prompt: ruleForm.value.custom_summary_prompt.trim(),
+                    max_items: ruleForm.value.max_items || null, // 🌟 最大抓取条数
+                  };
+                  const res = await pywebview.api.validate_and_save_rss_rule(ruleDict);
+                  if (res.status === "success") {
+                    showNotification(
+                      "保存成功",
+                      `📡 RSS 规则「${ruleDict.task_name}」已保存`,
+                      "success"
+                    );
+                    closeCustomRuleModal();
+                    await fetchCustomRules();
+                  } else {
+                    showNotification("保存失败", res.message || "RSS 验证失败", "error");
+                  }
+                } catch (e) {
+                  showNotification("保存失败", "网络请求失败", "error");
+                  console.error("保存 RSS 规则失败:", e);
+                } finally {
+                  isGeneratingRule.value = false;
+                }
+                return;
+              }
+
+              // HTML 模式：过滤空字段
               const validFields = ruleForm.value.target_fields.filter((f) =>
                 f.trim(),
               );
@@ -9642,6 +10998,10 @@
                   validFields,
                   ruleForm.value.require_ai_summary,
                   ruleForm.value.task_purpose.trim(), // 任务目的/类别
+                  ruleForm.value.custom_summary_prompt.trim(), // 🌟 专属 AI 提示词
+                  ruleForm.value.max_items || null, // 🌟 最大抓取条数
+                  ruleForm.value.body_field || "", // 🌟 正文来源字段
+                  ruleForm.value.skip_detail, // 🌟 跳过详情页抓取
                 );
 
                 if (res.status === "success") {
@@ -9681,6 +11041,47 @@
               await generateAndTestRule();
             };
 
+            // 🌟 手动微调选择器后重新测试
+            const handleManualRetest = async () => {
+              if (!generatedRuleCache.value) {
+                showNotification("测试失败", "没有可测试的规则", "error");
+                return;
+              }
+
+              isRetestingRule.value = true;
+              console.log("用户手动修改选择器，重新测试...");
+
+              try {
+                // 调用后端的 test_custom_spider_rule 接口
+                const res = await pywebview.api.test_custom_spider_rule(
+                  generatedRuleCache.value,
+                );
+
+                if (res.status === "success") {
+                  // 用新测试的数据覆盖当前的样本列表
+                  previewData.value = res.sample_data || [];
+                  showNotification(
+                    "测试成功",
+                    `已用新选择器提取到 ${previewData.value.length} 条样本数据`,
+                    "success",
+                  );
+                  // 折叠面板
+                  showSelectorPanel.value = false;
+                } else {
+                  showNotification(
+                    "测试失败",
+                    res.message || "提取数据失败，请检查选择器",
+                    "error",
+                  );
+                }
+              } catch (error) {
+                console.error("重新测试异常:", error);
+                showNotification("测试异常", "请求失败，请重试", "error");
+              } finally {
+                isRetestingRule.value = false;
+              }
+            };
+
             // 确认并保存规则
             const confirmAndSaveRule = async () => {
               // 编辑模式
@@ -9702,6 +11103,10 @@
                       {},
                     ),
                     require_ai_summary: ruleForm.value.require_ai_summary,
+                    custom_summary_prompt: ruleForm.value.custom_summary_prompt, // 🌟 专属提示词
+                    max_items: ruleForm.value.max_items || null, // 🌟 最大抓取条数
+                    body_field: ruleForm.value.body_field || "", // 🌟 正文来源字段
+                    skip_detail: ruleForm.value.skip_detail, // 🌟 跳过详情页抓取
                   };
 
                   const res =
@@ -9741,6 +11146,11 @@
                   ...generatedRuleCache.value,
                   task_name: ruleForm.value.task_name,
                   task_purpose: ruleForm.value.task_purpose,
+                  require_ai_summary: ruleForm.value.require_ai_summary,
+                  custom_summary_prompt: ruleForm.value.custom_summary_prompt, // 🌟 专属提示词
+                  max_items: ruleForm.value.max_items || null, // 🌟 最大抓取条数
+                  body_field: ruleForm.value.body_field || "", // 🌟 正文来源字段
+                  skip_detail: ruleForm.value.skip_detail, // 🌟 跳过详情页抓取
                 };
                 const res = await pywebview.api.confirm_and_save_rule(
                   ruleToSave,
@@ -9773,11 +11183,16 @@
               editingRuleId.value = rule.rule_id;
               // 填充表单数据
               ruleForm.value = {
+                source_type: rule.source_type || "html", // 🌟 填充数据源类型
                 url: rule.url,
                 task_name: rule.task_name,
                 task_purpose: rule.task_purpose || "",
                 target_fields: Object.keys(rule.field_selectors || {}),
                 require_ai_summary: rule.require_ai_summary ?? false,
+                custom_summary_prompt: rule.custom_summary_prompt || "", // 🌟 填充专属提示词
+                max_items: rule.max_items ?? null, // 🌟 填充最大抓取条数
+                body_field: rule.body_field || "", // 🌟 填充正文来源字段
+                skip_detail: rule.skip_detail ?? false, // 🌟 填充跳过详情页
               };
               // 直接使用已有规则作为缓存，跳过AI生成步骤
               generatedRuleCache.value = {
@@ -9843,6 +11258,75 @@
                 }
               } catch (e) {
                 showNotification("删除失败", "网络请求失败", "error");
+              }
+            };
+
+            // ============================================================
+            // 备选模型配置方法
+            // ============================================================
+
+            // 备选模型展开状态
+            const secondaryModelsExpanded = ref(false);
+
+            // 切换备选模型展开状态
+            const toggleSecondaryModelsExpanded = () => {
+              secondaryModelsExpanded.value = !secondaryModelsExpanded.value;
+            };
+
+            // 添加备选模型
+            const addSecondaryModel = () => {
+              if (config.value.secondaryModels.length >= 3) {
+                showNotification("已达上限", "最多支持 3 个备选模型", "warning", 2000);
+                return;
+              }
+              config.value.secondaryModels.push({
+                baseUrl: "",
+                apiKey: "",
+                modelName: "",
+                showApiKey: false,
+                isTesting: false,
+                connectionStatus: "idle"
+              });
+            };
+
+            // 移除备选模型
+            const removeSecondaryModel = (index) => {
+              config.value.secondaryModels.splice(index, 1);
+            };
+
+            // 测试单个备选模型连接
+            const testSecondaryModelConnection = async (index) => {
+              const model = config.value.secondaryModels[index];
+
+              if (!model.baseUrl || !model.apiKey || !model.modelName) {
+                showNotification("配置不完整", "请填写完整的模型配置", "warning", 2000);
+                return;
+              }
+
+              model.isTesting = true;
+              model.connectionStatus = "testing";
+
+              try {
+                const res = await pywebview.api.test_ai_connection(
+                  model.apiKey,
+                  model.modelName,
+                  "custom",
+                  model.baseUrl
+                );
+
+                model.isTesting = false;
+
+                if (res.status === "success") {
+                  model.connectionStatus = "success";
+                  showNotification("连接成功", `模型 ${model.modelName} 连接正常`, "success", 1500);
+                } else {
+                  model.connectionStatus = "error";
+                  showNotification("连接失败", res.message || "未知错误", "error", 3000);
+                }
+              } catch (e) {
+                model.isTesting = false;
+                model.connectionStatus = "error";
+                showNotification("连接失败", "网络请求失败", "error", 3000);
               }
             };
 
@@ -11292,6 +12776,11 @@
                 ...item,
                 parsedAttachments: parsedAttachments,
               };
+              // 🌟 记录当前文章在列表中的索引（用于删除操作）
+              const idx = articles.value.findIndex(
+                (a) => a.url === enrichedItem.url
+              );
+              activeArticleIndex.value = idx;
               activeArticle.value = enrichedItem;
               lastArticle.value = enrichedItem;
               currentView.value = "detail";
@@ -11299,6 +12788,69 @@
               // 🌟 手动点击同样受"真实阅读追踪器"保护
               setupReadingTracker(enrichedItem);
             };
+
+            // 🗑️ 打开删除确认弹窗
+            const handleDeleteArticle = (article, index) => {
+              if (!article || index < 0) return;
+              deleteConfirmVisible.value = true;
+            };
+
+            // 🗑️ 执行删除操作（soft: 软删除屏蔽 | hard: 硬删除重新抓取）
+            const confirmDeleteArticle = async (mode) => {
+              deleteConfirmVisible.value = false;
+
+              const article = activeArticle.value;
+              const index = activeArticleIndex.value;
+              if (!article || index < 0) return;
+
+              const isHardDelete = mode === "hard";
+
+              // 先从列表中移除（乐观更新）
+              const removed = articles.value.splice(index, 1)[0];
+              if (!removed.is_read && unreadCount.value > 0) {
+                unreadCount.value--;
+              }
+
+              // 清理阅读追踪状态
+              activeArticle.value = null;
+              activeArticleIndex.value = -1;
+              currentView.value = "list";
+
+              try {
+                const res = await pywebview.api.delete_article(
+                  article.id,
+                  isHardDelete
+                );
+                if (res.status !== "success") {
+                  // 删除失败，恢复数据
+                  articles.value.splice(index, 0, removed);
+                  if (!removed.is_read) {
+                    unreadCount.value++;
+                  }
+                  showNotification("删除失败", res.message || "删除失败", "error");
+                } else {
+                  showNotification(
+                    "操作成功",
+                    isHardDelete ? "已清除记录，可重新抓取" : "已屏蔽该文章",
+                    "success"
+                  );
+                }
+              } catch (e) {
+                // 网络异常，恢复数据
+                articles.value.splice(index, 0, removed);
+                if (!removed.is_read) {
+                  unreadCount.value++;
+                }
+                showNotification("网络异常", "请检查网络连接", "error");
+                console.error("删除文章失败:", e);
+              }
+            };
+
+            // 🗑️ 取消删除
+            const cancelDeleteArticle = () => {
+              deleteConfirmVisible.value = false;
+            };
+
             // 👇 终极版：接收后台强提醒 -> 直接在右上角展示新内容详情
             window.showArticleDetailFromBackend = (item) => {
               console.log("🔔 收到后台推送:", item.title);
@@ -11377,6 +12929,12 @@
               } else {
                 articles.value.unshift(enrichedItem);
               }
+
+              // 🌟 记录当前文章在列表中的索引（用于删除操作）
+              const finalIdx = articles.value.findIndex(
+                (a) => a.url === enrichedItem.url
+              );
+              activeArticleIndex.value = finalIdx;
 
               // 强制切换到详情视图
               currentView.value = "detail";
@@ -12490,6 +14048,10 @@
               // 视图与状态
               currentView,
               activeArticle,
+              activeArticleIndex, // 🌟 当前文章索引（用于删除）
+              deleteConfirmVisible, // 🌟 删除确认弹窗状态
+              confirmDeleteArticle, // 🌟 确认删除
+              cancelDeleteArticle, // 🌟 取消删除
               lastArticle,
               isNavigatingBack,
               processedArticles,
@@ -12523,6 +14085,7 @@
               handleButtonClick,
               checkUpdates,
               openDetail,
+              handleDeleteArticle, // 🌟 双轨删除
               backToList,
               goToLastArticle,
               renderMarkdown,
@@ -12611,7 +14174,11 @@
               addRuleField,
               removeRuleField,
               generateAndTestRule,
+              validateAndSaveRssRule,
               handleRegenerateRule,
+              handleManualRetest,
+              showSelectorPanel,
+              isRetestingRule,
               confirmAndSaveRule,
               editRule,
               toggleRuleStatus,
@@ -12619,6 +14186,13 @@
               resetRuleForm,
               openCustomRuleModal,
               closeCustomRuleModal,
+
+              // 备选模型配置
+              secondaryModelsExpanded,
+              toggleSecondaryModelsExpanded,
+              addSecondaryModel,
+              removeSecondaryModel,
+              testSecondaryModelConnection,
 
               // 附件与工具
               truncateMiddle,
@@ -12640,6 +14214,8 @@
               getAITagBgColor,
               getSubsChipColor,
               getSubsIcon,
+              getSubsChipStyle,
+              getSubsIconStyle,
 
               //设置相关
               isPromptEditorOpen,

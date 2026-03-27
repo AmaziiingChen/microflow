@@ -127,6 +127,15 @@ def update_tray_status(unread: int = None, sync_time: str = None):  # type:ignor
                 )
                 main_mod._sync_item.setTitle_(f"同步: {sync_text}")
 
+            # 🌟 更新勿扰模式勾选状态
+            if hasattr(main_mod, "_mute_item") and main_mod._mute_item:
+                from Cocoa import NSOnState, NSOffState  # type: ignore
+
+                main_mod._mute_item.setState_(
+                    NSOnState if main_mod._mute_mode else NSOffState
+                )
+                print(f"📊 [DEBUG] 勿扰模式勾选状态已更新: {main_mod._mute_mode}")
+
             # 2. 🌟 核心修复：根据未读数量控制红点显示/隐藏
             print(f"📊 [DEBUG] 准备更新红点, _unread_count={main_mod._unread_count}")
             if main_mod._unread_count > 0:

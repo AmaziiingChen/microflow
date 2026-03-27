@@ -84,7 +84,7 @@ class UtlSpider(BaseSpider):
 
             logger.debug(f"[{self.SOURCE_NAME}] HTML 长度: {len(html_content)}")
 
-            soup = BeautifulSoup(html_content, 'html.parser')
+            soup = BeautifulSoup(html_content, 'lxml')
 
             # 根据板块选择不同的解析策略
             if section == "学院动态":

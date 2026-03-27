@@ -42,6 +42,8 @@ class AppConfig:
     smtp_user: str = ""  # SMTP 用户名
     smtp_password: str = ""  # SMTP 密码/授权码
     subscriber_list: list = field(default_factory=list)  # 订阅者邮箱列表
+    # 🤖 多模型配置（用于 AI 爬虫多模型投票）
+    secondary_models: list = field(default_factory=list)  # 备选模型列表 [{baseUrl, apiKey, modelName}]
 
 
 class ConfigService:
@@ -190,6 +192,8 @@ class ConfigService:
                 smtp_user=data.get('smtpUser', ''),
                 smtp_password=data.get('smtpPassword', ''),
                 subscriber_list=data.get('subscriberList', []),
+                # 🤖 多模型配置（用于 AI 爬虫多模型投票）
+                secondary_models=data.get('secondaryModels', []),
             )
             return self._config
 
@@ -270,6 +274,8 @@ class ConfigService:
                 smtp_user=config_dict.get('smtpUser', ''),
                 smtp_password=config_dict.get('smtpPassword', ''),
                 subscriber_list=config_dict.get('subscriberList', []),
+                # 🤖 多模型配置（用于 AI 爬虫多模型投票）
+                secondary_models=config_dict.get('secondaryModels', []),
             )
 
             logger.info("配置已成功保存")
@@ -321,6 +327,8 @@ class ConfigService:
             "smtpUser": config.smtp_user,
             "smtpPassword": config.smtp_password,
             "subscriberList": config.subscriber_list,
+            # 🤖 多模型配置（用于 AI 爬虫多模型投票）
+            "secondaryModels": config.secondary_models,
         }
 
     def get(self, key: str, default: Any = None) -> Any:
@@ -373,6 +381,8 @@ class ConfigService:
             'smtpUser': 'smtp_user',
             'smtpPassword': 'smtp_password',
             'subscriberList': 'subscriber_list',
+            # 🤖 多模型配置（用于 AI 爬虫多模型投票）
+            'secondaryModels': 'secondary_models',
         }
 
         # 转换键名

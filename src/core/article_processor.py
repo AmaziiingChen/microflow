@@ -29,6 +29,7 @@ class ArticleContext:
     category: str = ""
     department: str = ""
     require_ai_summary: bool = True  # 🌟 是否需要 AI 摘要（动态爬虫可设置为 False）
+    custom_summary_prompt: str = ""  # 🌟 专属 AI 提示词（用于定制摘要输出格式）
 
 
 @dataclass
@@ -208,7 +209,7 @@ class ArticleProcessor:
                 if task is None:
                     break
 
-                # 🌟 核心修复：检查取消状态。如果用户点击了取消，充当“黑洞”瞬间清空队列
+                # 🌟 核心修复：检查取消状态。如果用户点击了取消，充当"黑洞"瞬间清空队列
                 if self.is_cancel_requested():
                     logger.info(
                         f"Worker #{worker_id} 处于取消状态，快速丢弃任务: {task.ctx.title if task else 'None'}"
@@ -265,16 +266,63 @@ class ArticleProcessor:
         spider = task.spider
         ctx = task.ctx
 
+        # 🌟 获取数据源类型（用于分流处理）
+        source_type = getattr(spider, '_source_type', 'html')
+        # 🌟 获取跳过详情配置（仅 HTML 爬虫有效）
+        skip_detail = getattr(spider, 'skip_detail', False)
+
         # 1. 获取详情
-        try:
-            detail = spider.fetch_detail(ctx.url)
-            if not detail:
-                logger.debug(f"[{ctx.source_name}] 详情获取失败: {ctx.title}")
-                return False, "detail_failed", None
-            ctx.detail = detail
-        except Exception as e:
-            logger.warning(f"[{ctx.source_name}] 详情获取异常 ({ctx.title}): {e}")
-            return False, "detail_error", None
+        # 🌟 根据数据源类型和配置决定是否抓取详情
+        if source_type == 'rss':
+            # RSS 订阅：列表中已包含完整内容，无需抓取详情
+            detail = {
+                'title': ctx.title,
+                'url': ctx.url,
+                'body_text': ctx.raw_text,
+                'body_html': '',
+                'images': [],
+                'attachments': [],
+                'exact_time': '',
+                'dynamic_fields': {}
+            }
+            logger.debug(f"[{ctx.source_name}] RSS 订阅，跳过详情抓取: {ctx.title[:30]}...")
+        elif source_type == 'html' and skip_detail:
+            # HTML 动态爬虫且配置了 skip_detail：使用列表页内容，跳过详情抓取
+            detail = {
+                'title': ctx.title,
+                'url': ctx.url,
+                'body_text': ctx.raw_text,
+                'body_html': '',
+                'images': [],
+                'attachments': [],
+                'exact_time': '',
+                'dynamic_fields': getattr(spider, 'field_selectors', {})
+            }
+            logger.debug(f"[{ctx.source_name}] HTML 动态爬虫配置了 skip_detail，跳过详情抓取: {ctx.title[:30]}...")
+        elif ctx.raw_text and len(ctx.raw_text.strip()) >= 10:
+            # HTML 动态爬虫：列表中可能已包含内容
+            detail = {
+                'title': ctx.title,
+                'url': ctx.url,
+                'body_text': ctx.raw_text,
+                'body_html': '',
+                'images': [],
+                'attachments': [],
+                'exact_time': ''
+            }
+            logger.debug(f"[{ctx.source_name}] 列表中已包含内容，跳过详情抓取: {ctx.title[:30]}...")
+        else:
+            # 正常抓取详情
+            try:
+                detail = spider.fetch_detail(ctx.url)
+                if not detail:
+                    logger.debug(f"[{ctx.source_name}] 详情获取失败: {ctx.title}")
+                    return False, "detail_failed", None
+            except Exception as e:
+                logger.warning(f"[{ctx.source_name}] 详情获取异常 ({ctx.title}): {e}")
+                return False, "detail_error", None
+
+        ctx.detail = detail
 
         # 2. 提取正文
         raw_text = detail.get("body_text", "")
@@ -292,7 +340,7 @@ class ArticleProcessor:
                 from bs4 import BeautifulSoup
 
                 try:
-                    soup = BeautifulSoup(body_html, "html.parser")
+                    soup = BeautifulSoup(body_html, 'lxml')
                     extracted_text = soup.get_text(strip=True, separator=" ")
                     # 检查是否包含图片标签
                     has_images = bool(soup.find("img"))
@@ -396,9 +444,19 @@ class ArticleProcessor:
                 except Exception as e:
                     logger.warning(f"纯图片进度回调失败: {e}")
         elif skip_ai_summary:
-            # 🌟 动态爬虫：跳过 AI 调用，使用格式化的动态字段作为摘要
-            summary = self._format_dynamic_summary(detail, raw_text)
-            logger.info(f"[{ctx.source_name}] 动态爬虫跳过 AI，使用字段摘要: {ctx.title}")
+            # 🌟 跳过 AI 调用：根据数据源类型分流处理
+            if source_type == 'html':
+                # HTML 动态爬虫：使用格式化的动态字段作为摘要
+                summary = self._format_dynamic_summary(detail, raw_text)
+                logger.info(f"[{ctx.source_name}] HTML 动态爬虫跳过 AI，使用字段摘要: {ctx.title}")
+            elif source_type == 'rss':
+                # RSS 订阅：直接使用完整原始内容作为摘要
+                summary = raw_text if raw_text else "【无内容】"
+                logger.info(f"[{ctx.source_name}] RSS 订阅跳过 AI，使用原始内容: {ctx.title[:30]}...")
+            else:
+                # 其他类型：兜底处理
+                summary = raw_text if raw_text else "【无内容】"
+                logger.info(f"[{ctx.source_name}] 跳过 AI，使用原始内容: {ctx.title[:30]}...")
             with self._stats_lock:
                 self._stats["ai_completed"] += 1
                 ai_completed = self._stats["ai_completed"]
@@ -420,7 +478,10 @@ class ArticleProcessor:
             # 9. AI 生成摘要（此处已有指数退避重试）
             logger.info(f"[{ctx.source_name}] 发现变动 ({reason}) -> {ctx.title}")
             try:
-                summary = self.llm.summarize_article(ctx.title, raw_text)
+                # 🌟 传递专属 AI 提示词
+                summary = self.llm.summarize_article(
+                    ctx.title, raw_text, custom_prompt=ctx.custom_summary_prompt
+                )
             except Exception as e:
                 logger.warning(f"AI 摘要生成异常 ({ctx.title}): {e}")
                 with self._stats_lock:
@@ -635,9 +696,11 @@ class ArticleProcessor:
             date=article.get("date", ""),
             source_name=source_name,
             section_name=section_name,
+            raw_text=article.get("body_text", ""),  # 🌟 传递列表中已获取的内容（RSS 等场景）
             category=article.get("category", ""),
             department=department,
             require_ai_summary=article.get("require_ai_summary", True),
+            custom_summary_prompt=article.get("custom_summary_prompt", ""),
         )
 
     def get_stats(self) -> Dict[str, int]:
@@ -759,12 +822,28 @@ class ArticleProcessor:
             from src.services.snapshot_service import render_article_snapshot
             from src.services.email_service import EmailService
 
-            # 1. 生成快照图片
+            # 1. 🌟 生成快照图片（带重试机制）
             logger.info(f"📧 步骤1: 正在生成快照图片...")
-            snapshot_path = render_article_snapshot(article_data)
+            snapshot_path = None
+            max_retries = 3
+
+            for attempt in range(max_retries):
+                try:
+                    snapshot_path = render_article_snapshot(article_data)
+                    if snapshot_path:
+                        break  # 成功，退出重试
+                    logger.warning(f"📧 快照生成返回空，第 {attempt+1}/{max_retries} 次重试")
+                except Exception as e:
+                    logger.warning(f"📧 快照生成异常 (尝试 {attempt+1}/{max_retries}): {e}")
+
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(1)  # 等待 1 秒后重试
 
             if not snapshot_path:
-                logger.error("📧 快照生成失败，跳过邮件发送")
+                logger.error("📧 快照生成最终失败，跳过邮件推送")
+                # 🌟 通知用户快照生成失败
+                self._notify_email_failure("快照生成失败，请检查网络或重试")
                 return
 
             logger.info(f"📧 快照生成成功: {snapshot_path}")
@@ -802,15 +881,41 @@ class ArticleProcessor:
             except Exception as e:
                 logger.warning(f"📧 清理临时文件失败: {e}")
 
+            # 5. 🌟 处理发送结果，失败时通知用户
             if result.get('success'):
                 logger.info(f"📧 ✅ 邮件推送成功: {result.get('sent_count', 0)} 封")
             else:
-                logger.error(f"📧 ❌ 邮件推送失败: {result.get('message', '未知错误')}")
+                failed_list = result.get('failed', [])
+                error_msg = result.get('message', '未知错误')
+                logger.error(f"📧 ❌ 邮件推送失败: {error_msg}")
+
+                # 通知用户邮件发送失败
+                if failed_list:
+                    failed_emails = [f.get('email', '未知') for f in failed_list]
+                    self._notify_email_failure(f"邮件推送失败：{', '.join(failed_emails[:3])}")
+                else:
+                    self._notify_email_failure(error_msg)
 
         except ImportError as e:
             logger.error(f"📧 邮件服务模块导入失败: {e}")
+            self._notify_email_failure("邮件服务模块加载失败")
         except Exception as e:
             logger.error(f"📧 邮件发送异常: {e}", exc_info=True)
+            self._notify_email_failure(f"邮件发送异常: {str(e)[:50]}")
+
+    def _notify_email_failure(self, message: str) -> None:
+        """
+        通知用户邮件推送失败
+
+        Args:
+            message: 失败原因
+        """
+        try:
+            from src.notifier import send_notification
+            send_notification("邮件推送失败", message)
+            logger.info(f"📧 已发送邮件失败通知: {message}")
+        except Exception as e:
+            logger.warning(f"📧 发送失败通知时出错: {e}")
 
     def shutdown(self, wait: bool = True):
         """

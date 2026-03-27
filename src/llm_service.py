@@ -1,5 +1,6 @@
 import logging
 import time
+import threading
 from openai import OpenAI
 import os
 import random
@@ -45,6 +46,9 @@ class LLMService:
 
         self.client = None
 
+        # 🌟 取消事件（用于中断正在进行的 AI 调用）
+        self._cancel_event = threading.Event()
+
         self.system_prompt = """# Role: 高校公文首席分析师
 
 ## Profile
@@ -70,9 +74,9 @@ class LLMService:
 - **信息缺失处理**：若原文未提及时间/地点，请忽略或备注"详见原文"，绝对禁止编造。
 
 本系统的前端已通过原生代码自动渲染了【发文单位】、【发文日期】以及【文末文档附件列表（如 pdf/docx 下载）】。为避免画面冗余：
-1. **禁止输出外围信息**：总结中**绝对禁止**重复输出“发文单位”、“落款日期”，也严禁出现“附件详见文末”、“请下载附件查看”等废话提示语。
-2. **转移注意力（深化细节）**：请将原本用于总结外围信息的算力，100% 转移到“正文高价值细节”的深挖上。例如：具体的办理步骤、严苛的审核条件、处罚机制、学分折算细则等。
-3. **链接特例区分**：普通的文档附件需忽略，但**“外部系统的网页操作入口 / 报名问卷网址”**必须严格按照前述的 `[描述](URL)` 格式强制保留在正文中！
+1. **禁止输出外围信息**：总结中**绝对禁止**重复输出"发文单位"、"落款日期"，也严禁出现"附件详见文末"、"请下载附件查看"等废话提示语。
+2. **转移注意力（深化细节）**：请将原本用于总结外围信息的算力，100% 转移到"正文高价值细节"的深挖上。例如：具体的办理步骤、严苛的审核条件、处罚机制、学分折算细则等。
+3. **链接特例区分**：普通的文档附件需忽略，但**"外部系统的网页操作入口 / 报名问卷网址"**必须严格按照前述的 `[描述](URL)` 格式强制保留在正文中！
 
 ## 输出格式规范
 
@@ -134,6 +138,21 @@ class LLMService:
         error_lower = error_msg.lower()
         return any(pattern in error_lower for pattern in retryable_patterns)
 
+    # ==================== 取消控制 ====================
+
+    def request_cancel(self) -> None:
+        """请求取消当前正在进行的 AI 调用"""
+        self._cancel_event.set()
+        logger.info("🛑 LLMService: 已请求取消 AI 调用")
+
+    def clear_cancel(self) -> None:
+        """清除取消标志（用于新的一轮调用）"""
+        self._cancel_event.clear()
+
+    def is_cancelled(self) -> bool:
+        """检查是否已请求取消"""
+        return self._cancel_event.is_set()
+
     def _calculate_delay(self, attempt: int) -> float:
         """
         计算指数退避延迟时间
@@ -150,22 +169,30 @@ class LLMService:
         jitter = delay * 0.1 * random.random()
         return min(delay + jitter, self.MAX_DELAY)
 
-    def summarize_article(self, title: str, raw_text: str) -> str:
-        """
-        调用大模型对公文正文进行结构化总结（带指数退避重试）
+    def summarize_article(self, title: str, raw_text: str, custom_prompt: str = None) -> str:
+        '''
+        调用大模型对公文正文进行结构化总结（带指数退避重试和可中断机制）
 
         Args:
             title: 文章标题
             raw_text: 原始文本
+            custom_prompt: 🌟 专属 AI 提示词（用于定制摘要输出格式）
 
         Returns:
             摘要内容或错误标识字符串
-        """
+        '''
+        # 🌟 清除之前的取消状态（开始新任务）
+        self._cancel_event.clear()
+
         if not self.client:
             return "⚠️ 系统未配置 API Key 或大模型尚未初始化。请在设置中配置。"
 
         if not raw_text or len(raw_text.strip()) < 10:
             return "⚠️ 原文内容过短或抓取失败，无法进行有效的 AI 总结。"
+
+        # 🌟 检查取消状态
+        if self._cancel_event.is_set():
+            return "⚠️ 用户取消"
 
         # 🌟 检查余额状态：如果欠费，直接返回提示
         try:
@@ -185,30 +212,68 @@ class LLMService:
                         )
                 except Exception as notify_err:
                     logger.debug(f"通知前端失败: {notify_err}")
-                return "⚠️【欠费提醒】您的 API 账户余额不足，AI 总结功能已暂停。请充值或更换密钥后点击“我已充值”恢复。"
+                return "⚠️【欠费提醒】您的 API 账户余额不足，AI 总结功能已暂停。请充值或更换密钥后点击「我已充值」恢复。"
         except Exception as e:
             logger.warning(f"检查余额状态失败: {e}")
 
         logger.info(f"正在调用 AI 分析公文: {title}")
-        user_content = f"以下是公文《{title}》的正文内容，请按照系统设定的规范进行总结：\n\n{raw_text}"
+
+        # 🌟 构建用户消息：支持自定义提示词
+        if custom_prompt and custom_prompt.strip():
+            user_content = f"以下是文章《{title}》的正文内容。\n\n📋 **专属指令**：{custom_prompt}\n\n---\n\n{raw_text}"
+            logger.info(f"使用自定义提示词: {custom_prompt[:50]}...")
+        else:
+            user_content = f"以下是公文《{title}》的正文内容，请按照系统设定的规范进行总结：\n\n{raw_text}"
 
         last_error = None
 
         for attempt in range(self.MAX_RETRIES):
-            try:
-                response = self.client.chat.completions.create(
-                    model=self.model_name,
-                    messages=[
-                        {"role": "system", "content": self.system_prompt},
-                        {"role": "user", "content": user_content},
-                    ],
-                    temperature=0.3,
-                    max_tokens=3000,
-                    top_p=0.9,
-                    timeout=60.0,
-                )
+            # 🌟 在每次尝试前检查取消状态
+            if self._cancel_event.is_set():
+                logger.info(f"AI 调用被用户取消（尝试 {attempt + 1}）: {title}")
+                return "⚠️ 用户取消"
 
-                content = response.choices[0].message.content
+            try:
+                # 🌟 使用线程执行 API 调用，支持中断
+                result_container = {"content": None, "error": None}
+                call_completed = threading.Event()
+
+                def _api_call():
+                    try:
+                        response = self.client.chat.completions.create(
+                            model=self.model_name,
+                            messages=[
+                                {"role": "system", "content": self.system_prompt},
+                                {"role": "user", "content": user_content},
+                            ],
+                            temperature=0.3,
+                            max_tokens=3000,
+                            top_p=0.9,
+                            timeout=45.0,  # 🌟 缩短超时：60 -> 45 秒
+                        )
+                        result_container["content"] = response.choices[0].message.content
+                    except Exception as e:
+                        result_container["error"] = e
+                    finally:
+                        call_completed.set()
+
+                # 启动 API 调用线程
+                api_thread = threading.Thread(target=_api_call, daemon=True)
+                api_thread.start()
+
+                # 🌟 等待 API 调用完成或被取消（每 0.5 秒检查一次取消状态）
+                while not call_completed.wait(timeout=0.5):
+                    if self._cancel_event.is_set():
+                        logger.info(f"用户取消，等待 API 线程结束: {title}")
+                        # 等待线程结束（最多再等 2 秒）
+                        call_completed.wait(timeout=2.0)
+                        return "⚠️ 用户取消"
+
+                # 检查结果
+                if result_container["error"] is not None:
+                    raise result_container["error"]
+
+                content = result_container["content"]
                 if content:
                     return content.strip()
                 else:
@@ -217,6 +282,10 @@ class LLMService:
             except Exception as e:
                 last_error = str(e)
                 error_lower = last_error.lower()
+
+                # 🌟 如果是取消导致的异常，直接返回
+                if self._cancel_event.is_set():
+                    return "⚠️ 用户取消"
 
                 # 🌟 检测余额不足错误并更新状态
                 balance_error_patterns = [
@@ -265,7 +334,11 @@ class LLMService:
                         logger.warning(
                             f"AI 调用失败（第 {attempt + 1} 次），{delay:.1f}秒后重试 ({title}): {last_error}"
                         )
-                        time.sleep(delay)
+                        # 🌟 在退避等待期间也检查取消状态
+                        for _ in range(int(delay * 10)):
+                            if self._cancel_event.is_set():
+                                return "⚠️ 用户取消"
+                            time.sleep(0.1)
                         continue
                     else:
                         logger.error(

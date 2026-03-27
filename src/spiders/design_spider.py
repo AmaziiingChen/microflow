@@ -100,7 +100,7 @@ class DesignSpider(BaseSpider):
             response.encoding = response.apparent_encoding or 'utf-8'
             html_content = response.text
 
-            soup = BeautifulSoup(html_content, 'html.parser')
+            soup = BeautifulSoup(html_content, 'lxml')
 
             # 尝试两种列表项格式
             items = soup.select('li.news-item')

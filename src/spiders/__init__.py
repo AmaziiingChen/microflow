@@ -12,6 +12,8 @@ from .business_spider import BusinessSpider
 from .icoc_spider import IcocSpider
 from .future_tech_spider import FutureTechSpider
 from .sfl_spider import SflSpider
+from .music_spider import MusicSpider
+from .rss_spider import RssSpider
 
 # 重导出类型别名，方便外部使用
 from .base_spider import ArticleData
@@ -31,5 +33,7 @@ __all__ = [
     'BusinessSpider',
     'IcocSpider',
     'FutureTechSpider',
-    'SflSpider'
+    'SflSpider',
+    'MusicSpider',
+    'RssSpider'
 ]

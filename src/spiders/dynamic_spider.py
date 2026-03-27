@@ -214,9 +214,24 @@ class DynamicSpider(BaseSpider):
         # AI 摘要开关
         self.require_ai_summary = rule_dict.get('require_ai_summary', True)
 
+        # 🌟 跳过详情页抓取（当列表页已包含所需全部字段时）
+        self.skip_detail = rule_dict.get('skip_detail', False)
+
+        # 🌟 正文来源字段（指定某个字段作为正文，而非拼接所有字段）
+        self.body_field = rule_dict.get('body_field')
+
+        # 🌟 专属 AI 提示词
+        self.custom_summary_prompt = rule_dict.get('custom_summary_prompt', '')
+
         # 动态爬虫标记（用于 ArticleProcessor 识别）
         self._is_dynamic_spider = True
         self._rule_id = self.rule_id
+
+        # 🌟 数据源类型标记（用于调度器识别爬虫类型）
+        self._source_type = rule_dict.get('source_type', 'html')
+
+        # 🌟 单次抓取最大条目数（可配置，覆盖默认值）
+        self.max_items = rule_dict.get('max_items')
 
         logger.info(f"🕷️ DynamicSpider 初始化: {self.task_name} (rule_id={self.rule_id})")
 
@@ -252,7 +267,7 @@ class DynamicSpider(BaseSpider):
                 return []
 
             # 2. 解析 HTML
-            soup = BeautifulSoup(response.text, 'html.parser')
+            soup = BeautifulSoup(response.text, 'lxml')
 
             # 3. 查找列表容器
             container = soup.select_one(self.list_container)
@@ -359,10 +374,13 @@ class DynamicSpider(BaseSpider):
             'dynamic_fields': fields,
             # 🌟 核心字段：是否需要 AI 摘要
             'require_ai_summary': self.require_ai_summary,
+            # 🌟 核心字段：专属 AI 提示词
+            'custom_summary_prompt': self.custom_summary_prompt,
             # 🌟 核心字段：规则 ID（用于溯源）
             'rule_id': self.rule_id,
-            # 格式化的内容文本（用于 AI 摘要或直接显示）
-            'body_text': self._format_fields_as_text(fields),
+            # 🌟 格式化的内容文本（用于 AI 摘要或直接显示）
+            # 如果配置了 body_field 且字段存在，使用该字段；否则拼接所有字段
+            'body_text': fields.get(self.body_field, '') if self.body_field and self.body_field in fields else self._format_fields_as_text(fields),
         }
 
         return article
@@ -472,10 +490,8 @@ class DynamicSpider(BaseSpider):
         """
         获取文章详情
 
-        对于动态爬虫，详情页通常不需要单独抓取，
-        因为列表页已经包含了所有必要信息。
-
-        如果 URL 指向外部网站，可以尝试抓取详情。
+        对于动态爬虫，如果配置了 skip_detail，则直接返回列表页内容；
+        否则调用父类 BaseSpider 的详情抓取逻辑，获得更可靠的正文提取。
 
         Args:
             url: 文章 URL
@@ -485,36 +501,84 @@ class DynamicSpider(BaseSpider):
         """
         # 检查是否是生成的哈希 URL（不需要抓取详情）
         if '#item-' in url:
-            # 返回一个空的详情，表示不需要进一步抓取
             return {
                 'title': '',
                 'url': url,
                 'body_text': '',
                 'attachments': [],
                 'source_name': self.SOURCE_NAME,
-                'exact_time': ''
+                'exact_time': '',
+                'dynamic_fields': {}
             }
 
-        # 尝试抓取外部链接的详情
+        # 如果配置了跳过详情，返回列表页内容
+        if getattr(self, 'skip_detail', False):
+            return {
+                'title': '',
+                'url': url,
+                'body_text': '',
+                'attachments': [],
+                'source_name': self.SOURCE_NAME,
+                'exact_time': '',
+                'dynamic_fields': {}
+            }
+
+        # 🌟 调用父类的详情抓取方法（包含多容器正文提取、附件解析、时间解析等）
+        try:
+            detail = super().fetch_detail(url)
+            if detail:
+                # 确保返回的数据结构包含 dynamic_fields
+                if 'dynamic_fields' not in detail:
+                    detail['dynamic_fields'] = {}
+                return detail
+            else:
+                # 父类方法未匹配到容器，使用通用选择器降级
+                logger.debug(f"[{self.SOURCE_NAME}] 父类方法未匹配，使用通用选择器降级: {url}")
+                return self._fallback_fetch_detail(url)
+        except Exception as e:
+            logger.warning(f"[{self.SOURCE_NAME}] 调用父类 fetch_detail 失败: {url} -> {e}")
+            return self._fallback_fetch_detail(url)
+
+    def _fallback_fetch_detail(self, url: str) -> Optional[ArticleData]:
+        """
+        降级方案：使用通用选择器提取正文
+
+        当父类 BaseSpider.fetch_detail 无法匹配特定容器时使用。
+
+        Args:
+            url: 文章 URL
+
+        Returns:
+            文章详情字典
+        """
         try:
             response = self._safe_get(url)
             if not response:
                 return None
 
-            soup = BeautifulSoup(response.text, 'html.parser')
+            soup = BeautifulSoup(response.text, 'lxml')
 
-            # 尝试提取正文（通用策略）
+            # 🌟 移除干扰元素
+            for tag in soup(['script', 'style', 'nav', 'header', 'footer', 'aside', 'form']):
+                tag.decompose()
+
+            # 通用正文选择器
             body_text = ""
             content_selectors = [
-                'article', 'div.content', 'div.article-content',
-                'div.post-content', 'div.entry-content', 'main'
+                'article',
+                'div.v_news_content', 'div#vsb_content',  # 高校常用
+                'div.content_m', 'div.news_conent_two_text',
+                'div.article-content', 'div.post-content',
+                'div.entry-content', 'div.content',
+                'main', 'div.main'
             ]
 
             for selector in content_selectors:
                 content = soup.select_one(selector)
                 if content:
                     body_text = content.get_text(separator='\n', strip=True)
-                    break
+                    if len(body_text) > 50:  # 确保提取到有效内容
+                        break
 
             # 尝试提取精确时间
             exact_time = ""
@@ -533,11 +597,12 @@ class DynamicSpider(BaseSpider):
                 'body_text': body_text,
                 'attachments': [],
                 'source_name': self.SOURCE_NAME,
-                'exact_time': exact_time
+                'exact_time': exact_time,
+                'dynamic_fields': {}
             }
 
         except Exception as e:
-            logger.warning(f"[{self.SOURCE_NAME}] 获取详情失败: {url} -> {e}")
+            logger.warning(f"[{self.SOURCE_NAME}] 降级详情提取失败: {url} -> {e}")
             return None
 
     def _safe_get(self, url: str, **kwargs) -> Optional[requests.Response]:

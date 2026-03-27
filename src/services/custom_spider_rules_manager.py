@@ -138,6 +138,14 @@ class CustomSpiderRulesManager:
                 rule_dict['created_at'] = rule_dict.get('created_at') or now
                 rule_dict['updated_at'] = now
 
+                # 🌟 清理冗余字段：RSS 规则不需要 HTML 选择器
+                if rule_dict.get('source_type') == 'rss':
+                    # 移除 HTML 专用字段（避免存储空值）
+                    rule_dict.pop('list_container', None)
+                    rule_dict.pop('item_selector', None)
+                    rule_dict.pop('field_selectors', None)
+                    logger.debug(f"RSS 规则清理：移除 HTML 选择器字段")
+
                 # 检查是否已存在相同 rule_id 的规则
                 rule_id = rule_dict.get('rule_id')
                 existing_index = None

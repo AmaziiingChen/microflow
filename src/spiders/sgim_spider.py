@@ -80,7 +80,7 @@ class SgimSpider(BaseSpider):
 
             logger.debug(f"[{self.SOURCE_NAME}] HTML 长度: {len(html_content)}")
 
-            soup = BeautifulSoup(html_content, 'html.parser')
+            soup = BeautifulSoup(html_content, 'lxml')
 
             # 使用 .content-list .item（从截图看外层是 .content-list）
             items = soup.select('.content-list .item')

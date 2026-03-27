@@ -22,8 +22,11 @@ from src.spiders import (
     IcocSpider,
     FutureTechSpider,
     SflSpider,
+    MusicSpider,
+    RssSpider,
 )
 from src.spiders.dynamic_spider import DynamicSpider, create_dynamic_spider_from_rule
+from src.spiders.rss_spider import RssSpider, create_rss_spider_from_rule
 from src.database import db
 from src.core.article_processor import ArticleProcessor, ArticleContext
 from src.core.network_utils import (
@@ -32,6 +35,7 @@ from src.core.network_utils import (
     get_network_description,
 )
 from src.services.custom_spider_rules_manager import get_rules_manager
+from src.utils.date_utils import parse_date_safe
 
 if TYPE_CHECKING:
     from src.services.config_service import ConfigService
@@ -39,30 +43,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _parse_date_safe(date_str: str) -> Optional[datetime]:
-    """
-    健壮的日期字符串标准化解析器（线程安全，纯函数）
-
-    支持格式：
-    - "2026-03-24"、"2026/03/24"（日期）
-    - "2026-03-24 10:30:00"、"2026/03/24 10:30:00"（日期时间）
-
-    Returns:
-        datetime 对象，解析失败返回 None
-    """
-    if not date_str:
-        return None
-    # 统一分隔符，截取前 10 位日期部分
-    normalized = date_str.strip().replace("/", "-")
-    date_part = normalized[:10]
-    try:
-        return datetime.strptime(date_part, "%Y-%m-%d")
-    except ValueError:
-        return None
+# 🌟 使用公共模块中的增强日期解析函数（兼容旧名称）
+_parse_date_safe = parse_date_safe
 
 
 # 爬虫注册表：(爬虫类, 板块数量, 描述, 是否需要校园网)
-# 顺序：公文通 -> 中德智能制造 -> 人工智能 -> 新材料与新能源 -> 城市交通与物流 -> 健康与环境工程 -> 工程物理 -> 药学院 -> 集成电路与光电芯片 -> 未来技术 -> 创意设计 -> 商学院
+# 顺序：公文通 -> 中德智能制造 -> 人工智能 -> 新材料与新能源 -> 城市交通与物流 -> 健康与环境工程 -> 工程物理 -> 药学院 -> 集成电路与光电芯片 -> 未来技术 -> 创意设计 -> 商学院 -> 外国语 -> 音乐学院
 SPIDER_REGISTRY: List[Tuple[Type[BaseSpider], int, str, bool]] = [
     (GwtSpider, 1, "公文通", True),  # 公文通需要校园网
     (SgimSpider, 2, "中德智能制造学院", False),
@@ -77,6 +63,7 @@ SPIDER_REGISTRY: List[Tuple[Type[BaseSpider], int, str, bool]] = [
     (DesignSpider, 6, "创意设计学院", False),
     (BusinessSpider, 4, "商学院", False),
     (SflSpider, 2, "外国语学院", False),
+    (MusicSpider, 3, "音乐学院", False),
 ]
 
 
@@ -133,6 +120,10 @@ class SpiderScheduler:
         # 🌟 使用 threading.Event 确保线程可见性
         self._cancel_event = threading.Event()  # 全局终止信号
 
+        # 🌟 热重载优化：缓存规则文件修改时间
+        self._rules_last_mtime: float = 0
+        self._rules_manager = get_rules_manager()
+
         # 初始化爬虫
         self._init_spiders()
 
@@ -161,7 +152,7 @@ class SpiderScheduler:
         加载所有启用的动态爬虫规则
 
         从 CustomSpiderRulesManager 读取启用的规则，
-        为每条规则创建 DynamicSpider 实例并加入爬虫列表。
+        根据 source_type 选择创建 RssSpider 或 DynamicSpider。
         """
         try:
             rules_manager = get_rules_manager()
@@ -180,15 +171,23 @@ class SpiderScheduler:
                     )
                     continue
 
-                # 创建动态爬虫实例
-                spider = create_dynamic_spider_from_rule(rule_dict)
+                # 🌟 根据 source_type 路由到不同的爬虫
+                source_type = rule_dict.get("source_type", "html")
+
+                if source_type == "rss":
+                    # RSS 订阅：使用 RssSpider
+                    spider = create_rss_spider_from_rule(rule_dict)
+                else:
+                    # HTML 网页：使用 DynamicSpider
+                    spider = create_dynamic_spider_from_rule(rule_dict)
+
                 if spider:
                     # 标记为动态爬虫（不需要校园网）
                     setattr(spider, "_requires_intranet", False)
                     setattr(spider, "_is_dynamic", True)
                     self.active_spiders.append(spider)
                     dynamic_count += 1
-                    logger.info(f"🕷️ 加载动态爬虫: {spider.SOURCE_NAME}")
+                    logger.info(f"🕷️ 加载动态爬虫: {spider.SOURCE_NAME} ({source_type})")
 
             if dynamic_count > 0:
                 logger.info(f"🕷️ 共加载 {dynamic_count} 个动态爬虫")
@@ -197,7 +196,45 @@ class SpiderScheduler:
             logger.error(f"加载动态爬虫规则失败: {e}")
 
     def reload_dynamic_spiders(self) -> None:
-        """重新加载动态爬虫（每次轮询前调用，实现热重载）"""
+        """
+        重新加载动态爬虫（每次轮询前调用，实现热重载）
+
+        🌟 优化：通过检查规则文件修改时间，仅在文件变化时执行重载，
+        避免不必要的爬虫实例创建和规则解析。
+        """
+        import os
+
+        # 获取规则文件路径
+        rules_path = self._rules_manager._rules_path
+
+        # 文件不存在，视为需要加载（可能首次运行）
+        if not rules_path.exists():
+            logger.debug("规则文件不存在，执行动态爬虫加载")
+            self._do_reload_dynamic_spiders()
+            return
+
+        # 获取当前文件修改时间
+        try:
+            current_mtime = rules_path.stat().st_mtime
+        except Exception as e:
+            logger.warning(f"无法读取规则文件修改时间: {e}")
+            self._do_reload_dynamic_spiders()
+            return
+
+        # 如果文件未修改，跳过重载
+        if current_mtime == self._rules_last_mtime:
+            logger.debug("规则文件未变化，跳过动态爬虫重载")
+            return
+
+        # 文件有变化，执行重载
+        logger.info("📋 检测到规则文件变化，重新加载动态爬虫")
+        self._do_reload_dynamic_spiders()
+        self._rules_last_mtime = current_mtime
+
+    def _do_reload_dynamic_spiders(self) -> None:
+        """
+        实际执行动态爬虫重载（清除现有动态爬虫并重新加载）
+        """
         # 清除现有的动态爬虫
         self.active_spiders = [s for s in self.active_spiders if not getattr(s, '_is_dynamic', False)]
         self._load_dynamic_spiders()
@@ -446,13 +483,20 @@ class SpiderScheduler:
         is_cold_start = existing_count == 0
 
         if is_cold_start:
-            # 公文通配额 10，其余学院跨板块累计 1
-            quota = (
-                self._COLD_START_QUOTA_GWT
-                if source_name == "公文通"
-                else self._COLD_START_QUOTA_COLLEGE
-            )
-            logger.info(f"❄️ [{source_name}] 冷启动模式，配额上限: {quota} 条")
+            # 🌟 检查数据源类型
+            source_type = getattr(spider, '_source_type', 'html')
+            if source_type == 'rss':
+                # RSS 订阅：不设配额限制，抓取所有条目
+                quota = None
+                logger.info(f"📡 [{source_name}] RSS 订阅冷启动，不限配额")
+            else:
+                # HTML 爬虫：使用原有配额
+                quota = (
+                    self._COLD_START_QUOTA_GWT
+                    if source_name == "公文通"
+                    else self._COLD_START_QUOTA_COLLEGE
+                )
+                logger.info(f"❄️ [{source_name}] 冷启动模式，配额上限: {quota} 条")
         else:
             quota = None  # 非冷启动，不限配额
 
@@ -488,15 +532,24 @@ class SpiderScheduler:
                 )
                 break
 
+            # 🌟 确定本次抓取上限
+            # 优先级：规则配置 max_items > 数据源类型默认 > 全局默认
+            if hasattr(spider, 'max_items') and spider.max_items is not None:
+                fetch_limit = spider.max_items
+            elif getattr(spider, '_source_type', 'html') == 'rss':
+                fetch_limit = 50  # RSS 默认抓取 50 条
+            else:
+                fetch_limit = self._FALLBACK_LIMIT  # HTML 默认 10 条
+
             try:
                 if section_name:
                     articles = spider.fetch_list(
                         page_num=1,
                         section_name=section_name,
-                        limit=self._FALLBACK_LIMIT,
+                        limit=fetch_limit,
                     )
                 else:
-                    articles = spider.fetch_list(page_num=1, limit=self._FALLBACK_LIMIT)
+                    articles = spider.fetch_list(page_num=1, limit=fetch_limit)
 
                 for article in articles:
                     if self._cancel_event.is_set():
@@ -591,11 +644,3 @@ class SpiderScheduler:
     def is_cancelled(self) -> bool:
         """🌟 供外部调用的线程安全检查方法"""
         return self._cancel_event.is_set()
-
-    def reload_dynamic_spiders(self) -> None:
-        """重新加载动态爬虫（每次轮询前调用，实现热重载）"""
-        # 清除现有的动态爬虫
-        self.active_spiders = [
-            s for s in self.active_spiders if not getattr(s, "_is_dynamic", False)
-        ]
-        self._load_dynamic_spiders()

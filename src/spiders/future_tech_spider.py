@@ -75,7 +75,7 @@ class FutureTechSpider(BaseSpider):
             if not response:
                 continue
 
-            soup = BeautifulSoup(response.text, 'html.parser')
+            soup = BeautifulSoup(response.text, 'lxml')
 
             # 双路 DOM 兼容：尝试 .hireBox（通知类）和 .listBox（新闻类）
             containers = soup.find_all('ul', class_='hireBox')

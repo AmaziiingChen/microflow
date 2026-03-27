@@ -59,7 +59,7 @@ class GwtSpider(BaseSpider):
             if not response:
                 break
 
-            soup = BeautifulSoup(response.text, 'html.parser')
+            soup = BeautifulSoup(response.text, 'lxml')
 
             # 定位公文列表项
             articles_tags = soup.select('ul.news-ul li.clearfix')
@@ -152,7 +152,7 @@ class GwtSpider(BaseSpider):
         if not response:
             return None
 
-        soup = BeautifulSoup(response.text, 'html.parser')
+        soup = BeautifulSoup(response.text, 'lxml')
 
         # 提取正文
         body_html = ""

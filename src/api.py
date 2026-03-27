@@ -33,6 +33,8 @@ import tempfile
 import platform
 import subprocess
 import base64
+import threading
+import queue
 from typing import Dict, Any, Optional, List
 import time
 from src.database import db
@@ -68,6 +70,17 @@ class Api:
         self._version_info: Dict[str, Any] = {}
         # 🌟 用于 304 缓存协商的 ETag
         self._version_etag: Optional[str] = None
+
+        # 🌟 线程安全的 JS 执行队列（确保 evaluate_js 在主线程调用）
+        self._js_queue: queue.Queue = queue.Queue(maxsize=500)
+        self._js_thread_running = True
+        self._js_thread = threading.Thread(
+            target=self._process_js_queue,
+            daemon=True,
+            name="JSExecutor"
+        )
+        self._js_thread.start()
+        logger.info("📱 JS 执行线程已启动")
 
         # 大模型服务
         self.llm = LLMService()
@@ -160,6 +173,61 @@ class Api:
         logger.info(f"[DEBUG] _get_effective_sources - 最终有效来源: {effective}")
         return effective  # 🌟 直接返回列表，空列表表示"不显示任何内容"
 
+    # ==================== 🌟 线程安全的 JS 执行队列 ====================
+
+    def _process_js_queue(self) -> None:
+        """
+        后台线程：定期处理 JS 执行队列
+
+        确保 evaluate_js 始终在"伪主线程"中调用，
+        避免多线程直接调用 GUI API 导致崩溃。
+        """
+        while self._js_thread_running:
+            try:
+                # 阻塞等待最多 50ms，平衡响应速度和 CPU 占用
+                task = self._js_queue.get(timeout=0)
+                if task is None:
+                    continue
+
+                js_code, callback = task
+
+                # 在主上下文中执行 JS
+                if webview.windows:
+                    try:
+                        result = webview.windows[0].evaluate_js(js_code)
+                        if callback:
+                            callback(result)
+                    except Exception as e:
+                        logger.debug(f"JS 执行失败: {e}")
+                        if callback:
+                            callback(None)
+
+            except queue.Empty:
+                pass  # 超时，继续循环检查停止信号
+            except Exception as e:
+                logger.warning(f"JS 队列处理异常: {e}")
+
+    def _enqueue_js(self, js_code: str, callback: Optional[Callable[[Any], None]] = None) -> None:
+        """
+        将 JS 代码放入执行队列（线程安全）
+
+        Args:
+            js_code: 要执行的 JavaScript 代码
+            callback: 执行完成后的回调函数（可选）
+        """
+        try:
+            self._js_queue.put((js_code, callback), block=False)
+        except queue.Full:
+            logger.warning("JS 执行队列已满，丢弃任务")
+
+    def _stop_js_thread(self) -> None:
+        """停止 JS 执行线程（应用退出时调用）"""
+        self._js_thread_running = False
+        self._js_thread.join(timeout=2)
+        logger.info("JS 执行线程已停止")
+
+    # ==================== 进度推送方法 ====================
+
     def _push_progress(self, completed: int, total: int, current_title: str = ""):
         """
         推送进度更新到前端
@@ -177,7 +245,8 @@ class Api:
                 else ""
             )
             js_code = f"if(window.updatePyProgress) window.updatePyProgress({completed}, {total}, '{safe_title}');"
-            webview.windows[0].evaluate_js(js_code)
+            # 🌟 使用队列执行（线程安全）
+            self._enqueue_js(js_code)
         except Exception as e:
             logger.debug(f"进度推送失败: {e}")
 
@@ -198,7 +267,8 @@ class Api:
             # 转义单引号
             safe_name = source_name.replace("'", "\\'").replace('"', '\\"')
             js_code = f"if(window.updateSpiderProgress) window.updateSpiderProgress({current}, {total}, '{safe_name}');"
-            webview.windows[0].evaluate_js(js_code)
+            # 🌟 使用队列执行（线程安全）
+            self._enqueue_js(js_code)
             logger.debug(f"爬虫进度推送: {current}/{total} - {source_name}")
         except Exception as e:
             logger.warning(f"爬虫进度推送失败: {e}")
@@ -223,7 +293,8 @@ class Api:
                 else ""
             )
             js_code = f"if(window.updatePyProgress) window.updatePyProgress({completed}, {total}, '{safe_title}');"
-            webview.windows[0].evaluate_js(js_code)
+            # 🌟 使用队列执行（线程安全）
+            self._enqueue_js(js_code)
             logger.debug(
                 f"AI 进度推送: {completed}/{total} - {current_title[:20] if current_title else ''}"
             )
@@ -261,20 +332,18 @@ class Api:
                         f"✅ 所有任务处理完成，准备关闭加载状态: processed={processed}/{submitted}, ai_total={ai_total}"
                     )
                     # 通知前端关闭加载状态
-                    if webview.windows:
-                        js_result = webview.windows[0].evaluate_js(
-                            """
-                            if (window.updatePyProgress) {
-                                window.updatePyProgress(0, 0, '');
-                                'success';
-                            } else {
-                                'no_updatePyProgress';
-                            }
-                        """
-                        )
-                        logger.info(f"📢 前端 JS 执行结果: {js_result}")
-                    else:
-                        logger.warning("⚠️ webview.windows 为空，无法通知前端")
+                    js_code = """
+                        if (window.updatePyProgress) {
+                            window.updatePyProgress(0, 0, '');
+                            'success';
+                        } else {
+                            'no_updatePyProgress';
+                        }
+                    """
+                    # 🌟 使用队列执行（线程安全）
+                    self._enqueue_js(js_code)
+                else:
+                    logger.warning("⚠️ webview.windows 为空，无法通知前端")
         except Exception as e:
             logger.error(f"❌ 任务完成回调执行失败: {e}")
 
@@ -304,7 +373,8 @@ class Api:
 
                 # 静默更新前端数据（不弹出详情）
                 js_code = f"if(window.silentUpdateArticle) window.silentUpdateArticle({json_data});"
-                self.window.evaluate_js(js_code)
+                # 🌟 使用队列执行（线程安全）
+                self._enqueue_js(js_code)
                 logger.info(
                     f"🔔 静音模式：已显示托盘红点 - {article_data.get('title', '未知标题')}"
                 )
@@ -313,7 +383,8 @@ class Api:
                 self.window.restore()
                 self.window.show()
                 js_code = f"if(window.openArticleDetail) window.openArticleDetail({json_data});"
-                self.window.evaluate_js(js_code)
+                # 🌟 使用队列执行（线程安全）
+                self._enqueue_js(js_code)
                 logger.info(
                     f"🔔 已唤醒窗口并推送文章: {article_data.get('title', '未知标题')}"
                 )
@@ -350,14 +421,13 @@ class Api:
                 # 余额不足，通知前端显示欠费卡片
                 logger.warning("检测到 API 余额不足，拦截更新请求")
                 try:
-                    if webview.windows:
-                        webview.windows[0].evaluate_js(
-                            """
-                            if (window.updateApiBalanceStatus) {
-                                window.updateApiBalanceStatus(false);
-                            }
-                        """
-                        )
+                    js_code = """
+                        if (window.updateApiBalanceStatus) {
+                            window.updateApiBalanceStatus(false);
+                        }
+                    """
+                    # 🌟 使用队列执行（线程安全）
+                    self._enqueue_js(js_code)
                 except Exception as e:
                     logger.debug(f"通知前端显示欠费卡片失败: {e}")
                 return {
@@ -393,10 +463,9 @@ class Api:
                 latest_ver = latest_version_data.get("version", "")
                 if latest_ver and latest_ver > self.CURRENT_VERSION:
                     logger.info(f"安全心跳检测到新版本: {latest_ver}")
-                    if webview.windows:
-                        webview.windows[0].evaluate_js(
-                            f"if(window.onNewVersionAvailable) window.onNewVersionAvailable('{latest_ver}');"
-                        )
+                    js_code = f"if(window.onNewVersionAvailable) window.onNewVersionAvailable('{latest_ver}');"
+                    # 🌟 使用队列执行（线程安全）
+                    self._enqueue_js(js_code)
         except Exception as e:
             logger.debug(f"安全心跳检测失败（网络波动，允许继续执行）: {e}")
 
@@ -431,31 +500,30 @@ class Api:
         # 🌟 核心：在执行爬虫之前，立即通知前端开始加载
         # 无论是手动还是自动，都要通知前端显示进度条和冷却状态
         try:
-            if webview.windows:
-                # 如果是后台自动执行，合并通知（同时显示进度条和提示消息）
-                if not is_manual:
-                    webview.windows[0].evaluate_js(
-                        """
-                        if (window.onStartFetching) {
-                            window.onStartFetching();
-                        }
-                        if (window.showAutoFetchNotice) {
-                            window.showAutoFetchNotice();
-                        }
-                    """
-                    )
-                else:
-                    # 手动触发只显示进度条
-                    webview.windows[0].evaluate_js(
-                        """
-                        if (window.onStartFetching) {
-                            window.onStartFetching();
-                        }
-                    """
-                    )
-                # 🌟 关键修复：给浏览器一个处理事件循环的机会
-                # 确保通知在爬虫执行之前被渲染到 UI
-                time.sleep(0.05)
+            # 如果是后台自动执行，合并通知（同时显示进度条和提示消息）
+            if not is_manual:
+                js_code = """
+                    if (window.onStartFetching) {
+                        window.onStartFetching();
+                    }
+                    if (window.showAutoFetchNotice) {
+                        window.showAutoFetchNotice();
+                    }
+                """
+                # 🌟 使用队列执行（线程安全）
+                self._enqueue_js(js_code)
+            else:
+                # 手动触发只显示进度条
+                js_code = """
+                    if (window.onStartFetching) {
+                        window.onStartFetching();
+                    }
+                """
+                # 🌟 使用队列执行（线程安全）
+                self._enqueue_js(js_code)
+            # 🌟 关键修复：给浏览器一个处理事件循环的机会
+            # 确保通知在爬虫执行之前被渲染到 UI
+            time.sleep(0.05)
         except Exception as e:
             logger.debug(f"通知前端开始执行失败: {e}")
 
@@ -480,18 +548,17 @@ class Api:
         # 有新文章时，由 _on_task_complete 统一处理完成通知
         submitted_count = result.get("submitted_count", 0)
         try:
-            if webview.windows:
-                if submitted_count == 0:
-                    # 无新文章，直接关闭加载状态
-                    webview.windows[0].evaluate_js(
-                        """
-                        if (window.onSpiderComplete) {
-                            window.onSpiderComplete(false);
-                        }
-                    """
-                    )
-                    logger.debug("爬虫完成，已通知前端关闭加载状态（无新文章）")
-                # else: 有新文章时，由 _on_task_complete 处理完成通知
+            if submitted_count == 0:
+                # 无新文章，直接关闭加载状态
+                js_code = """
+                    if (window.onSpiderComplete) {
+                        window.onSpiderComplete(false);
+                    }
+                """
+                # 🌟 使用队列执行（线程安全）
+                self._enqueue_js(js_code)
+                logger.debug("爬虫完成，已通知前端关闭加载状态（无新文章）")
+            # else: 有新文章时，由 _on_task_complete 处理完成通知
         except Exception as e:
             logger.debug(f"通知前端爬虫完成失败: {e}")
 
@@ -624,6 +691,33 @@ class Api:
             new_status = db.toggle_favorite(url)
             return {"status": "success", "is_favorite": new_status}
         except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    def delete_article(self, article_id: int, hard_delete: bool = False) -> Dict[str, Any]:
+        """
+        删除文章
+
+        Args:
+            article_id: 文章 ID
+            hard_delete: True 为物理删除（清除记录，允许重新抓取），
+                        False 为软删除（屏蔽，不再抓取）
+
+        Returns:
+            {"status": "success"} 或 {"status": "error", "message": str}
+        """
+        try:
+            success = db.delete_article(article_id, hard_delete=hard_delete)
+            if success:
+                # 异步刷新托盘状态
+                try:
+                    import threading
+                    threading.Thread(target=self._refresh_tray_status, daemon=True).start()
+                except Exception:
+                    pass
+                return {"status": "success"}
+            return {"status": "error", "message": "删除失败或文章不存在"}
+        except Exception as e:
+            logger.error(f"删除文章失败: {e}")
             return {"status": "error", "message": str(e)}
 
     def update_article_summary(
@@ -767,6 +861,38 @@ class Api:
 
             traceback.print_exc()
 
+    def refresh_tray_mute_status(self, mute_mode: bool) -> Dict[str, Any]:
+        """
+        刷新托盘勿扰模式状态
+
+        Args:
+            mute_mode: 勿扰模式是否开启
+
+        Returns:
+            {"status": "success"}
+        """
+        try:
+            import sys
+
+            if "__main__" in sys.modules:
+                main_mod = sys.modules["__main__"]
+            else:
+                import main
+
+                main_mod = main
+
+            # 更新全局勿扰模式状态
+            main_mod._mute_mode = mute_mode
+
+            # 更新托盘菜单中的勿扰模式勾选状态
+            main_mod.update_tray_status()
+
+            logger.info(f"🔕 勿扰模式状态已同步到托盘: {mute_mode}")
+            return {"status": "success"}
+        except Exception as e:
+            logger.error(f"刷新托盘勿扰状态失败: {e}")
+            return {"status": "error", "message": str(e)}
+
     def download_attachment(self, url: str, filename: str) -> dict:
         """下载附件（支持后缀智能补全）"""
         return self.download_service.download_attachment(url, filename)
@@ -838,7 +964,8 @@ class Api:
             self.window.move(x_pos, y_pos)
 
             js_code = f"if(window.showArticleDetailFromBackend) {{ window.showArticleDetailFromBackend({json.dumps(article_dict)}); }}"
-            self.window.evaluate_js(js_code)
+            # 🌟 使用队列执行（线程安全）
+            self._enqueue_js(js_code)
 
         except Exception as e:
             logger.warning(f"桌面弹窗展示失败: {e}")
@@ -1440,15 +1567,20 @@ class Api:
                     "message": "原文内容过短或缺失，无法生成总结",
                 }
 
-            # 3. 调用 LLM 服务重新生成总结
-            logger.info(f"正在重新生成文章总结: {title}")
-            new_summary = self.llm.summarize_article(title, raw_text)
+            # 3. 🌟 获取自定义提示词（用于自定义数据源）
+            custom_prompt = article.get("custom_summary_prompt")
 
-            # 4. 检查是否生成成功
+            # 4. 调用 LLM 服务重新生成总结
+            logger.info(f"正在重新生成文章总结: {title}")
+            if custom_prompt:
+                logger.info(f"使用自定义提示词: {custom_prompt[:50]}...")
+            new_summary = self.llm.summarize_article(title, raw_text, custom_prompt)
+
+            # 5. 检查是否生成成功
             if new_summary.startswith("⚠️") or new_summary.startswith("❌"):
                 return {"status": "error", "message": new_summary}
 
-            # 5. 更新数据库
+            # 6. 更新数据库
             success = db.update_summary(article_id, new_summary)
             if not success:
                 return {"status": "error", "message": "更新数据库失败"}
@@ -1929,6 +2061,10 @@ class Api:
         target_fields: list,
         require_ai_summary: bool = False,
         task_purpose: str = "",
+        custom_summary_prompt: str = "",
+        max_items: Optional[int] = None,
+        body_field: str = "",
+        skip_detail: bool = False,
     ) -> Dict[str, Any]:
         """
         生成自定义爬虫规则
@@ -1942,6 +2078,10 @@ class Api:
             target_fields: 用户想要提取的字段列表
             require_ai_summary: 是否需要对抓取内容进行 AI 摘要
             task_purpose: 任务目的/类别（映射到数据库 category 字段）
+            custom_summary_prompt: 🌟 专属 AI 提示词（用于定制摘要输出格式）
+            max_items: 🌟 单次抓取最大条目数
+            body_field: 🌟 正文来源字段（仅 HTML 爬虫有效）
+            skip_detail: 🌟 是否跳过详情页抓取（仅 HTML 爬虫有效）
 
         Returns:
             {
@@ -1968,6 +2108,10 @@ class Api:
                 target_fields=target_fields,
                 require_ai_summary=require_ai_summary,
                 task_purpose=task_purpose,
+                custom_summary_prompt=custom_summary_prompt,
+                max_items=max_items,
+                body_field=body_field,
+                skip_detail=skip_detail,
             )
 
             if result.success:
@@ -2002,15 +2146,29 @@ class Api:
             if not rule_dict:
                 return {"status": "error", "message": "规则数据不能为空"}
 
-            required_fields = [
-                "rule_id",
-                "task_id",
-                "task_name",
-                "url",
-                "list_container",
-                "item_selector",
-                "field_selectors",
-            ]
+            # 🌟 根据 source_type 使用不同的必填字段
+            source_type = rule_dict.get('source_type', 'html')
+
+            if source_type == 'rss':
+                # RSS 规则只需要基础字段
+                required_fields = [
+                    "rule_id",
+                    "task_id",
+                    "task_name",
+                    "url",
+                ]
+            else:
+                # HTML 规则需要完整的选择器字段
+                required_fields = [
+                    "rule_id",
+                    "task_id",
+                    "task_name",
+                    "url",
+                    "list_container",
+                    "item_selector",
+                    "field_selectors",
+                ]
+
             missing_fields = [f for f in required_fields if f not in rule_dict]
             if missing_fields:
                 return {
@@ -2033,6 +2191,91 @@ class Api:
 
         except Exception as e:
             logger.error(f"保存规则失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def validate_and_save_rss_rule(self, rule_dict: dict) -> Dict[str, Any]:
+        """
+        验证并直接保存 RSS 规则（无需 AI 生成选择器）
+
+        RSS 订阅规则不需要 CSS 选择器，直接验证 URL 可达性后保存。
+
+        Args:
+            rule_dict: 规则字典，包含 url, task_name 等基础字段
+
+        Returns:
+            {"status": "success/error", "message": str, "feed_info": dict}
+        """
+        import feedparser
+
+        try:
+            logger.info(f"📡 鷻加 RSS 规则: {rule_dict.get('task_name', 'unknown')}")
+
+            # 参数验证
+            if not rule_dict:
+                return {"status": "error", "message": "规则数据不能为空"}
+
+            required_fields = ["rule_id", "task_id", "task_name", "url"]
+            missing_fields = [f for f in required_fields if f not in rule_dict]
+            if missing_fields:
+                return {
+                    "status": "error",
+                    "message": f"缺少必要字段: {', '.join(missing_fields)}"
+                }
+
+            url = rule_dict.get('url', '')
+            if not url:
+                return {"status": "error", "message": "RSS URL 不能为空"}
+
+            # 鋰前验证：尝试解析 RSS
+            logger.info(f"📡 正在验证 RSS: {url}")
+            feed = feedparser.parse(url)
+
+            # 检查是否为有效的 RSS
+            if feed.bozo and not feed.entries:
+                error_detail = str(feed.bozo_exception) if feed.bozo_exception else "未知错误"
+                logger.error(f"📡 RSS 验证失败: {error_detail}")
+                return {
+                    "status": "error",
+                    "message": f"无效的 RSS 订阅地址: {error_detail}"
+                }
+
+            # 声成成功：获取 feed 信息
+            feed_title = getattr(feed.feed, 'title', url)
+            feed_link = getattr(feed.feed, 'link', url)
+            entry_count = len(feed.entries)
+
+            logger.info(f"📡 RSS 验证成功: {feed_title} ({entry_count} 条目)")
+
+            # 填充默认值（RSS 规则不需要 HTML 选择器字段）
+            rule_dict.setdefault('source_type', 'rss')
+            # 🌟 不再填充冗余的 HTML 选择器字段，由 save_custom_rule 统一处理
+            rule_dict.setdefault('require_ai_summary', False)
+            rule_dict.setdefault('custom_summary_prompt', '')
+            rule_dict.setdefault('enabled', True)
+
+            # 保存规则
+            success = self.rules_manager.save_custom_rule(rule_dict)
+
+            if success:
+                logger.info(f"✅ RSS 规则保存成功: {rule_dict.get('rule_id')}")
+                return {
+                    "status": "success",
+                    "message": "RSS 规则保存成功",
+                    "rule_id": rule_dict.get("rule_id"),
+                    "feed_info": {
+                        "title": feed_title,
+                        "link": feed_link,
+                        "entry_count": entry_count
+                    }
+                }
+            else:
+                return {"status": "error", "message": "规则保存失败"}
+
+        except ImportError:
+            logger.error("feedparser 未安装")
+            return {"status": "error", "message": "feedparser 模块未安装，请检查 requirements.txt"}
+        except Exception as e:
+            logger.error(f"保存 RSS 规则失败: {e}")
             return {"status": "error", "message": str(e)}
 
     def get_custom_spider_rules(self) -> Dict[str, Any]:

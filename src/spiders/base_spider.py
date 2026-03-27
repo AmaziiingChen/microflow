@@ -70,10 +70,10 @@ class BaseSpider(ABC):
         response = self._safe_get(entry_url)
         if not response: return [entry_url]
         
-        soup = BeautifulSoup(response.text, 'html.parser')
+        soup = BeautifulSoup(response.text, 'lxml')
         page_urls = [entry_url]
 
-        # 寻找”尾页”按钮，这是所有规律的源头
+        # 寻找"尾页"按钮，这是所有规律的源头
         last_btn = soup.find('a', string=lambda t: t and '尾页' in t)  # type: ignore[call-overload]
         if not last_btn: 
             logger.info(f"[{self.SOURCE_NAME}] 未找到翻页组件，视为单页板块。")
@@ -104,7 +104,7 @@ class BaseSpider(ABC):
                 if total_text:
                     total_pages = int(total_text.get_text(strip=True))
                 
-                # 尝试二（NMNE专属兜底）：通过”下页”的链接提取总页数
+                # 尝试二（NMNE专属兜底）：通过"下页"的链接提取总页数
                 if total_pages == 1:
                     next_btn = soup.find('a', string=lambda t: t and ('下页' in t or '下一页' in t))  # type: ignore[call-overload]
                     if next_btn:
@@ -131,7 +131,7 @@ class BaseSpider(ABC):
 
         response = self._safe_get(url)
         if not response: return None
-        soup = BeautifulSoup(response.text, 'html.parser')
+        soup = BeautifulSoup(response.text, 'lxml')
         
         # 2. 三级精确时间防御体系
         exact_time = ""
@@ -203,7 +203,7 @@ class BaseSpider(ABC):
         if not response: return None
 
         html_content = response.text
-        soup = BeautifulSoup(html_content, 'html.parser')
+        soup = BeautifulSoup(html_content, 'lxml')
 
         title_tag = soup.find('h1', class_='rich_media_title')
         title = title_tag.get_text(strip=True) if title_tag else ""

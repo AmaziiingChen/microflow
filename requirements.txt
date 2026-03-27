@@ -13,12 +13,14 @@ requests>=2.28              # HTTP 请求库
 urllib3>=2.0                # HTTP 连接池（requests 依赖）
 beautifulsoup4>=4.12        # HTML/XML 解析
 lxml>=5.0                   # XML 解析后端（加速 BeautifulSoup）
+feedparser>=6.0             # RSS/Atom 订阅解析
 
 # === AI 能力 ===
 openai>=1.0                 # OpenAI 兼容 API 客户端
 
 # === 工具库 ===
 mistune>=3.0                # Markdown 渲染（邮件快照）
+python-dateutil>=2.8.0        # 增强的日期解析（支持多种日期格式）
 python-dotenv>=1.0          # 环境变量加载
 
 # === 系统托盘（macOS 原生）===

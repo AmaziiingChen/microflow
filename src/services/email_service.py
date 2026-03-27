@@ -260,26 +260,39 @@ class EmailService:
                     logger.info(f"📧 等待 {delay:.1f} 秒后发送下一封...")
                     time.sleep(delay)
 
-                try:
-                    msg = self._create_html_email(
-                        to_addr=to_addr,
-                        subject=subject,
-                        title=title,
-                        source_name=source_name,
-                        category=category,
-                        date=date,
-                        summary_preview=summary_preview,
-                        image_path=image_path,
-                        article_url=url,
-                    )
+                # 🌟 重试机制：最多重试 3 次
+                max_retries = 3
+                last_error = None
+                for retry in range(max_retries):
+                    try:
+                        msg = self._create_html_email(
+                            to_addr=to_addr,
+                            subject=subject,
+                            title=title,
+                            source_name=source_name,
+                            category=category,
+                            date=date,
+                            summary_preview=summary_preview,
+                            image_path=image_path,
+                            article_url=url,
+                        )
 
-                    smtp.sendmail(self.smtp_user, to_addr, msg.as_string())
-                    sent_count += 1
-                    logger.info(f"📧 邮件发送成功: {to_addr}")
+                        smtp.sendmail(self.smtp_user, to_addr, msg.as_string())
+                        sent_count += 1
+                        logger.info(f"📧 邮件发送成功: {to_addr}")
+                        break  # 成功，跳出重试循环
 
-                except Exception as e:
-                    failed.append({"email": to_addr, "error": str(e)})
-                    logger.warning(f"邮件发送失败 ({to_addr}): {e}")
+                    except Exception as e:
+                        last_error = e
+                        if retry < max_retries - 1:
+                            # 还有重试机会，等待后重试
+                            wait_time = retry + 1  # 1 秒, 2 秒
+                            logger.info(f"📧 邮件发送失败，{wait_time} 秒后重试 ({retry+1}/{max_retries}): {to_addr}")
+                            time.sleep(wait_time)
+                        else:
+                            # 最后一次重试仍失败
+                            failed.append({"email": to_addr, "error": str(e)})
+                            logger.warning(f"📧 邮件发送失败 ({to_addr}): {e}")
 
             # 关闭连接
             smtp.quit()

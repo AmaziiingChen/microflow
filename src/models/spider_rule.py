@@ -81,30 +81,60 @@ class SpiderRuleOutput(BaseModel):
         description="任务目的/类别（映射到数据库的 category 字段）"
     )
 
+    # 🌟 数据源类型（HTML 或 RSS）
+    source_type: str = Field(
+        default="html",
+        description="数据源类型：html（网页 CSS 提取）或 rss（RSS/Atom 订阅）"
+    )
+
     # 目标 URL
     url: str = Field(
         ...,
-        description="目标网页 URL"
+        description="目标网页 URL 或 RSS 订阅地址"
     )
 
-    # CSS 选择器规则
-    list_container: str = Field(
-        ...,
-        description="包含所有列表项的父级 CSS 选择器"
+    # CSS 选择器规则（仅 source_type=html 时需要）
+    list_container: Optional[str] = Field(
+        default="",
+        description="包含所有列表项的父级 CSS 选择器（RSS 源无需填写）"
     )
-    item_selector: str = Field(
-        ...,
-        description="单个列表项的 CSS 选择器"
+    item_selector: Optional[str] = Field(
+        default="",
+        description="单个列表项的 CSS 选择器（RSS 源无需填写）"
     )
-    field_selectors: Dict[str, str] = Field(
-        ...,
-        description="字段选择器映射"
+    field_selectors: Optional[Dict[str, str]] = Field(
+        default_factory=dict,
+        description="字段选择器映射（RSS 源无需填写）"
     )
 
     # AI 摘要开关
     require_ai_summary: bool = Field(
         default=False,
         description="是否需要对抓取内容进行 AI 摘要"
+    )
+
+    # 🌟 跳过详情页抓取（仅 HTML 爬虫有效）
+    skip_detail: bool = Field(
+        default=False,
+        description="是否跳过详情页抓取（仅 HTML 爬虫有效）。当列表页已包含所需全部字段时，可设为 True 以提升抓取速度"
+    )
+
+    # 🌟 正文来源字段（仅 HTML 爬虫有效）
+    body_field: Optional[str] = Field(
+        default=None,
+        description="指定作为正文的字段名（仅 HTML 爬虫有效）。不设则使用所有字段拼接的文本。适用于列表页已包含摘要/描述的场景"
+    )
+
+    # 🌟 专属 AI 提示词
+    custom_summary_prompt: Optional[str] = Field(
+        default="",
+        description="该数据源专属的 AI 摘要提示词，用于定制提取和 Markdown 排版逻辑"
+    )
+
+    # 🌟 单次抓取最大条目数
+    max_items: Optional[int] = Field(
+        default=None,
+        description="单次抓取的最大条目数，不设则使用默认值（HTML:10, RSS:50）"
     )
 
     # 时间戳
@@ -153,6 +183,17 @@ class RuleGenerationResult(BaseModel):
     sample_data: Optional[List[Dict[str, str]]] = Field(
         default=None,
         description="沙盒测试提取的前 3 条数据样本"
+    )
+
+    # 🌟 选择器稳定性评分
+    stability_score: Optional[float] = Field(
+        default=None,
+        description="选择器稳定性评分 (0-100)"
+    )
+
+    stability_rating: Optional[str] = Field(
+        default=None,
+        description="稳定性评级（优秀/良好/一般/风险）"
     )
 
 

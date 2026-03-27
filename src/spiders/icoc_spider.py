@@ -70,7 +70,7 @@ class IcocSpider(BaseSpider):
             if not response:
                 continue
 
-            soup = BeautifulSoup(response.text, 'html.parser')
+            soup = BeautifulSoup(response.text, 'lxml')
             page_articles = []  # 🌟 必须在循环内新建局部空列表！
 
             # 查找文章列表容器下的所有 li
