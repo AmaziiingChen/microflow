@@ -28,6 +28,10 @@ dist-ssr
 *.sln
 *.sw?
 
+# Backup files
+*.backup_*
+*.bak
+
 # Test coverage
 coverage
 

@@ -83,42 +83,42 @@ class Api:
         logger.info("📱 JS 执行线程已启动")
 
         # 大模型服务
-        self.llm = LLMService()
+        self._llm = LLMService()
 
         # 🌟 服务层：系统交互、文件下载、配置管理
-        self.system_service = SystemService()
-        self.download_service = DownloadService()
-        self.config_service = ConfigService(str(CONFIG_PATH), self.llm.system_prompt)
+        self._system_service = SystemService()
+        self._download_service = DownloadService()
+        self._config_service = ConfigService(str(CONFIG_PATH), self._llm.system_prompt)
 
         # 🌟 核心组件：文章处理器（传入回调函数用于唤醒窗口）
-        self.article_processor = ArticleProcessor(
-            self.llm,
+        self._article_processor = ArticleProcessor(
+            self._llm,
             db,
             on_task_complete=self._on_task_complete,  # 🌟 新增：任务完成回调
             on_article_processed=self._on_article_processed,
             on_progress=self._push_ai_progress,  # 🌟 新增：AI 进度回调
-            config_service=self.config_service,  # 📧 邮件推送配置服务
+            config_service=self._config_service,  # 📧 邮件推送配置服务
         )
-        self.scheduler = SpiderScheduler(
-            article_processor=self.article_processor,
+        self._scheduler = SpiderScheduler(
+            article_processor=self._article_processor,
             progress_callback=self._push_progress,
-            config_service=self.config_service,
+            config_service=self._config_service,
         )
 
         # 🌟 核心组件：守护进程管理器
-        self.daemon_manager = DaemonManager()
+        self._daemon_manager = DaemonManager()
         # 🌟 设置冷却时间获取器（从配置服务动态读取）
-        self.daemon_manager.set_cooldown_getter(
-            lambda: self.config_service.get("updateCooldown", 60)
+        self._daemon_manager.set_cooldown_getter(
+            lambda: self._config_service.get("updateCooldown", 60)
         )
 
         # 🌟 核心组件：动态爬虫规则生成器和规则管理器
-        self.rule_generator = RuleGeneratorService(self.config_service)
-        self.rules_manager = get_rules_manager()
+        self._rule_generator = RuleGeneratorService(self._config_service)
+        self._rules_manager = get_rules_manager()
 
         # 线程控制
         self.is_running = True
-        self.window: Optional[webview.Window] = None
+        self._window: Optional[webview.Window] = None
 
         # 加载配置并应用
         self._apply_config()
@@ -126,9 +126,9 @@ class Api:
     def _get_active_dynamic_sources(self) -> list:
         """获取所有启用的动态爬虫任务名称"""
         try:
-            rules = self.rules_manager.load_custom_rules()
+            rules = self._rules_manager.load_custom_rules()
             sources = [rule.get('task_name') for rule in rules if rule.get('enabled', True)]
-            logger.info(f"[DEBUG] _get_active_dynamic_sources - 规则数: {len(rules)}, 启用的来源: {sources}")
+            logger.debug(f"[DEBUG] _get_active_dynamic_sources - 规则数: {len(rules)}, 启用的来源: {sources}")
             return sources
         except Exception as e:
             logger.error(f"获取动态来源失败: {e}", exc_info=True)
@@ -148,17 +148,17 @@ class Api:
         """
         # 🌟 详细调试：追踪配置读取
         try:
-            subscribed = self.config_service.get("subscribedSources", [])
-            logger.info(f"[DEBUG] _get_effective_sources - config_service.get('subscribedSources') 返回: {subscribed}, type: {type(subscribed)}")
+            subscribed = self._config_service.get("subscribedSources", [])
+            logger.debug(f"[DEBUG] _get_effective_sources - config_service.get('subscribedSources') 返回: {subscribed}, type: {type(subscribed)}")
         except Exception as e:
-            logger.error(f"[DEBUG] _get_effective_sources - 读取 subscribedSources 失败: {e}")
+            logger.debug(f"[DEBUG] _get_effective_sources - 读取 subscribedSources 失败: {e}")
             subscribed = []
 
         try:
             dynamic = self._get_active_dynamic_sources()
-            logger.info(f"[DEBUG] _get_effective_sources - _get_active_dynamic_sources() 返回: {dynamic}")
+            logger.debug(f"[DEBUG] _get_effective_sources - _get_active_dynamic_sources() 返回: {dynamic}")
         except Exception as e:
-            logger.error(f"[DEBUG] _get_effective_sources - 获取动态来源失败: {e}")
+            logger.debug(f"[DEBUG] _get_effective_sources - 获取动态来源失败: {e}")
             dynamic = []
 
         # 合并两个列表，去重
@@ -170,8 +170,27 @@ class Api:
             if d not in effective:
                 effective.append(d)
 
-        logger.info(f"[DEBUG] _get_effective_sources - 最终有效来源: {effective}")
+        logger.debug(f"[DEBUG] _get_effective_sources - 最终有效来源: {effective}")
+        if not effective and self._is_config_effectively_blank():
+            logger.warning("配置看起来是空白/损坏状态，临时放开来源过滤以避免首屏空白")
+            return None
+
         return effective  # 🌟 直接返回列表，空列表表示"不显示任何内容"
+
+    def _is_config_effectively_blank(self) -> bool:
+        """判断当前配置是否像未初始化或损坏的空白配置。"""
+        try:
+            critical_values = [
+                self._config_service.get("baseUrl", ""),
+                self._config_service.get("modelName", ""),
+                self._config_service.get("prompt", ""),
+                self._config_service.get("apiKey", ""),
+                self._config_service.get("subscribedSources", []),
+                self._config_service.get("secondaryModels", []),
+            ]
+            return not any(critical_values)
+        except Exception:
+            return False
 
     # ==================== 🌟 线程安全的 JS 执行队列 ====================
 
@@ -314,7 +333,7 @@ class Api:
         """
         try:
             # 获取最新统计
-            stats = self.article_processor.get_stats()
+            stats = self._article_processor.get_stats()
             processed = stats.get("processed", 0)
             submitted = stats.get("submitted", 0)
             ai_total = stats.get("ai_total", 0)
@@ -354,12 +373,12 @@ class Api:
         Args:
             article_data: 完整的文章数据字典
         """
-        if not self.window:
+        if not self._window:
             return
 
         try:
             # 检查静音模式
-            mute_mode = self.config_service.get("muteMode", False)
+            mute_mode = self._config_service.get("muteMode", False)
             json_data = json.dumps(article_data, ensure_ascii=False)
 
             if mute_mode:
@@ -380,8 +399,8 @@ class Api:
                 )
             else:
                 # 强提醒模式：唤醒窗口并弹出详情
-                self.window.restore()
-                self.window.show()
+                self._window.restore()
+                self._window.show()
                 js_code = f"if(window.openArticleDetail) window.openArticleDetail({json_data});"
                 # 🌟 使用队列执行（线程安全）
                 self._enqueue_js(js_code)
@@ -403,7 +422,7 @@ class Api:
             {"status": "success/error", "submitted_count": int, "queue_size": int, "data": list, "cooldown_remaining": int}
         """
         # 🌟 拦截只读模式：完全切断爬虫触发
-        if self.config_service.current.is_locked:
+        if self._config_service.current.is_locked:
             msg = "服务已暂停，当前为只读模式，仅可查看和利用 AI 分析历史公文"
             logger.warning(f"拦截爬虫请求：{msg}")
             return {
@@ -415,9 +434,9 @@ class Api:
             }
 
         # 🌟 优先检查 API 余额状态（如果配置了 AI）
-        api_key = self.config_service.get("apiKey", "")
+        api_key = self._config_service.get("apiKey", "")
         if api_key:  # 只有配置了 API Key 才检查余额
-            if not self.config_service.get_api_balance_ok():
+            if not self._config_service.get_api_balance_ok():
                 # 余额不足，通知前端显示欠费卡片
                 logger.warning("检测到 API 余额不足，拦截更新请求")
                 try:
@@ -471,8 +490,8 @@ class Api:
 
         # 🌟 终极防御：如果前端的锁失效了，后端在这里强行拦截
         if is_manual:
-            last_fetch = self.daemon_manager._get_last_fetch_time()
-            cooldown_seconds = self.config_service.get(
+            last_fetch = self._daemon_manager._get_last_fetch_time()
+            cooldown_seconds = self._config_service.get(
                 "updateCooldown", 60
             )  # 🌟 动态获取冷却时间
             remaining = cooldown_seconds - (time.time() - last_fetch)
@@ -486,12 +505,12 @@ class Api:
                 }
 
         # 🌟 无论是否手动，都先记录时间戳，防止守护线程重复执行
-        self.daemon_manager.record_manual_update()
+        self._daemon_manager.record_manual_update()
 
-        mode = self.config_service.get("trackMode", "continuous")
+        mode = self._config_service.get("trackMode", "continuous")
 
         # 获取用户订阅的来源列表
-        subscribed_sources = self.config_service.get("subscribedSources", None)
+        subscribed_sources = self._config_service.get("subscribedSources", None)
 
         if subscribed_sources is not None:
             subscribed_sources = list(subscribed_sources)  # 复制副本防止污染配置
@@ -528,7 +547,7 @@ class Api:
             logger.debug(f"通知前端开始执行失败: {e}")
 
         # 委托给调度器执行（异步提交）
-        result = self.scheduler.run_all_spiders(
+        result = self._scheduler.run_all_spiders(
             mode=mode,
             is_manual=is_manual,
             wait_for_completion=False,  # 不等待处理完成，立即返回
@@ -540,7 +559,7 @@ class Api:
         if result.get("status") == "error" and result.get("message"):
             return {
                 **result,
-                "cooldown_remaining": self.daemon_manager.get_cooldown_remaining(),
+                "cooldown_remaining": self._daemon_manager.get_cooldown_remaining(),
             }
 
         # 🌟 爬虫阶段完成后，通知前端切换状态
@@ -564,17 +583,17 @@ class Api:
 
         # 🌟 手动更新成功后，记录时间戳（与守护进程共享冷却状态）
         if is_manual and result.get("status") == "success":
-            self.daemon_manager.record_manual_update()
+            self._daemon_manager.record_manual_update()
 
         # 获取最新数据（🌟 修复：必须加上全局白名单过滤）
         filter_sources = self._get_effective_sources()
-        if not filter_sources:
+        if filter_sources == []:
             all_articles = []  # 如果全都取消订阅了，就返回空
         else:
             all_articles = db.get_articles_paged(limit=20, offset=0, source_names=filter_sources)
 
         # 🌟 获取冷却剩余时间
-        cooldown_remaining = self.daemon_manager.get_cooldown_remaining()
+        cooldown_remaining = self._daemon_manager.get_cooldown_remaining()
 
         # 🌟 更新托盘同步时间
         try:
@@ -597,7 +616,7 @@ class Api:
 
     def get_update_cooldown(self) -> Dict[str, Any]:
         """获取真实的剩余更新冷却时间（秒）"""
-        remaining = self.daemon_manager.get_cooldown_remaining()
+        remaining = self._daemon_manager.get_cooldown_remaining()
 
         if remaining > 0:
             return {"status": "cooling", "remaining": remaining}
@@ -605,7 +624,7 @@ class Api:
 
     def get_processing_stats(self) -> Dict[str, Any]:
         """获取后台处理任务的统计信息"""
-        stats = self.scheduler.get_processor_stats()
+        stats = self._scheduler.get_processor_stats()
         return {"status": "success", "data": stats}
 
     # ===== 以下是保留的兼容方法 =====
@@ -638,10 +657,10 @@ class Api:
             else:
                 filter_sources = self._get_effective_sources()
 
-            logger.info(f"[DEBUG] get_history_paged - source_name={source_name}, filter_sources={filter_sources}")
+            logger.debug(f"[DEBUG] get_history_paged - source_name={source_name}, filter_sources={filter_sources}")
 
             # 🌟 致命防御：如果什么都没订阅，直接阻断
-            if not filter_sources and not source_name:
+            if filter_sources == [] and not source_name:
                 return {"status": "success", "data": []}
 
             articles = db.get_articles_paged(
@@ -655,7 +674,7 @@ class Api:
             # 🌟 详细调试：显示返回文章的来源分布
             from collections import Counter
             source_counts = Counter(a.get('source_name') for a in articles)
-            logger.info(f"[DEBUG] get_history_paged - 返回文章来源分布: {dict(source_counts)}")
+            logger.debug(f"[DEBUG] get_history_paged - 返回文章来源分布: {dict(source_counts)}")
 
             return {"status": "success", "data": articles}
         except Exception as e:
@@ -749,9 +768,9 @@ class Api:
         logger.info("【2】后端 API 已接收到取消指令")
         try:
             logger.info("【2.1】正在调用 scheduler.request_cancel()...")
-            self.scheduler.request_cancel()  # 🌟 新增：一脚踩死爬虫抓取线程
+            self._scheduler.request_cancel()  # 🌟 新增：一脚踩死爬虫抓取线程
             logger.info("【2.2】正在调用 article_processor.request_cancel()...")
-            self.article_processor.request_cancel()
+            self._article_processor.request_cancel()
             logger.info("【2.3】取消指令已发送完毕")
             return {"status": "success", "message": "已请求取消 AI 任务"}
         except Exception as e:
@@ -761,7 +780,7 @@ class Api:
     def clear_ai_cancel(self) -> dict:
         """清除取消标志（新一轮任务开始前调用）"""
         try:
-            self.article_processor.clear_cancel()
+            self._article_processor.clear_cancel()
             return {"status": "success"}
         except Exception as e:
             return {"status": "error", "message": str(e)}
@@ -778,7 +797,7 @@ class Api:
 
     def open_browser(self, url: str):
         """使用默认浏览器打开链接"""
-        success = self.system_service.open_browser(url)
+        success = self._system_service.open_browser(url)
         return {"status": "success" if success else "error"}
 
     def open_in_browser(self, url: str):
@@ -801,11 +820,11 @@ class Api:
 
         # 🌟 热重载 Getter：动态读取配置，带安全边界（最小 15 分钟）
         def get_interval_seconds() -> int:
-            polling_minutes = self.config_service.get("pollingInterval", 60)
+            polling_minutes = self._config_service.get("pollingInterval", 60)
             # 防御性转换：确保最小 900 秒（15 分钟）
             return max(int(polling_minutes) * 60, 900)
 
-        self.daemon_manager.start(
+        self._daemon_manager.start(
             task_callback=self.check_updates,
             interval_getter=get_interval_seconds,
             on_new_articles=on_new_articles,
@@ -832,31 +851,31 @@ class Api:
 
             # 如果没有传入 count，则从数据库获取
             if count is None:
-                subscribed_sources = self.config_service.get("subscribedSources", None)
-                if subscribed_sources is not None:
-                    subscribed_sources = list(subscribed_sources)
-                    subscribed_sources.extend(self._get_active_dynamic_sources())
-                count = db.get_unread_count(source_names=subscribed_sources)
+                effective_sources = self._get_effective_sources()
+                if effective_sources == []:
+                    count = 0
+                else:
+                    count = db.get_unread_count(source_names=effective_sources)
             # 获取当前时间
             sync_time = datetime.now().strftime("%H:%M")
             # 🔍 调试：打印更新前的状态
-            logger.info(
+            logger.debug(
                 f"📊 [DEBUG] _refresh_tray_status 被调用: count={count}, sync_time={sync_time}"
             )
-            logger.info(
+            logger.debug(
                 f"📊 [DEBUG] 当前 main._unread_count={getattr(main_mod, '_unread_count', 'N/A')}"
             )
-            logger.info(
+            logger.debug(
                 f"📊 [DEBUG] 当前 main._status_item={getattr(main_mod, '_status_item', 'N/A')}"
             )
-            logger.info(
+            logger.debug(
                 f"📊 [DEBUG] 当前 main._base_image={getattr(main_mod, '_base_image', 'N/A')}"
             )
             # 更新托盘
             main_mod.update_tray_status(unread=count, sync_time=sync_time)
-            logger.info(f"📊 [DEBUG] update_tray_status 调用完成")
+            logger.debug(f"📊 [DEBUG] update_tray_status 调用完成")
         except Exception as e:
-            logger.error(f"❌ [DEBUG] 刷新托盘状态失败: {e}")
+            logger.debug(f"❌ [DEBUG] 刷新托盘状态失败: {e}")
             import traceback
 
             traceback.print_exc()
@@ -895,15 +914,15 @@ class Api:
 
     def download_attachment(self, url: str, filename: str) -> dict:
         """下载附件（支持后缀智能补全）"""
-        return self.download_service.download_attachment(url, filename)
+        return self._download_service.download_attachment(url, filename)
 
     def open_system_link(self, url: str):
         """调用系统原生应用打开链接"""
-        return self.system_service.open_system_link(url)
+        return self._system_service.open_system_link(url)
 
     def save_snapshot(self, b64_data: str, title: str) -> dict:
         """保存快照图片"""
-        return self.download_service.save_snapshot(b64_data, title)
+        return self._download_service.save_snapshot(b64_data, title)
 
     def copy_image_to_clipboard(self, b64_data: str) -> dict:
         """接收 Base64 图片并调用操作系统底层接口暴力写入剪贴板（无需第三方库）"""
@@ -947,12 +966,12 @@ class Api:
 
     def popup_new_article(self, article_dict: dict):
         """弹窗展示新文章"""
-        if not self.window:
+        if not self._window:
             return
 
         try:
-            self.window.restore()
-            self.window.show()
+            self._window.restore()
+            self._window.show()
 
             screen = webview.screens[0]
             target_width = 465
@@ -960,8 +979,8 @@ class Api:
             x_pos = screen.width - target_width - 20
             y_pos = 40
 
-            self.window.resize(target_width, target_height)
-            self.window.move(x_pos, y_pos)
+            self._window.resize(target_width, target_height)
+            self._window.move(x_pos, y_pos)
 
             js_code = f"if(window.showArticleDetailFromBackend) {{ window.showArticleDetailFromBackend({json.dumps(article_dict)}); }}"
             # 🌟 使用队列执行（线程安全）
@@ -972,8 +991,8 @@ class Api:
 
     def _apply_config(self):
         """应用配置到 LLM 服务"""
-        config = self.config_service.current
-        self.llm.update_config(
+        config = self._config_service.current
+        self._llm.update_config(
             api_key=config.api_key,
             model_name=config.model_name,
             system_prompt=config.prompt,
@@ -982,14 +1001,14 @@ class Api:
 
     def load_config(self) -> dict:
         """暴露给前端：获取配置"""
-        config_data = self.config_service.to_dict()
+        config_data = self._config_service.to_dict()
 
         # 🌟 修复：确保所有字段存在（提供默认值），避免设置界面空白
         default_config = {
             "baseUrl": "https://api.deepseek.com/v1",
             "apiKey": "",
             "modelName": "deepseek-chat",
-            "prompt": self.llm.system_prompt if hasattr(self, 'llm') and self.llm else "请帮我总结以下文章内容",
+            "prompt": self._llm.system_prompt if hasattr(self, "_llm") and self._llm else "请帮我总结以下文章内容",
             "autoStart": False,
             "muteMode": False,
             "trackMode": "continuous",
@@ -1012,12 +1031,12 @@ class Api:
             "skip_detail": False,
         }
         for key, default in default_config.items():
-            if key not in config_data:
+            if key not in config_data or (isinstance(default, str) and config_data.get(key) in (None, "")):
                 config_data[key] = default
 
         # 🌟 修复：启动时恢复置顶状态，改为对属性赋值
-        if self.window and config_data.get("isPinned", False):
-            self.window.on_top = True
+        if self._window and config_data.get("isPinned", False):
+            self._window.on_top = True
 
         return {"status": "success", "data": config_data}
 
@@ -1025,11 +1044,11 @@ class Api:
         """暴露给前端：保存配置"""
         try:
             # 🌟 检查配置锁定状态
-            if self.config_service.current and self.config_service.current.is_locked:
+            if self._config_service.current and self._config_service.current.is_locked:
                 logger.warning("⚠️ 配置已锁定，拒绝保存操作")
                 return {"status": "error", "message": "配置已锁定，无法保存"}
 
-            if not self.config_service.save(new_config):
+            if not self._config_service.save(new_config):
                 return {"status": "error", "message": "保存配置文件失败，请检查文件权限"}
 
             # 应用开机自启设置
@@ -1053,7 +1072,7 @@ class Api:
     ) -> dict:
         """测试 AI 连通性"""
         logger.info("正在进行 AI 连通性测试...")
-        is_ok, msg = self.llm.test_connection(api_key, model_name, base_url)
+        is_ok, msg = self._llm.test_connection(api_key, model_name, base_url)
         if is_ok:
             return {"status": "success"}
         return {"status": "error", "message": msg}
@@ -1061,7 +1080,7 @@ class Api:
     def get_api_balance_status(self) -> dict:
         """获取 API 余额状态"""
         try:
-            balance_ok = self.config_service.get_api_balance_ok()
+            balance_ok = self._config_service.get_api_balance_ok()
             return {"status": "success", "balance_ok": balance_ok}
         except Exception as e:
             logger.error(f"获取余额状态失败: {e}")
@@ -1070,7 +1089,7 @@ class Api:
     def clear_api_balance_status(self) -> dict:
         """清除欠费状态（用户充值后调用）"""
         try:
-            self.config_service.set_api_balance_ok(True)
+            self._config_service.set_api_balance_ok(True)
             logger.info("用户已清除欠费状态")
             return {"status": "success"}
         except Exception as e:
@@ -1079,7 +1098,7 @@ class Api:
 
     def get_cooldown_config(self) -> dict:
         """获取冷却时间配置"""
-        cooldown_seconds = self.config_service.get("updateCooldown", 60)
+        cooldown_seconds = self._config_service.get("updateCooldown", 60)
         return {"status": "success", "cooldown_seconds": cooldown_seconds}
 
     # ==================== 📧 邮件推送 API ====================
@@ -1096,10 +1115,10 @@ class Api:
         """
         try:
             # 获取邮件配置
-            smtp_host = self.config_service.get("smtpHost", "")
-            smtp_port = self.config_service.get("smtpPort", 465)
-            smtp_user = self.config_service.get("smtpUser", "")
-            smtp_password = self.config_service.get("smtpPassword", "")
+            smtp_host = self._config_service.get("smtpHost", "")
+            smtp_port = self._config_service.get("smtpPort", 465)
+            smtp_user = self._config_service.get("smtpUser", "")
+            smtp_password = self._config_service.get("smtpPassword", "")
 
             if not smtp_host or not smtp_user or not smtp_password:
                 return {"status": "error", "message": "请先配置 SMTP 服务器信息"}
@@ -1138,14 +1157,14 @@ class Api:
         try:
             return {
                 "status": "success",
-                "emailNotifyEnabled": self.config_service.get(
+                "emailNotifyEnabled": self._config_service.get(
                     "emailNotifyEnabled", False
                 ),
-                "smtpHost": self.config_service.get("smtpHost", ""),
-                "smtpPort": self.config_service.get("smtpPort", 465),
-                "smtpUser": self.config_service.get("smtpUser", ""),
-                "hasPassword": bool(self.config_service.get("smtpPassword", "")),
-                "subscriberList": self.config_service.get("subscriberList", []),
+                "smtpHost": self._config_service.get("smtpHost", ""),
+                "smtpPort": self._config_service.get("smtpPort", 465),
+                "smtpUser": self._config_service.get("smtpUser", ""),
+                "hasPassword": bool(self._config_service.get("smtpPassword", "")),
+                "subscriberList": self._config_service.get("subscriberList", []),
             }
         except Exception as e:
             return {"status": "error", "message": str(e)}
@@ -1162,7 +1181,7 @@ class Api:
 
         try:
             # 检查配置服务
-            if not self.article_processor.config_service:
+            if not self._article_processor.config_service:
                 return {
                     "status": "error",
                     "message": "ArticleProcessor 缺少 config_service",
@@ -1170,12 +1189,12 @@ class Api:
                 }
 
             # 获取各项配置
-            enabled = self.config_service.get("emailNotifyEnabled", False)
-            subscriber_list = self.config_service.get("subscriberList", [])
-            smtp_host = self.config_service.get("smtpHost", "")
-            smtp_port = self.config_service.get("smtpPort", 465)
-            smtp_user = self.config_service.get("smtpUser", "")
-            smtp_password = self.config_service.get("smtpPassword", "")
+            enabled = self._config_service.get("emailNotifyEnabled", False)
+            subscriber_list = self._config_service.get("subscriberList", [])
+            smtp_host = self._config_service.get("smtpHost", "")
+            smtp_port = self._config_service.get("smtpPort", 465)
+            smtp_user = self._config_service.get("smtpUser", "")
+            smtp_password = self._config_service.get("smtpPassword", "")
 
             # ========== 第一步：基础配置检查 ==========
             issues = []
@@ -1351,8 +1370,8 @@ class Api:
             logger.info(f"📧 测试邮件推送：使用文章 [{article.get('title', '')[:30]}]")
 
             # 检查配置
-            enabled = self.config_service.get("emailNotifyEnabled", False)
-            subscriber_list = self.config_service.get("subscriberList", [])
+            enabled = self._config_service.get("emailNotifyEnabled", False)
+            subscriber_list = self._config_service.get("subscriberList", [])
 
             if not enabled:
                 return {"status": "error", "message": "邮件通知未启用"}
@@ -1360,10 +1379,10 @@ class Api:
                 return {"status": "error", "message": "订阅者列表为空"}
 
             # 🌟 添加 model_name 字段（从配置获取当前模型名称）
-            article["model_name"] = self.config_service.get("modelName", "AI")
+            article["model_name"] = self._config_service.get("modelName", "AI")
 
             # 直接调用 ArticleProcessor 的邮件发送方法
-            self.article_processor._send_email_notification(article)
+            self._article_processor._send_email_notification(article)
 
             # 🌟 格式化订阅者显示：1个显示全名，2个及以上显示"...等N个邮箱"
             if len(subscriber_list) == 1:
@@ -1395,12 +1414,12 @@ class Api:
 
     def _set_autostart(self, enabled: bool):
         """设置开机自启"""
-        self.system_service.set_autostart(enabled)
+        self._system_service.set_autostart(enabled)
 
     def hide_window(self):
         """隐藏窗口"""
-        if self.window:
-            self.window.hide()
+        if self._window:
+            self._window.hide()
 
     def search_articles(self, keyword: str, source_name: str = None, favorites_only: bool = False) -> dict:  # type: ignore
         """全局搜索（支持按来源筛选、按收藏筛选）
@@ -1421,10 +1440,10 @@ class Api:
             else:
                 filter_sources = self._get_effective_sources()
 
-            logger.info(f"[DEBUG] search_articles - keyword={keyword}, source_name={source_name}, filter_sources={filter_sources}")
+            logger.debug(f"[DEBUG] search_articles - keyword={keyword}, source_name={source_name}, filter_sources={filter_sources}")
 
             # 🌟 致命防御：如果什么都没订阅，直接阻断
-            if not filter_sources and not source_name:
+            if filter_sources == [] and not source_name:
                 return {"status": "success", "data": []}
 
             if not keyword or not keyword.strip():
@@ -1443,7 +1462,7 @@ class Api:
                 source_names=filter_sources,
                 favorites_only=favorites_only,
             )
-            logger.info(f"[DEBUG] search_articles - 返回结果数: {len(data)}")
+            logger.debug(f"[DEBUG] search_articles - 返回结果数: {len(data)}")
             return {"status": "success", "data": data}
         except Exception as e:
             logger.error(f"搜索失败: {e}")
@@ -1453,8 +1472,8 @@ class Api:
         """彻底退出"""
         logger.info("程序彻底退出")
         self.is_running = False
-        self.daemon_manager.request_stop()
-        self.article_processor.shutdown(wait=False)
+        self._daemon_manager.request_stop()
+        self._article_processor.shutdown(wait=False)
         os._exit(0)
 
     def get_all_sources(self) -> dict:
@@ -1495,20 +1514,22 @@ class Api:
             else:
                 filter_sources = self._get_effective_sources()
 
-            logger.info(f"📊 获取未读数量 - 筛选来源: {filter_sources}")
+            logger.debug(f"📊 获取未读数量 - 筛选来源: {filter_sources}")
 
             # 从数据库直接统计未读数量
             count = db.get_unread_count(source_names=filter_sources)
-            logger.info(f"📊 未读数量统计结果: {count}")
+            logger.debug(f"📊 未读数量统计结果: {count}")
 
-            # 🌟 同步更新状态栏图标
-            try:
-                import threading
-                threading.Thread(
-                    target=self._refresh_tray_status, daemon=True
-                ).start()
-            except Exception:
-                pass
+            # 🌟 只有在统计全局未读数时才顺带刷新托盘，避免来源切换时额外占用数据库
+            if source_name is None or source_name == "全部":
+                try:
+                    import threading
+
+                    threading.Thread(
+                        target=self._refresh_tray_status, daemon=True
+                    ).start()
+                except Exception:
+                    pass
 
             return {"status": "success", "count": count}
         except Exception as e:
@@ -1534,7 +1555,7 @@ class Api:
             article = db.get_first_unread(source_names=filter_sources)
 
             if article:
-                logger.info(f"📊 找到未读文章: {article['title'][:30]}...")
+                logger.debug(f"📊 找到未读文章: {article['title'][:30]}...")
                 return {"status": "success", "url": article["url"], "id": article["id"]}
             else:
                 logger.info("📊 没有找到未读文章")
@@ -1610,7 +1631,7 @@ class Api:
             logger.info(f"正在重新生成文章总结: {title}")
             if custom_prompt:
                 logger.info(f"使用自定义提示词: {custom_prompt[:50]}...")
-            new_summary = self.llm.summarize_article(title, raw_text, custom_prompt)
+            new_summary = self._llm.summarize_article(title, raw_text, custom_prompt)
 
             # 5. 检查是否生成成功
             if new_summary.startswith("⚠️") or new_summary.startswith("❌"):
@@ -1746,7 +1767,7 @@ class Api:
             }
         """
         # 🌟 步骤 1：重新加载本地配置（触发签名验证）
-        self.config_service.load()
+        self._config_service.load()
 
         # 🌟 步骤 2：请求远程 version.json（云端最高仲裁）
         try:
@@ -1820,7 +1841,7 @@ class Api:
             响应字典
         """
         # 步骤 1：检查本地锁定状态
-        if self.config_service.current.is_locked:
+        if self._config_service.current.is_locked:
             logger.warning("🚫 离线检查：配置校验失败或软件已被锁定，进入只读模式")
             response = self._build_success_response({})
             response["mode"] = "read_only"
@@ -1828,7 +1849,7 @@ class Api:
             return response
 
         # 步骤 2：检查 TTL
-        last_sync = self.config_service.current.last_cloud_sync_time
+        last_sync = self._config_service.current.last_cloud_sync_time
         current_time = time.time()
         elapsed_seconds = current_time - last_sync
 
@@ -1860,11 +1881,11 @@ class Api:
 
         当云端 is_active=True 时，解除之前的只读锁定，恢复正常功能。
         """
-        if self.config_service.current.is_locked:
+        if self._config_service.current.is_locked:
             try:
-                current_config = self.config_service.to_dict()
+                current_config = self._config_service.to_dict()
                 current_config["isLocked"] = False
-                self.config_service.save(current_config)
+                self._config_service.save(current_config)
                 logger.info("🔓 云端验证成功，已解除只读锁定，恢复正常模式")
             except Exception as e:
                 logger.error(f"解除锁定失败: {e}")
@@ -1874,9 +1895,9 @@ class Api:
         更新云端同步时间戳（云端验证成功后调用）
         """
         try:
-            current_config = self.config_service.to_dict()
+            current_config = self._config_service.to_dict()
             current_config["lastCloudSyncTime"] = time.time()
-            self.config_service.save(current_config)
+            self._config_service.save(current_config)
             logger.info("🔐 已更新云端同步时间戳")
         except Exception as e:
             logger.error(f"更新云端同步时间戳失败: {e}")
@@ -1892,9 +1913,9 @@ class Api:
 
         # 锁定配置文件
         try:
-            current_config = self.config_service.to_dict()
+            current_config = self._config_service.to_dict()
             current_config["isLocked"] = True
-            self.config_service.save(current_config)
+            self._config_service.save(current_config)
             logger.info("✅ 已将配置标记为锁定")
         except Exception as e:
             logger.error(f"锁定配置失败: {e}")
@@ -1984,7 +2005,7 @@ class Api:
         注意：在 Windows 上，窗口操作必须在 UI 线程执行，
         否则会导致死锁或无响应。
         """
-        if not self.window:
+        if not self._window:
             return {"status": "error", "message": "窗口未初始化"}
 
         try:
@@ -1994,7 +2015,7 @@ class Api:
 
                 def _set_on_top_safe():
                     try:
-                        self.window.on_top = is_on_top
+                        self._window.on_top = is_on_top
                         logger.info(f"Windows: 窗口置顶状态已设置为 {is_on_top}")
                     except Exception as e:
                         logger.error(f"Windows 设置置顶失败: {e}")
@@ -2006,7 +2027,7 @@ class Api:
                 return {"status": "success", "is_pinned": is_on_top, "async": True}
             else:
                 # macOS 可以直接设置
-                self.window.on_top = is_on_top
+                self._window.on_top = is_on_top
                 return {"status": "success", "is_pinned": is_on_top}
 
         except Exception as e:
@@ -2137,7 +2158,7 @@ class Api:
                 return {"status": "error", "message": "target_fields 必须是非空列表"}
 
             # 调用规则生成服务
-            result = self.rule_generator.generate_and_test_rule(
+            result = self._rule_generator.generate_and_test_rule(
                 task_id=task_id,
                 task_name=task_name,
                 url=url,
@@ -2213,7 +2234,7 @@ class Api:
                 }
 
             # 保存规则
-            success = self.rules_manager.save_custom_rule(rule_dict)
+            success = self._rules_manager.save_custom_rule(rule_dict)
 
             if success:
                 logger.info(f"✅ 规则保存成功: {rule_dict.get('rule_id')}")
@@ -2290,7 +2311,7 @@ class Api:
             rule_dict.setdefault('enabled', True)
 
             # 保存规则
-            success = self.rules_manager.save_custom_rule(rule_dict)
+            success = self._rules_manager.save_custom_rule(rule_dict)
 
             if success:
                 logger.info(f"✅ RSS 规则保存成功: {rule_dict.get('rule_id')}")
@@ -2322,7 +2343,7 @@ class Api:
             {"status": "success", "rules": list}
         """
         try:
-            rules = self.rules_manager.load_custom_rules()
+            rules = self._rules_manager.load_custom_rules()
             return {"status": "success", "rules": rules}
         except Exception as e:
             logger.error(f"获取规则列表失败: {e}")
@@ -2336,13 +2357,13 @@ class Api:
             {"status": "success", "subscribed": list, "dynamic": list, "effective": list}
         """
         try:
-            subscribed = self.config_service.get("subscribedSources", [])
+            subscribed = self._config_service.get("subscribedSources", [])
             dynamic = self._get_active_dynamic_sources()
             effective = self._get_effective_sources()
 
-            logger.info(f"[DEBUG API] subscribedSources from config: {subscribed}")
-            logger.info(f"[DEBUG API] dynamic sources: {dynamic}")
-            logger.info(f"[DEBUG API] effective sources: {effective}")
+            logger.debug(f"[DEBUG API] subscribedSources from config: {subscribed}")
+            logger.debug(f"[DEBUG API] dynamic sources: {dynamic}")
+            logger.debug(f"[DEBUG API] effective sources: {effective}")
 
             return {
                 "status": "success",
@@ -2365,7 +2386,7 @@ class Api:
             {"status": "success", "rule": dict}
         """
         try:
-            rule = self.rules_manager.get_rule_by_id(rule_id)
+            rule = self._rules_manager.get_rule_by_id(rule_id)
             if rule:
                 return {"status": "success", "rule": rule}
             else:
@@ -2385,7 +2406,7 @@ class Api:
             {"status": "success/error"}
         """
         try:
-            success = self.rules_manager.delete_rule(rule_id)
+            success = self._rules_manager.delete_rule(rule_id)
             if success:
                 return {"status": "success", "message": "规则已删除"}
             else:
@@ -2406,7 +2427,7 @@ class Api:
             {"status": "success/error"}
         """
         try:
-            success = self.rules_manager.update_rule_status(rule_id, enabled)
+            success = self._rules_manager.update_rule_status(rule_id, enabled)
             if success:
                 status = "启用" if enabled else "禁用"
                 return {"status": "success", "message": f"规则已{status}"}
@@ -2433,7 +2454,7 @@ class Api:
             rule = SpiderRuleOutput(**rule_dict)
 
             # 测试规则
-            sample_data = self.rule_generator.test_existing_rule(rule, max_items=5)
+            sample_data = self._rule_generator.test_existing_rule(rule, max_items=5)
 
             return {
                 "status": "success",

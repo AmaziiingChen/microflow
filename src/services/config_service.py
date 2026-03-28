@@ -7,6 +7,8 @@ import hmac
 import hashlib
 import uuid
 import time
+import shutil
+import tempfile
 from typing import Dict, Any, Optional
 from dataclasses import dataclass, field, asdict
 
@@ -70,6 +72,8 @@ class ConfigService:
         self.config_path = config_path
         self._default_prompt = default_prompt
         self._config: Optional[AppConfig] = None
+        self._last_load_failed = False
+        self._has_loaded_successfully = False
 
         # 确保配置目录存在
         config_dir = os.path.dirname(config_path)
@@ -136,7 +140,11 @@ class ConfigService:
 
         if not os.path.exists(self.config_path):
             self._config = default
+            self._last_load_failed = False
+            self._has_loaded_successfully = True
             return self._config
+
+        backup_path = f"{self.config_path}.bak"
 
         try:
             with open(self.config_path, 'r', encoding='utf-8') as f:
@@ -195,11 +203,54 @@ class ConfigService:
                 # 🤖 多模型配置（用于 AI 爬虫多模型投票）
                 secondary_models=data.get('secondaryModels', []),
             )
+            self._last_load_failed = False
+            self._has_loaded_successfully = True
             return self._config
 
         except Exception as e:
             logger.error(f"读取配置文件失败: {e}")
-            self._config = default
+            try:
+                if os.path.exists(backup_path):
+                    with open(backup_path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    self._config = AppConfig(
+                        base_url=data.get('baseUrl', default.base_url),
+                        api_key=data.get('apiKey', default.api_key),
+                        model_name=data.get('modelName', default.model_name),
+                        prompt=data.get('prompt', default.prompt),
+                        auto_start=data.get('autoStart', default.auto_start),
+                        mute_mode=data.get('muteMode', default.mute_mode),
+                        track_mode=data.get('trackMode', default.track_mode),
+                        font_family=data.get('fontFamily', default.font_family),
+                        custom_font_path=data.get('customFontPath', default.custom_font_path),
+                        custom_font_name=data.get('customFontName', default.custom_font_name),
+                        subscribed_sources=data.get('subscribedSources', default.subscribed_sources),
+                        polling_interval=data.get('pollingInterval', default.polling_interval),
+                        update_cooldown=data.get('updateCooldown', default.update_cooldown),
+                        is_locked=data.get('isLocked', False),
+                        api_balance_ok=data.get('apiBalanceOk', default.api_balance_ok),
+                        config_sign=data.get('configSign', ''),
+                        last_cloud_sync_time=data.get('lastCloudSyncTime', 0.0),
+                        device_id=data.get('deviceId', ''),
+                        email_notify_enabled=data.get('emailNotifyEnabled', False),
+                        smtp_host=data.get('smtpHost', ''),
+                        smtp_port=data.get('smtpPort', 465),
+                        smtp_user=data.get('smtpUser', ''),
+                        smtp_password=data.get('smtpPassword', ''),
+                        subscriber_list=data.get('subscriberList', []),
+                        secondary_models=data.get('secondaryModels', []),
+                    )
+                    self._last_load_failed = False
+                    self._has_loaded_successfully = True
+                    logger.warning("配置文件读取失败，已从备份恢复")
+                    return self._config
+            except Exception as backup_err:
+                logger.warning(f"配置备份恢复失败: {backup_err}")
+
+            if self._config is None:
+                self._config = default
+            self._last_load_failed = True
+            self._has_loaded_successfully = False
             return self._config
 
     def save(self, config_dict: Dict[str, Any]) -> bool:
@@ -237,6 +288,31 @@ class ConfigService:
                 except (ValueError, TypeError):
                     config_dict['smtpPort'] = 465
 
+            # 如果配置从未成功加载过，避免把前端初始空白状态写回磁盘。
+            # 这种情况下优先保留内存中的已知配置，防止把有效设置覆盖成空值。
+            if self._config is not None and not self._has_loaded_successfully:
+                current = self._config
+
+                def keep_existing(key: str, current_value: Any) -> None:
+                    value = config_dict.get(key)
+                    if value in (None, "", []):
+                        if current_value not in (None, "", []):
+                            config_dict[key] = current_value
+
+                keep_existing('baseUrl', current.base_url)
+                keep_existing('apiKey', current.api_key)
+                keep_existing('modelName', current.model_name)
+                keep_existing('prompt', current.prompt)
+                keep_existing('fontFamily', current.font_family)
+                keep_existing('customFontPath', current.custom_font_path)
+                keep_existing('customFontName', current.custom_font_name)
+                keep_existing('subscribedSources', current.subscribed_sources)
+                keep_existing('secondaryModels', current.secondary_models)
+                keep_existing('smtpHost', current.smtp_host)
+                keep_existing('smtpUser', current.smtp_user)
+                keep_existing('smtpPassword', current.smtp_password)
+                keep_existing('subscriberList', current.subscriber_list)
+
             # 确保目录存在
             config_dir = os.path.dirname(self.config_path)
             if config_dir:
@@ -266,9 +342,32 @@ class ConfigService:
             logger.debug(f"📧 邮件配置保存: smtpUser={config_dict.get('smtpUser', '')}")
             logger.debug(f"📧 邮件配置保存: subscriberList={config_dict.get('subscriberList', [])}")
 
-            # 写入文件
-            with open(self.config_path, 'w', encoding='utf-8') as f:
-                json.dump(config_dict, f, ensure_ascii=False, indent=4)
+            # 写入文件：先写临时文件，再原子替换，避免并发读到半截 JSON
+            backup_path = f"{self.config_path}.bak"
+            fd, tmp_path = tempfile.mkstemp(
+                dir=config_dir or None,
+                prefix=os.path.basename(self.config_path) + ".",
+                suffix=".tmp",
+            )
+            try:
+                with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                    json.dump(config_dict, f, ensure_ascii=False, indent=4)
+                    f.flush()
+                    os.fsync(f.fileno())
+
+                if os.path.exists(self.config_path):
+                    try:
+                        shutil.copy2(self.config_path, backup_path)
+                    except Exception as copy_err:
+                        logger.debug(f"更新配置备份失败: {copy_err}")
+
+                os.replace(tmp_path, self.config_path)
+            finally:
+                if os.path.exists(tmp_path):
+                    try:
+                        os.remove(tmp_path)
+                    except Exception:
+                        pass
 
             # 更新内存中的配置
             self._config = AppConfig(
@@ -301,6 +400,8 @@ class ConfigService:
                 # 🤖 多模型配置（用于 AI 爬虫多模型投票）
                 secondary_models=config_dict.get('secondaryModels', []),
             )
+            self._last_load_failed = False
+            self._has_loaded_successfully = True
 
             logger.info("配置已成功保存")
             return True
@@ -413,6 +514,14 @@ class ConfigService:
         attr_name = key_mapping.get(key, key)
 
         return getattr(config, attr_name, default)
+
+    @property
+    def last_load_failed(self) -> bool:
+        return self._last_load_failed
+
+    @property
+    def has_loaded_successfully(self) -> bool:
+        return self._has_loaded_successfully
 
     def reload(self) -> bool:
         """

@@ -4,6 +4,7 @@
 import webview
 import os
 import sys
+import logging
 from PIL import Image, ImageDraw
 import requests
 import urllib3
@@ -42,6 +43,7 @@ except ImportError as e:
 from src.logger import setup_logging
 
 setup_logging()
+logger = logging.getLogger(__name__)
 
 # 引入我们的"总调度室"
 from src.api import Api
@@ -98,13 +100,11 @@ def update_tray_status(unread: int = None, sync_time: str = None):  # type:ignor
     # 🌟 关键修复：使用 __main__ 获取真正的主模块
     main_mod = get_main_module()
     if main_mod is None:
-        print("❌ [DEBUG] 无法获取主模块")
+        logger.debug("无法获取主模块")
         return
 
     # 🔍 调试日志
-    print(
-        f"📊 [DEBUG] update_tray_status 被调用: unread={unread}, sync_time={sync_time}"
-    )
+    logger.debug("update_tray_status 被调用: unread=%s, sync_time=%s", unread, sync_time)
 
     if unread is not None:
         main_mod._unread_count = unread
@@ -112,14 +112,13 @@ def update_tray_status(unread: int = None, sync_time: str = None):  # type:ignor
         main_mod._last_sync_time = sync_time
 
     def do_update():
-        print(f"📊 [DEBUG] do_update 开始执行, _unread_count={main_mod._unread_count}")
+        logger.debug("do_update 开始执行, _unread_count=%s", main_mod._unread_count)
         if HAS_PYOBJC:
             # 1. 动态刷新菜单栏里的文字
             if hasattr(main_mod, "_unread_item") and main_mod._unread_item:
                 main_mod._unread_item.setTitle_(f"未读: {main_mod._unread_count}")
-                print(f"📊 [DEBUG] 菜单项文字已更新为: 未读: {main_mod._unread_count}")
             else:
-                print(f"📊 [DEBUG] _unread_item 不存在或为 None")
+                logger.debug("_unread_item 不存在或为 None")
 
             if hasattr(main_mod, "_sync_item") and main_mod._sync_item:
                 sync_text = (
@@ -134,19 +133,17 @@ def update_tray_status(unread: int = None, sync_time: str = None):  # type:ignor
                 main_mod._mute_item.setState_(
                     NSOnState if main_mod._mute_mode else NSOffState
                 )
-                print(f"📊 [DEBUG] 勿扰模式勾选状态已更新: {main_mod._mute_mode}")
 
             # 2. 🌟 核心修复：根据未读数量控制红点显示/隐藏
-            print(f"📊 [DEBUG] 准备更新红点, _unread_count={main_mod._unread_count}")
             if main_mod._unread_count > 0:
-                print(f"📊 [DEBUG] 调用 set_tray_alert()")
                 set_tray_alert()
             else:
-                print(f"📊 [DEBUG] 调用 clear_tray_alert()")
                 clear_tray_alert()
 
-            print(
-                f"📊 托盘状态已更新: 未读={main_mod._unread_count}, 同步={main_mod._last_sync_time}"
+            logger.debug(
+                "托盘状态已更新: 未读=%s, 同步=%s",
+                main_mod._unread_count,
+                main_mod._last_sync_time,
             )
 
         else:
@@ -159,8 +156,10 @@ def update_tray_status(unread: int = None, sync_time: str = None):  # type:ignor
             else:
                 clear_tray_alert()
 
-            print(
-                f"📊 托盘状态已更新: 未读={main_mod._unread_count}, 同步={main_mod._last_sync_time}"
+            logger.debug(
+                "托盘状态已更新: 未读=%s, 同步=%s",
+                main_mod._unread_count,
+                main_mod._last_sync_time,
             )
 
     # 菜单文字更新需要在主线程，红点函数内部也有主线程保护
@@ -183,9 +182,9 @@ def set_tray_alert():
                 if alert_image:
                     main_mod._status_item.button().setImage_(alert_image)
                     main_mod._has_alert = True
-                    print("🔴 托盘红点已显示")
+                    logger.debug("托盘红点已显示")
             except Exception as e:
-                print(f"❌ 设置托盘红点失败: {e}")
+                logger.warning("设置托盘红点失败: %s", e)
         else:
             # pystray 备选方案
             if main_mod._tray_icon is None or main_mod._base_icon_256 is None:
@@ -211,7 +210,7 @@ def set_tray_alert():
                 main_mod._tray_icon.icon = alert_canvas
                 main_mod._has_alert = True
             except Exception as e:
-                print(f"❌ 设置托盘红点失败: {e}")
+                logger.warning("设置托盘红点失败: %s", e)
 
     run_on_main_thread(do_set_alert)
 
@@ -220,26 +219,30 @@ def clear_tray_alert():
     """清除托盘图标上的红点提醒"""
     main_mod = get_main_module()
 
-    print(
-        f"📊 [DEBUG] clear_tray_alert 被调用, _status_item={main_mod._status_item if main_mod else 'N/A'}, _base_image={main_mod._base_image if main_mod else 'N/A'}"
+    logger.debug(
+        "clear_tray_alert 被调用, _status_item=%s, _base_image=%s",
+        main_mod._status_item if main_mod else "N/A",
+        main_mod._base_image if main_mod else "N/A",
     )
 
     def do_clear_alert():
         if main_mod is None:
             return
-        print(f"📊 [DEBUG] do_clear_alert 开始执行, HAS_PYOBJC={HAS_PYOBJC}")
+        logger.debug("do_clear_alert 开始执行, HAS_PYOBJC=%s", HAS_PYOBJC)
         if HAS_PYOBJC:
             if main_mod._status_item is None or main_mod._base_image is None:
-                print(
-                    f"📊 [DEBUG] 提前返回: _status_item={main_mod._status_item}, _base_image={main_mod._base_image}"
+                logger.debug(
+                    "提前返回: _status_item=%s, _base_image=%s",
+                    main_mod._status_item,
+                    main_mod._base_image,
                 )
                 return
             try:
                 main_mod._status_item.button().setImage_(main_mod._base_image)
                 main_mod._has_alert = False
-                print("⚪ 托盘红点已清除")
+                logger.debug("托盘红点已清除")
             except Exception as e:
-                print(f"❌ 清除托盘红点失败: {e}")
+                logger.warning("清除托盘红点失败: %s", e)
         else:
             if main_mod._tray_icon is None or main_mod._base_icon_256 is None:
                 return
@@ -247,7 +250,7 @@ def clear_tray_alert():
                 main_mod._tray_icon.icon = main_mod._base_icon_256
                 main_mod._has_alert = False
             except Exception as e:
-                print(f"❌ 清除托盘红点失败: {e}")
+                logger.warning("清除托盘红点失败: %s", e)
 
     run_on_main_thread(do_clear_alert)
 
@@ -657,11 +660,11 @@ def run_native_tray(api, window):
     # 保存全局引用
     main_mod._api_instance = api
     main_mod._window_instance = window
-    main_mod._mute_mode = api.config_service.get("muteMode", False)
+    main_mod._mute_mode = api._config_service.get("muteMode", False)
 
     # 初始化未读数量
     try:
-        subscribed_sources = api.config_service.get("subscribedSources", None)
+        subscribed_sources = api._config_service.get("subscribedSources", None)
         from src.database import db
 
         main_mod._unread_count = db.get_unread_count(source_names=subscribed_sources)
@@ -679,7 +682,7 @@ def run_native_tray(api, window):
 
         time.sleep(1)
         try:
-            subscribed_sources = api.config_service.get("subscribedSources", None)
+            subscribed_sources = api._config_service.get("subscribedSources", None)
             from src.database import db
 
             count = db.get_unread_count(source_names=subscribed_sources)
@@ -720,7 +723,7 @@ if __name__ == "__main__":
         hidden=start_minimized,
     )
 
-    api.window = window
+    api._window = window
 
     # 保存全局引用
     main_module = get_main_module()
@@ -874,10 +877,10 @@ if __name__ == "__main__":
         )
 
         main_module._tray_icon = tray_icon
-        main_module._mute_mode = api.config_service.get("muteMode", False)
+        main_module._mute_mode = api._config_service.get("muteMode", False)
 
         try:
-            subscribed_sources = api.config_service.get("subscribedSources", None)
+            subscribed_sources = api._config_service.get("subscribedSources", None)
             from src.database import db
 
             main_module._unread_count = db.get_unread_count(
@@ -894,7 +897,7 @@ if __name__ == "__main__":
 
             time.sleep(1)
             try:
-                subscribed_sources = api.config_service.get("subscribedSources", None)
+                subscribed_sources = api._config_service.get("subscribedSources", None)
                 from src.database import db
 
                 count = db.get_unread_count(source_names=subscribed_sources)

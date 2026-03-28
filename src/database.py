@@ -567,7 +567,11 @@ class DatabaseManager:
                 conditions.append("is_favorite = 1")
 
             # 来源筛选
-            logger.info(f"[DEBUG DB] get_articles_paged - source_name={source_name}, source_names={source_names}")
+            logger.debug(
+                "get_articles_paged - source_name=%s, source_names=%s",
+                source_name,
+                source_names,
+            )
 
             if source_name:
                 conditions.append("source_name = ?")
@@ -578,11 +582,15 @@ class DatabaseManager:
                     placeholders = ','.join('?' * len(source_names))
                     conditions.append(f"source_name IN ({placeholders})")
                     params.extend(source_names)
-                    logger.info(f"[DEBUG DB] SQL条件: source_name IN ({placeholders}), params={source_names}")
+                    logger.debug(
+                        "SQL条件: source_name IN (%s), params=%s",
+                        placeholders,
+                        source_names,
+                    )
                 else:
                     # 空列表：添加一个永远为假的条件
                     conditions.append("1 = 0")
-                    logger.info("[DEBUG DB] 空列表，添加 1=0 条件")
+                    logger.debug("空列表，添加 1=0 条件")
 
             # 组装 WHERE 子句
             if conditions:

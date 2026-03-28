@@ -1,0 +1,5799 @@
+      :root {
+        --bg-color: #f6f6f8;
+        --card-bg: #ffffff;
+        --text-main: #111827;
+        --text-sub: #4b5563;
+        --accent-color: #408ff7;
+        --border-color: #e5e7eb;
+        /* Apple Store 级物理回弹曲线 */
+        --curve-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+        /* 丝滑位移曲线：专管布局推拉，绝对不过冲，防止元素越界 */
+        --curve-apple-move: cubic-bezier(0.32, 0.72, 0, 1);
+        /* 专属果冻曲线：专管被挤压时的 Q 弹形变 */
+        --curve-apple-squish: cubic-bezier(0.34, 1.4, 0.64, 1);
+      }
+
+      /* 🌟 细节：专属的果冻高光选中态 */
+      ::selection {
+        /* 使用你主题的纯正蓝，但赋予 20% 的极高透明度 */
+        background: rgba(59, 134, 247, 0.2);
+        /* 保持文字原本的颜色，拒绝生硬反白，保留阅读质感 */
+        color: inherit;
+      }
+
+      /* 🌟 细节：搜索框里闪烁的打字光标也要换成你的主题色 */
+      input,
+      textarea {
+        caret-color: var(--accent-color);
+      }
+
+      /* 🌟 专属内联设置卡片样式 */
+      .inline-settings-card {
+        cursor: default !important; /* 内部是表单，不显示手型 */
+        padding: 24px 20px !important;
+        display: block !important; /* 🌟 覆盖 list-card 的 flex 布局 */
+        /* 入场动画：与消息卡片一致 */
+        animation: cardPopIn 0.4s var(--curve-pop);
+      }
+
+      /* 入场动画关键帧 */
+      @keyframes cardPopIn {
+        from {
+          opacity: 0;
+          transform: translateY(20px) scale(0.96);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+
+      .inline-settings-card:hover,
+      .inline-settings-card:active {
+        transform: none !important; /* 🌟 屏蔽物理悬浮与下压，方便内部输入框交互 */
+        background-color: var(--card-bg) !important;
+      }
+
+      .list-date {
+        margin-left: auto; /* 在 flex 中把它推向最右边 */
+        font-weight: 600;
+        color: #808080; /* 🌟 与部门、类别标签颜色保持一致 */
+        display: flex;
+        letter-spacing: 0.5px;
+        font-size: 11px; /* 🌟 字体缩小到11px，与所有底层标签完全统一 */
+        height: 22px; /* 🌟 锁定高度 22px，保证底对齐水平线完美拉直 */
+        /* 🚀 核心防御：时间是绝对的视觉锚点，严禁被压缩 */
+        flex-shrink: 0;
+        align-items: center; /* 保证和前面的标签完美水平居中对齐 */
+        white-space: nowrap;
+      }
+
+      /* 衬线体模式：全局覆盖字体 (调用系统原生经典宋体) */
+      .serif-mode {
+        font-family:
+          "Songti SC", "Noto Serif CJK SC", "SimSun", "STSong", serif !important;
+      }
+
+      /* 确保正文内的元素、输入框、按钮等也被完美覆盖 */
+      .serif-mode .markdown-body,
+      .serif-mode .list-card-title,
+      .serif-mode .detail-title,
+      .serif-mode .form-input,
+      .serif-mode .search-input,
+      .serif-mode .btn-check,
+      .serif-mode button,
+      .serif-mode input {
+        font-family:
+          "Songti SC", "Noto Serif CJK SC", "SimSun", "STSong", serif !important;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      /* Vue挂载前隐藏原始内容 */
+      [v-cloak] {
+        display: none !important;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei",
+          "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        overflow: hidden;
+        background: var(--bg-color);
+        color: var(--text-main);
+      }
+
+      /* 1. 确保容器有滚动权限 */
+      .list-view {
+        flex: 1;
+        overflow-y: auto; /* 允许纵向滚动 */
+        padding: 12px;
+        padding-bottom: 42px; /* 为底部悬浮功能栏留出空间 */
+        /* 优化：平滑滚动 */
+        scroll-behavior: smooth;
+        min-height: 0 !important;
+        -webkit-overflow-scrolling: touch !important;
+        /* 开启原生弹性阻尼 */
+        overscroll-behavior-y: contain;
+      }
+
+      /* 列表视图滚动条样式 - 与详情视图保持一致 */
+      .list-view::-webkit-scrollbar {
+        width: 6px;
+        height: 4px;
+      }
+
+      /* ================= 绝杀 7：魔术底线 ================= */
+      .article-content a {
+        position: relative;
+        color: var(--accent-color);
+        text-decoration: none;
+        font-weight: 600;
+      }
+      .article-content a::after {
+        content: "";
+        position: absolute;
+        width: 100%;
+        height: 2px;
+        bottom: -2px;
+        left: 0;
+        background-color: var(--accent-color);
+        border-radius: 2px;
+        /* 核心：默认从右边消失 */
+        transform: scaleX(0);
+        transform-origin: right;
+        transition: transform 0.4s var(--curve-pop);
+      }
+      .article-content a:hover::after {
+        /* 悬浮时：从左边滑出填满 */
+        transform: scaleX(1);
+        transform-origin: left;
+      }
+
+      .list-view::-webkit-scrollbar-track {
+        background: transparent;
+      }
+
+      .list-view::-webkit-scrollbar-thumb {
+        background-color: rgba(0, 0, 0, 0.1);
+        border-radius: 3px;
+        transition: background-color 0.3s;
+      }
+
+      .list-view::-webkit-scrollbar-thumb:hover {
+        background-color: rgba(0, 0, 0, 0.3);
+      }
+      /* 1. 顶部交互容器重构 */
+      .header-action {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+        gap: 12px; /* 增加间距 */
+      }
+      .header-action h1 {
+        font-size: 20px;
+        margin: 0;
+        font-weight: 600;
+      }
+      /* 3. 更新按钮：物理形变 */
+      /* 3. 更新按钮：物理收缩 */
+      /* 3. 更新按钮：配合搜索框的丝滑收缩 */
+      .btn-check {
+        height: 38px;
+        width: 110px;
+        border-radius: 19px;
+        background: var(--accent-color);
+        color: white;
+        border: none;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        position: relative;
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        white-space: nowrap;
+        overflow: hidden;
+        /* 👇 修改 5：宽度收缩也使用同款丝滑曲线，保证两者联动时步调绝对一致 */
+        transition:
+          width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1),
+          background-color 0.3s ease,
+          transform 0.3s var(--curve-pop),
+          /* 🌟 仅悬浮缩放保留微弱的弹性回弹 */ box-shadow 0.3s ease;
+      }
+      .btn-check:hover {
+        background: #3a7ee0;
+        transform: scale(1.02);
+      }
+      .btn-check:active {
+        transform: scale(0.98);
+        transition: transform 0.05s;
+      }
+
+      /* 1. 禁用/冷却状态基础样式 */
+      .btn-check:disabled {
+        /* 删除了原先写死的 width: 110px，允许它发生形变 */
+        background: #e5e7eb !important;
+        color: #9ca3af !important;
+        font-variant-numeric: tabular-nums;
+        cursor: not-allowed;
+      }
+
+      /* 🌟 冷却状态：红色背景警示 */
+      .btn-check.is-cooldown {
+        color: red !important;
+      }
+
+      /* 🌟 只读模式按钮样式：灰色调，保留交互动画 */
+      .btn-check.read-only-btn {
+        background: linear-gradient(
+          135deg,
+          #e5e7eb 0%,
+          #d1d5db 100%
+        ) !important;
+        color: #6b7280 !important;
+        cursor: pointer;
+        border: 1px solid #d1d5db;
+      }
+
+      .btn-check.read-only-btn:hover {
+        background: linear-gradient(
+          135deg,
+          #d1d5db 0%,
+          #c4c8cc 100%
+        ) !important;
+      }
+
+      .btn-check.read-only-btn:active {
+        transform: scale(0.98);
+      }
+
+      /* ================= 绝杀 3：核心按钮光影流转 ================= */
+      .btn-check:not(:disabled):not(.loading)::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 50%;
+        height: 100%;
+        /* 绘制一道倾斜的柔和高光 */
+        background: linear-gradient(
+          to right,
+          rgba(255, 255, 255, 0) 0%,
+          rgba(255, 255, 255, 0.25) 50%,
+          rgba(255, 255, 255, 0) 100%
+        );
+        transform: skewX(-20deg);
+        /* 每隔 6 秒扫过一次，不要太频繁以免惹人烦 */
+        animation: shimmerSweep 6s infinite cubic-bezier(0.4, 0, 0.2, 1);
+        pointer-events: none;
+      }
+
+      @keyframes shimmerSweep {
+        0%,
+        80% {
+          left: -100%;
+          opacity: 0;
+        }
+        85% {
+          opacity: 1;
+        }
+        100% {
+          left: 200%;
+          opacity: 0;
+        }
+      }
+
+      /* 点击缩放动画类 */
+      .btn-click-scale {
+        transform: scale(0.96);
+        transition: transform 0.15s cubic-bezier(0.2, 0.9, 0.4, 1.1);
+      }
+      /* 脉冲光晕动画（已禁用） */
+      /* 数字变化时的放大动画（已禁用） */
+      /* 字体导入按钮 - 大气风格 */
+      .import-font-btn {
+        padding: 8px 20px;
+        font-size: 13px;
+        font-weight: 700;
+        border-radius: 8px;
+        background: var(--accent-color);
+        color: white;
+        border: none;
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+      }
+      .import-font-btn:hover {
+        background: #1d4ed8;
+        transform: scale(1.02);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      }
+      .import-font-btn:active {
+        transform: scale(0.98);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+      }
+
+      /* iOS 备忘录风格时间标头 */
+      .date-group-header {
+        font-size: 18px;
+        font-weight: 600;
+        color: #111827;
+        margin: 24px 0 12px 6px;
+        letter-spacing: 0.5px;
+        user-select: none;
+      }
+
+      /* 第一个标头不需要那么大的顶部间距 */
+      .date-group-header:first-of-type {
+        margin-top: 4px;
+      }
+
+      .list-card {
+        background: var(--card-bg);
+        border-radius: 24px; /* 🌟 严谨公式：外圆角(24) = 内圆角(12) + 内边距(12) */
+        padding: 12px;
+        margin-bottom: 12px;
+        cursor: pointer;
+        position: relative;
+        display: flex;
+        flex-direction: row;
+        align-items: flex-start;
+        border: 1px solid rgba(0, 0, 0, 0.03); /* 极浅的物理边界 */
+        /* 复合阴影：上层接触阴影，下层环境漫反射 */
+        box-shadow:
+          0 1px 3px rgba(0, 0, 0, 0.02),
+          0 4px 12px rgba(0, 0, 0, 0.02);
+        /* 强制硬件加速，防止文字在缩放时产生亚像素抖动模糊 */
+        will-change: transform, box-shadow;
+        transition:
+          transform 0.4s var(--curve-pop),
+          box-shadow 0.4s ease,
+          border-color 0.4s ease,
+          background-color 0.3s ease;
+      }
+
+      /* 🌟 卡片内容容器 */
+      .card-content-wrapper {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between; /* 强制上下两极分布（顶对齐、底对齐） */
+        min-height: 80px; /* 严格等于左侧总高度：图标(48) + 间距(10) + 标签(22) = 80 */
+      }
+
+      /* 🌟 部门图标样式：遵循外圆角24=内圆角12+边距12 */
+      .department-icon {
+        flex-shrink: 0;
+        width: 48px; /* 修正为 48x48 的正方形 */
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px; /* 严格执行内圆角 12px */
+        box-shadow: none;
+        border: none;
+        opacity: 0.8; /* 在此添加透明度 */
+      }
+
+      .department-icon svg {
+        width: 24px;
+        height: 24px;
+        opacity: 1; /* 在此添加透明度 */
+        color: #ffffff;
+      }
+
+      /* 🌟 新增：左侧专属 AI 标签样式 */
+      .card-left-column .ai-tag-left {
+        font-size: 11px !important;
+        padding: 0 6px !important;
+        width: 46px; /* 🌟 与部门图标宽度对齐 */
+        margin-left: 14px; /* 🌟 向右偏移：圆点(8) + 间距(6) = 14px，与图标对齐 */
+        height: 22px !important; /* 锁定高度，与右侧底栏完美对齐 */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-weight: 600;
+        letter-spacing: 1px;
+        color: #ffffff;
+        line-height: 1;
+        opacity: 1; /* 在此添加透明度 */
+      }
+
+      /* 🌟 新增：左侧视觉列容器 */
+      .card-left-column {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px; /* 内部上下间距统一为 10px */
+        flex-shrink: 0;
+        width: 62px; /* 宽度容纳未读圆点 + 间距 + 部门图标 */
+        margin-right: 12px; /* 右侧元素间距，严格等于卡片全局 Padding 12px */
+      }
+
+      /* 🌟 图标行：包含未读圆点和部门图标 */
+      .card-left-column .icon-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      /* 🌟 未读圆点 */
+      .unread-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: #3378f9;
+        flex-shrink: 0;
+        transition: opacity 0.3s ease;
+      }
+
+      /* 🌟 已读时圆点隐藏但保留空间 */
+      .unread-dot.unread-dot-hidden {
+        opacity: 0;
+      }
+
+      .card-left-column .department-icon svg {
+        width: 28px;
+        height: 28px;
+        color: currentColor;
+      }
+
+      .department-icon svg path {
+        fill: #ffffff;
+        fill-opacity: 1;
+      }
+
+      /* 悬浮态：Z轴微抬升 (已降低高度) */
+      .list-card:hover {
+        transform: translateY(-2px); /* 悬浮高度收敛，更具分量感 */
+        border-color: rgba(0, 0, 0, 0.06);
+        background-color: #ffffff; /* 悬浮时保持纯白，靠阴影体现高度 */
+        /* 阴影收敛，配合较低的悬浮高度 */
+        box-shadow:
+          0 4px 8px rgba(0, 0, 0, 0.03),
+          0 8px 16px rgba(0, 0, 0, 0.05);
+      }
+
+      /* ================= 升级 4：厚重卡片的下压物理学 ================= */
+      .list-card:active,
+      .announcement-card:active {
+        /* 下压得更深一点 */
+        transform: translateY(0) scale(0.96);
+        background-color: #f9fafb;
+        /* 增加全局亮度降低，模拟手指遮挡了光线 */
+        filter: brightness(0.97);
+        /* 按下时也需要一点点阻尼，不能瞬间瞬移 */
+        transition:
+          transform 0.2s cubic-bezier(0.2, 0.9, 0.4, 1.1),
+          filter 0.2s ease,
+          background-color 0.2s ease;
+      }
+
+      .announcement-card {
+        background: var(--card-bg);
+        border-radius: 16px; /* 变圆润 */
+        padding: 8px 20px; /* 大幅增加内呼吸空间 */
+        margin-bottom: 12px;
+        cursor: pointer;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        border: 1px solid rgba(0, 0, 0, 0.03); /* 极浅的物理边界 */
+        /* 复合阴影：上层接触阴影，下层环境漫反射 */
+        box-shadow:
+          0 1px 3px rgba(0, 0, 0, 0.02),
+          0 4px 12px rgba(0, 0, 0, 0.02);
+        /* 强制硬件加速，防止文字在缩放时产生亚像素抖动模糊 */
+        will-change: transform, box-shadow;
+        transition:
+          transform 0.4s var(--curve-pop),
+          box-shadow 0.4s ease,
+          border-color 0.4s ease,
+          background-color 0.3s ease;
+      }
+      /* 悬浮态：Z轴微抬升 (已降低高度) */
+      .announcement-card:hover {
+        transform: translateY(-2px); /* 悬浮高度收敛，更具分量感 */
+        border-color: rgba(0, 0, 0, 0.06);
+        background-color: #ffffff; /* 悬浮时保持纯白，靠阴影体现高度 */
+        /* 阴影收敛，配合较低的悬浮高度 */
+        box-shadow:
+          0 4px 8px rgba(0, 0, 0, 0.03),
+          0 8px 16px rgba(0, 0, 0, 0.05);
+      }
+
+      /* 按下态：Z轴下压 */
+      .announcement-card:active {
+        transform: translateY(0) scale(0.98);
+        background-color: #fafafa; /* 按下瞬间给予背景反馈 */
+        box-shadow:
+          0 1px 2px rgba(0, 0, 0, 0.03),
+          0 2px 4px rgba(0, 0, 0, 0.02);
+        transition: transform 0.1s;
+      }
+
+      .announcement-card.read {
+        opacity: 0.7;
+        filter: grayscale(0.2);
+        border-left-color: #d1d5db;
+      }
+      .announcement-card.read .announcement-icon {
+        filter: grayscale(0.5);
+      }
+
+      .article-stack {
+        opacity: 1;
+        transform: translateY(0);
+        transition:
+          opacity 0.26s cubic-bezier(0.32, 0, 0.2, 1),
+          transform 0.26s cubic-bezier(0.32, 0, 0.2, 1);
+      }
+
+      .article-stack.is-switching {
+        opacity: 0;
+        transform: translateY(10px);
+        pointer-events: none;
+      }
+
+      .announcement-icon {
+        font-size: 1.3rem;
+        margin-right: 8px;
+        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
+      }
+      .list-card.announcement-card .list-card-title {
+        font-weight: 700;
+        color: #b45309;
+        font-size: 20px;
+      }
+
+      /* 标题行：从 center 改回 flex-start，应对多行标题 */
+      .title-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        margin-bottom: 0; /* 🌟 删掉写死的 margin，交由外层的 space-between 引擎自动撑开，实现绝对顶对齐 */
+      }
+
+      .title-row .list-card-title {
+        flex: 1;
+        margin: 0;
+      }
+
+      /* 🌟 图标容器：两行布局，附件在上，收藏在下 */
+      .title-icons {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        flex-shrink: 0;
+      }
+
+      .title-icons .attachment-icon,
+      .title-icons .favorite-icon {
+        margin-top: 0;
+      }
+
+      .icon-placeholder {
+        width: 16px;
+        height: 22.5px; /* 🌟 与标题行高一致 */
+      }
+
+      /* 附件图标：对齐第一行文字中心 */
+      .attachment-icon {
+        flex-shrink: 0;
+        width: 16px;
+        height: 22.5px; /* 🌟 与标题行高一致 (15px × 1.5)，实现垂直居中对齐 */
+        opacity: 0.5; /* 🌟 降低10%透明度 (原0.5) */
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .attachment-icon svg {
+        width: 16px;
+        height: 16px;
+      }
+      .attachment-icon:hover {
+        opacity: 1;
+      }
+
+      /* 🌟 收藏图标样式：对齐第二行文字中心 */
+      .favorite-icon {
+        flex-shrink: 0;
+        width: 18px;
+        height: 22.5px; /* 🌟 与标题行高一致 (15px × 1.5)，实现垂直居中对齐 */
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0.7; /* 🌟 降低20%透明度 */
+      }
+      .favorite-icon svg {
+        width: 16px;
+        height: 16px;
+      }
+      /* 🌟 收藏图标可点击样式 */
+      .favorite-icon.clickable {
+        cursor: pointer;
+        transition:
+          transform 0.2s ease,
+          opacity 0.2s ease;
+      }
+      .favorite-icon.clickable:hover {
+        transform: scale(1.2);
+        opacity: 0.8;
+      }
+      .favorite-icon.clickable:active {
+        transform: scale(0.95);
+      }
+
+      .list-card-title {
+        font-size: 15px; /* 字体加大，提升阅读直觉 */
+        font-weight: 600;
+        margin: 0;
+        line-height: 1.5;
+        transition: color 0.3s ease;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        word-break: break-all;
+        overflow-wrap: break-word;
+      }
+      /* 未读标题：醒目的红色 */
+      .list-card-title.unread {
+        color: #636366;
+      }
+      /* 已读标题：保持黑色，不再变灰 */
+      .list-card-title.read {
+        color: #636366;
+      }
+
+      /* 元数据行：增加统一的 gap */
+      .article-meta {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 10px; /* 🌟 与左侧的内部间距 10px 严格对齐 */
+        align-items: center;
+        min-width: 0;
+      }
+
+      .meta-item {
+        color: #959aa4;
+        font-size: 11px; /* 🌟 统一缩小字号，避免头重脚轻 */
+        font-weight: 500;
+        white-space: nowrap;
+        flex-shrink: 0;
+        line-height: 1;
+        display: flex;
+        align-items: center;
+      }
+
+      .meta-tag-gray {
+        background-color: #f3f4f6;
+        color: #808080;
+        padding: 0 6px;
+        height: 22px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 600;
+        border: none;
+
+        /* 🚀 核心修复：文字截断与居中控制 */
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex-shrink: 1;
+      }
+
+      /* 详情视图 (现代微缩放渐变效果) */
+      .detail-view {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        background: #fff;
+        overflow: hidden;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 100;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+      }
+
+      /* 微缩放渐变过渡 - 进入起始状态 */
+      .slide-enter-from {
+        opacity: 0;
+        transform: scale(0.96);
+      }
+      /* 微缩放渐变过渡 - 离开结束状态 */
+      .slide-leave-to {
+        opacity: 0;
+        transform: scale(0.96);
+      }
+      /* 微缩放渐变过渡 - 激活状态 */
+      .slide-enter-active,
+      .slide-leave-active {
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      /* 微缩放渐变过渡 - 进入结束/离开起始状态 */
+      .slide-enter-to,
+      .slide-leave-from {
+        opacity: 1;
+        transform: scale(1);
+      }
+
+      /* 触控板返回时的视觉反馈类 */
+      .detail-view.is-navigating-back {
+        opacity: 0;
+        transform: scale(0.96);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      .detail-header {
+        padding: 16px 24px 12px;
+        border-bottom: 1px solid var(--border-color);
+        flex-shrink: 0;
+      }
+
+      /* 顶部 DEEPSEEK 与 附件标识栏 */
+      .provider-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+      }
+      .provider-info {
+        font-size: 12px;
+        color: #9ca3af;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        white-space: nowrap;
+      }
+      /* 🌟 核心补丁：确保内联 SVG 图标完美对齐文字 */
+      .inline-ai-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 14px;
+        height: 14px;
+        margin-right: 4px;
+        flex-shrink: 0; /* 🌟 强制图标不许被挤压 */
+        overflow: hidden; /* 🌟 核心：即便里面是长文本，也绝对不许溢出到外面 */
+        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
+        vertical-align: middle; /* 🌟 物理级垂直对齐 */
+      }
+
+      /* 强制 SVG 充满容器，彻底解决快照时尺寸丢失导致的"白框"Bug */
+      .inline-ai-icon svg {
+        width: 100% !important;
+        height: 100% !important;
+        display: block;
+      }
+      /* 1. 修改原有的附件按钮基础样式 */
+      .badge-attachment {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        color: #8395ff;
+        background: #eef1ff;
+        padding: 4px 6px;
+        border-radius: 7px;
+        border: 1px solid #d6deff;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        position: relative;
+        transition:
+          background 0.2s,
+          border-color 0.2s;
+      }
+      .badge-attachment:hover {
+        background: #d6deff;
+        border-color: #bbc6ff;
+      }
+      .badge-attachment:active {
+        transform: scale(0.95);
+      }
+
+      /* 快照按钮 - 彩虹色背景 */
+      .badge-snapshot {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        color: #a68cfd;
+        background: #f5f1ff;
+        padding: 4px 6px;
+        border-radius: 7px;
+        border: 1px solid #e0d6ff;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        position: relative;
+        transition:
+          background 0.2s,
+          border-color 0.2s;
+      }
+      .badge-snapshot:hover {
+        background: #e8e0ff;
+        border-color: #cdbdff;
+      }
+      .badge-snapshot:active {
+        transform: scale(0.95);
+      }
+
+      /* ============================================================
+   🔄 Apple 级重置图标交互与回弹引擎
+   ============================================================ */
+      /* 改为 badge-reset */
+      .badge-reset .icon-svg {
+        transform-origin: center center;
+        transition:
+          transform 0.15s cubic-bezier(0.25, 1, 0.5, 1),
+          opacity 0.15s ease;
+      }
+
+      /* 鼠标按住不放时的“物理凹陷感” */
+      .badge-reset:active .icon-svg {
+        transform: scale(0.8);
+        opacity: 0.6;
+      }
+
+      /* 旋转状态：配合 JS 的 0.6s 定时器 */
+      .icon-svg.apple-spin-active {
+        animation: apple-snap-rotate 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)
+          forwards;
+      }
+
+      /* 旋转关键帧 */
+      @keyframes apple-snap-rotate {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* 返回主页按钮 - 蓝色 */
+      .badge-home {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        color: #4298fd;
+        background: #e8f2ff;
+        padding: 4px 6px;
+        border-radius: 7px;
+        border: 1px solid #c6e0ff;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        position: relative;
+        transition:
+          background 0.2s,
+          border-color 0.2s;
+      }
+      .badge-home:hover {
+        background: #d6eaff;
+        border-color: #a6d4ff;
+      }
+      .badge-home:active {
+        transform: scale(0.95);
+      }
+
+      /* ============================================================
+   ✏️ 编辑按钮 - 紫色系 Apple 级激活动画方案 (修正版)
+   ============================================================ */
+      /* ============================================================
+   ✏️ 终极方案：紫色系「灵动画笔」Apple 级激活动画 (Pen Action)
+   ============================================================ */
+      /* 1. 基础卡片容器样式 (保持你原有的紫色设定，增加过渡属性) */
+      .badge-edit {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        color: #7c3aed; /* 🌟 默认紫色 */
+        background: #f3e8ff; /* 淡紫色底 */
+        padding: 4px;
+        border-radius: 7px;
+        border: 1px solid #ddd6fe; /* 浅紫色边框 */
+        cursor: pointer;
+        position: relative;
+        /* 🌟 核心：确保背景、边框、颜色都应用最扎实、优雅的无极缓动曲线 */
+        transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+        /* 🌟 Apple 级细节：默认状态下带有一点点微妙的阴影，增加实体感 */
+        box-shadow: 0 1px 2px rgba(124, 58, 237, 0.05);
+      }
+
+      /* Hover 时的轻微悬浮反馈 */
+      .badge-edit:hover:not(.is-editing) {
+        background: #ede9fe;
+        box-shadow: 0 2px 5px rgba(124, 58, 237, 0.1);
+      }
+
+      /* 2. 定义 SVG 内部元素的精密过渡 */
+
+      /* 选择第一个 path（底部的方框/纸张） */
+      .badge-edit .icon-svg g path:first-child {
+        transition: all 0.25s cubic-bezier(0.23, 1, 0.32, 1);
+        transform-origin: center;
+      }
+
+      /* 选择第二个 path（右上角的画笔部分） */
+      .badge-edit .icon-svg g path:last-child {
+        /* 🌟 终极优雅：画笔应用最精密的 Apple 级缓动曲线，制造丝滑位移 */
+        transition: all 0.35s cubic-bezier(0.23, 1, 0.32, 1);
+        transform-origin: top right; /* 确保是从右上方开始精密位移 */
+      }
+
+      /* 🌟 3. 激活状态 (is-editing) - 注入“灵动魔法” */
+
+      .badge-edit.is-editing {
+        color: #7c3aed !important; /* 强制锁定紫色 */
+        background: #ffffff; /* 🌟 激活时背景变为纯白，制造“纸张”感 */
+        border-color: #ddd6fe;
+        /* 🌟 高级光影：给卡片增加一个弥散、昂贵的紫色发光底座 (Glow) */
+        box-shadow:
+          0 0 10px rgba(124, 58, 237, 0.1),
+          0 0 1px rgba(124, 58, 237, 0.2);
+      }
+
+      /* 🌟 方框（纸张）部分：产生极其微弱的物理按压感（配合画笔落笔） */
+      .badge-edit.is-editing .icon-svg g path:first-child {
+        transform: scale(0.98) translate(0.5px, 0.5px); /* 微弱的右下按压 */
+        opacity: 0.8; /* 稍微变淡，制造虚化背景感 */
+      }
+
+      /* 🌟 画笔部分：产生精密、丝滑的“落笔即书”位移交互 */
+      .badge-edit.is-editing .icon-svg g path:last-child {
+        /* X轴左移 3.5px，Y轴下移 3.5px */
+        /* 笔尖瞬间划过卡片，触碰底部的方框边缘 */
+        transform: translate(-3.5px, 3.5px) rotate(-3deg);
+        /* 微微的光晕，制造画笔被聚焦的实体感 */
+        filter: drop-shadow(0 0 2px rgba(124, 58, 237, 0.25));
+      }
+
+      /* 4. 🖱️ 按下时的物理反馈 (Active State) */
+      .badge-edit:active:not(.is-editing) .icon-svg {
+        transform: scale(0.9); /* 按下时整体缩小，制造物理凹陷感 */
+        transition: transform 0.1s ease;
+      }
+
+      /* 清空按钮 - 红色系 */
+      .badge-clear {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        color: #be123c;
+        background: #fff1f2;
+        padding: 4px 8px;
+        border-radius: 7px;
+        border: 1px solid #fecdd3;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        position: relative;
+        transition:
+          background 0.2s,
+          border-color 0.2s;
+      }
+      .badge-clear:hover {
+        background: #ffe4e6; /* 悬浮时背景加深一点 */
+        border-color: #fda4af; /* 悬浮时边框加深一点 */
+      }
+      .badge-clear:active {
+        transform: scale(0.95);
+      }
+
+      /* 刷新按钮 - 紫色 */
+      .badge-refresh {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        color: #7c3aed;
+        background: #f3e8ff;
+        padding: 4px 6px;
+        border-radius: 7px;
+        border: 1px solid #ddd6fe;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        position: relative;
+        transition:
+          background 0.2s,
+          border-color 0.2s;
+      }
+      .badge-refresh:hover {
+        background: #e9d5ff;
+        border-color: #c4b5fd;
+      }
+      .badge-refresh:active {
+        transform: scale(0.95);
+      }
+      .badge-refresh.is-loading {
+        opacity: 0.7;
+        pointer-events: none;
+      }
+
+      /* 🌟 收藏按钮样式 */
+      .badge-favorite {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        color: #999;
+        background: #f5f5f5;
+        padding: 4px 6px;
+        border-radius: 7px;
+        border: 1px solid #e0e0e0;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        position: relative;
+        transition:
+          background 0.2s,
+          border-color 0.2s;
+      }
+      .badge-favorite:hover {
+        background: #fff9e6;
+        border-color: #ffd700;
+      }
+      .badge-favorite.is-favorite {
+        background: #fff9e6;
+        border-color: #ffd700;
+      }
+
+      /* 旋转动画 */
+      @keyframes spin {
+        from {
+          transform: rotate(0deg);
+        }
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .spin {
+        animation: spin 1s linear infinite;
+      }
+
+      /* SVG 图标样式 - 统一大小 */
+      .icon-svg {
+        width: 16px;
+        height: 16px;
+        vertical-align: middle;
+      }
+
+      /* ============================================================
+         🌟 浅色模式极简操作栏 (基于源码现有类名严格重构)
+         ============================================================ */
+
+      /* ============================================================
+         🌟 浅色模式极简操作栏 (彻底统一尺寸与间距、消除杂色边框)
+         ============================================================ */
+
+      .top-actions {
+        display: flex;
+        align-items: center;
+        /* 🌟 统一间距：严格控制为 6px，紧凑且有呼吸感 */
+        gap: 6px;
+      }
+
+      /* 统一按钮的基础形态 (无视原来的任何边框和大小) */
+      .top-actions span {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        /* 🌟 统一尺寸：严格限制高度 28px，最小宽度 28px (纯图标变正方，有文字变胶囊) */
+        height: 28px !important;
+        min-width: 28px !important;
+        padding: 0 6px !important;
+        border-radius: 6px !important;
+
+        /* 🌟 核心修复：用 !important 彻底击碎原代码里残留的彩色边框和阴影 */
+        border: none !important;
+        outline: none !important;
+        box-shadow: none !important;
+
+        /* 统一为极浅的隐形灰底和次级灰图标 */
+        background-color: rgba(0, 0, 0, 0.04) !important;
+        color: #8e8e93 !important;
+
+        font-size: 13px !important;
+        font-weight: 600;
+        cursor: pointer;
+        user-select: none;
+        box-sizing: border-box;
+
+        /* 🌟 核心修复：分离物理形变和光学变色 */
+        transition:
+          transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1),
+          /* 物理抬升保持 Q 弹 */ background-color 0.25s ease-in-out,
+          /* 背景变白必须平滑柔和 */ color 0.25s ease-in-out,
+          /* 图标颜色变幻必须平滑 */ box-shadow 0.3s ease-in-out,
+          /* 阴影的出现和消散稍微慢一点点，增加空气感 */ filter 0.2s ease !important;
+      }
+
+      /* 🌟 统一图标大小：防止不同 SVG 自带的比例导致大小不一 */
+      .top-actions span .icon-svg {
+        width: 14px !important;
+        height: 14px !important;
+        fill: currentColor;
+        /* 内部图标的通道同样解耦 */
+        transition:
+          transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1),
+          color 0.25s ease-in-out,
+          filter 0.25s ease-in-out !important;
+        display: block;
+      }
+      /* 编辑图标稍微大一点 */
+      .top-actions .badge-edit .icon-svg {
+        width: 16px !important;
+        height: 16px !important;
+      }
+
+      /* ============================================================
+         🎨 为现有类名注入「系统语义主色」(局部变量)
+         ============================================================ */
+      .badge-attachment {
+        --app-color: #007aff;
+      } /* 蓝 */
+      .badge-snapshot {
+        --app-color: #ff2d55;
+      } /* 粉 */
+      .badge-refresh {
+        --app-color: #30b0c7;
+      } /* 青 */
+      .badge-favorite {
+        --app-color: #f5a623;
+      } /* 琥珀黄 */
+      .badge-pin {
+        --app-color: #ff3b30;
+      } /* 橙 */
+      .badge-home {
+        --app-color: #3c3c43;
+      } /* 深灰 */
+      .badge-edit {
+        --app-color: #7c3aed;
+      } /* 紫 */
+
+      /* 🌟 编辑模式的取消和保存按钮样式 */
+      .badge-action {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 28px;
+        min-width: 28px;
+        padding: 0 12px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        user-select: none;
+        transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+
+      .badge-cancel {
+        --app-color: #8e8e93;
+        background-color: rgba(0, 0, 0, 0.06);
+        color: #8e8e93;
+      }
+
+      .badge-cancel:hover {
+        background-color: rgba(0, 0, 0, 0.1) !important;
+        color: #3c3c43 !important;
+        transform: translateY(-2px) scale(1.02);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      }
+
+      .badge-cancel:active {
+        transform: translateY(0) scale(0.96);
+        background-color: rgba(0, 0, 0, 0.12) !important;
+        transition: transform 0.1s ease;
+      }
+
+      .badge-save {
+        --app-color: #34c759;
+        background-color: rgba(52, 199, 89, 0.12);
+        color: #34c759;
+      }
+
+      .badge-save:hover {
+        background-color: rgba(52, 199, 89, 0.2) !important;
+        color: #28a745 !important;
+        transform: translateY(-2px) scale(1.02);
+        box-shadow: 0 4px 12px rgba(52, 199, 89, 0.2);
+      }
+
+      .badge-save:active {
+        transform: translateY(0) scale(0.96);
+        background-color: rgba(52, 199, 89, 0.25) !important;
+        transition: transform 0.1s ease;
+      }
+
+      /* ============================================================
+         🌈 交互状态：悬浮 (Hover) -> 浅色水彩浸染
+         ============================================================ */
+      .top-actions span:hover {
+        /* 1. 背景瞬间变为极其干净的纯白 */
+        background-color: #ffffff !important;
+        /* 2. 颜色点亮为各自的专属语义色 */
+        color: var(--app-color) !important;
+
+        /* 3. 物理悬浮：整个按钮在 Z 轴向上抬升 2px，并产生极其微弱的整体放大 */
+        transform: translateY(-2.5px) scale(1.02);
+
+        /* 4. Apple 级双层漫反射阴影：
+              底层提供极其柔和的环境光遮蔽 (0.04)
+              上层提供锐利的直射边缘阴影 (0.08) */
+        box-shadow:
+          0 6px 14px rgba(0, 0, 0, 0.08),
+          0 2px 4px rgba(0, 0, 0, 0.04) !important;
+      }
+
+      /* 内部图标的视差联动 (Parallax Pop) */
+      .top-actions span:hover .icon-svg {
+        /* 按钮抬升的同时，图标内部再放大一点点，形成错落有致的微距视差 */
+        transform: scale(1.15);
+        /* 给图标本体加上极其微弱的同色光晕，让它看起来像在发光 */
+        filter: drop-shadow(
+          0 2px 4px color-mix(in srgb, var(--app-color) 35%, transparent)
+        );
+      }
+
+      /* ============================================================
+         🔥 交互状态：锁定 (Active/Toggled) -> 实心高亮浮雕
+         ============================================================ */
+      .badge-favorite.is-favorite,
+      .badge-pin.is-pinned {
+        background-color: var(--app-color) !important;
+        color: #ffffff !important;
+        /* 锁定状态下，默认给一层轻微的同色阴影，暗示它处于 Active 层级 */
+        box-shadow: 0 4px 10px
+          color-mix(in srgb, var(--app-color) 40%, transparent) !important;
+        transform: translateY(-1px);
+      }
+
+      /* 锁定状态下的悬浮，抬得更高，阴影更浓 */
+      .badge-favorite.is-favorite:hover,
+      .badge-pin.is-pinned:hover {
+        transform: translateY(-3.5px) scale(1.02);
+        box-shadow: 0 8px 18px
+          color-mix(in srgb, var(--app-color) 50%, transparent) !important;
+        filter: brightness(1.05);
+      }
+
+      /* 锁定状态下，图标不需要发光，保持清脆的白色即可 */
+      .badge-favorite.is-favorite:hover .icon-svg,
+      .badge-pin.is-pinned:hover .icon-svg {
+        filter: none;
+      }
+
+      /* ============================================================
+         🍎 交互状态：物理下压 (Press) -> 拍回屏幕
+         ============================================================ */
+      .top-actions span:active {
+        /* 按下时，瞬间砸向屏幕（失去高度和阴影），变成凹陷感 */
+        transform: translateY(0) scale(0.92);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+        background-color: rgba(0, 0, 0, 0.06) !important; /* 按下时稍微变深灰 */
+        transition: all 0.1s ease !important; /* 按下必须是极其敏捷的线性动画 */
+      }
+
+      /* ============================================================
+         ⚙️ 刷新按钮状态：呼吸引擎脉冲旋转 (Breathing Spin)
+         ============================================================ */
+      .badge-refresh.is-loading .icon-svg {
+        color: var(--app-color) !important;
+        /* 1.2s 的周期，让呼吸感更加绵长优雅 */
+        animation: breathing-spin 1.2s linear infinite !important;
+      }
+
+      @keyframes breathing-spin {
+        0% {
+          transform: rotate(0deg) scale(0.9);
+          opacity: 0.7;
+          filter: drop-shadow(0 0 0 transparent);
+        }
+        50% {
+          /* 旋转到一半时，图标微微放大，透明度拉满，并泛起同色微光 */
+          transform: rotate(180deg) scale(1.15);
+          opacity: 1;
+          filter: drop-shadow(
+            0 0 6px color-mix(in srgb, var(--app-color) 60%, transparent)
+          );
+        }
+        100% {
+          /* 完成一圈时，收缩回去，形成完美的无缝循环 */
+          transform: rotate(360deg) scale(0.9);
+          opacity: 0.7;
+          filter: drop-shadow(0 0 0 transparent);
+        }
+      }
+
+      .detail-title {
+        font-size: 18px;
+        font-weight: 600;
+        color: #111;
+        margin: 0 0 16px 0;
+        line-height: 1.4;
+        user-select: text;
+        -webkit-user-select: text;
+        word-break: break-all;
+        overflow-wrap: anywhere;
+      }
+
+      /* 彩色标签容器 - 详情页专用 */
+      .tags-container {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-bottom: 6px;
+      }
+      .tag {
+        font-size: 12px;
+        padding: 3px 8px;
+        border-radius: 6px;
+        font-weight: 600;
+        border: 1px solid transparent;
+        flex-shrink: 0;
+      }
+      .tag-blue {
+        background-color: #eff6ff;
+        border-color: #bfdbfe;
+        color: #1e40af;
+      }
+      .tag-green {
+        background-color: #ecfdf5;
+        border-color: #a7f3d0;
+        color: #065f46;
+      }
+      .tag-purple {
+        background-color: #f5f3ff;
+        border-color: #ddd6fe;
+        color: #5b21b6;
+      }
+      .tag-rose {
+        background-color: #fff1f2;
+        border-color: #fecdd3;
+        color: #be123c;
+      }
+      .tag-amber {
+        background-color: #fffbeb;
+        border-color: #fde68a;
+        color: #92400e;
+      }
+      /* 列表页AI标签莫兰迪配色 */
+      .tag.morandi-0 {
+        background-color: #e8d4d4;
+        color: #8b6b6b;
+      }
+      .tag.morandi-1 {
+        background-color: #d4e0e8;
+        color: #5b7a8c;
+      }
+      .tag.morandi-2 {
+        background-color: #d4e4d8;
+        color: #5b8066;
+      }
+      .tag.morandi-3 {
+        background-color: #e0d8e8;
+        color: #7b6b8c;
+      }
+      .tag.morandi-4 {
+        background-color: #f0e8d8;
+        color: #8b7b5b;
+      }
+      .tag.morandi-5 {
+        background-color: #e8dcc8;
+        color: #8b7a5b;
+      }
+      .tag.morandi-6 {
+        background-color: #d8e0e0;
+        color: #6b8080;
+      }
+      .tag.morandi-7 {
+        background-color: #e4dcd4;
+        color: #7b6b5b;
+      }
+      /* 已读标签调暗
+      .tag-dimmed {
+        filter: grayscale(0.4) opacity(0.6);
+        border-color: transparent !important;
+      } */
+
+      /* 列表卡片类型标签 - 8种莫兰迪配色 */
+      .type-tag {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 2px 6px;
+        border-radius: 4px;
+        margin-right: 6px;
+        flex-shrink: 0;
+        vertical-align: 2px;
+      }
+      /* 莫兰迪配色方案 */
+      .type-tag.morandi-0 {
+        background-color: #e8d4d4;
+        color: #8b6b6b;
+      } /* 莫兰迪粉 */
+      .type-tag.morandi-1 {
+        background-color: #d4e0e8;
+        color: #5b7a8c;
+      } /* 莫兰迪蓝 */
+      .type-tag.morandi-2 {
+        background-color: #d4e4d8;
+        color: #5b8066;
+      } /* 莫兰迪绿 */
+      .type-tag.morandi-3 {
+        background-color: #e0d8e8;
+        color: #7b6b8c;
+      } /* 莫兰迪紫 */
+      .type-tag.morandi-4 {
+        background-color: #f0e8d8;
+        color: #8b7b5b;
+      } /* 莫兰迪黄 */
+      .type-tag.morandi-5 {
+        background-color: #e8dcc8;
+        color: #8b7a5b;
+      } /* 莫兰迪橙 */
+      .type-tag.morandi-6 {
+        background-color: #d8e0e0;
+        color: #6b8080;
+      } /* 莫兰迪灰蓝 */
+      .type-tag.morandi-7 {
+        background-color: #e4dcd4;
+        color: #7b6b5b;
+      } /* 莫兰迪米 */
+
+      /* 灰色详情框 (部门、类别、时间) - 统一灰色 */
+      .meta-badges {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .meta-badges-left {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+      }
+      .meta-badges-right {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .meta-badge {
+        background: #f3f4f6;
+        color: #808080;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        border: 1px solid #e5e7eb;
+      }
+
+      /* 正文区 (左侧蓝线 H3 样式还原) */
+      .detail-content {
+        flex: 1;
+        padding: 20px 24px;
+        overflow-y: auto;
+        line-height: 1.6;
+        font-size: 15px;
+        color: #374151;
+
+        /* 👇 新增：强制换行逻辑，防止长链接撑开页面 */
+        word-break: break-all; /* 兼容性最好的强制换行 */
+        overflow-wrap: anywhere; /* 现代浏览器首选，在任何地方换行 */
+
+        /* 👇 新增：允许文字选中 */
+        user-select: text;
+        -webkit-user-select: text; /* 兼容 pywebview 内核 */
+        cursor: auto; /* 确保鼠标悬停在文字上时显示选择光标 */
+      }
+      /* 1. 修改宽度 */
+      .detail-content::-webkit-scrollbar {
+        width: 6px; /* 宽度决定了竖向滚动条的大小 */
+        height: 4px; /* 这里决定了横向滚动条的粗细 */
+      }
+
+      /* 2. 默认状态：颜色较浅 */
+      .detail-content::-webkit-scrollbar-thumb {
+        background-color: rgba(0, 0, 0, 0.1); /* 使用半透明黑，不浮动时较浅 */
+        border-radius: 3px;
+        transition: background-color 0.3s; /* 平滑过渡效果 */
+      }
+
+      /* 3. 鼠标浮动状态：颜色加深 */
+      .detail-content::-webkit-scrollbar-thumb:hover {
+        background-color: rgba(0, 0, 0, 0.3); /* 浮动时透明度增加，颜色变深 */
+      }
+      .markdown-body strong {
+        color: #000;
+        font-weight: 600;
+      }
+      .markdown-body p {
+        margin-top: 0; /* 消除段落顶部间距 */
+        margin-bottom: 6px; /* 将原本过大的底部间距压缩至 8px */
+      }
+
+      .markdown-body h3 {
+        font-size: 16px;
+        font-weight: 600;
+        color: #111;
+        margin-top: 10px;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+      }
+      /* H3 前面的蓝色粗线条 */
+      .markdown-body h3::before {
+        content: "";
+        display: inline-block;
+        width: 5px;
+        height: 18px;
+        background: var(--accent-color);
+        margin-right: 10px;
+        border-radius: 2px;
+      }
+      .markdown-body ul {
+        padding-left: 20px;
+        margin: 10px 0;
+        color: #4b5563;
+      }
+      .markdown-body li {
+        margin-bottom: 2px;
+      }
+
+      /* ================= 新增：Markdown 细节排版优化 ================= */
+      /* 1. 缩减第一段 H3 标题（如：任务核心）距离顶部的多余留白 */
+      .markdown-body h3:first-of-type {
+        margin-top: 2px !important;
+      }
+
+      /* ================= 新增：AI 语义标签高亮（使用 class 选择器更稳定） ================= */
+      /* 日期标签 - 醒目红色 */
+      .md-date {
+        color: #e11d48;
+        font-weight: 600;
+        background: #fff1f2;
+        padding: 0 4px;
+        border-radius: 3px;
+      }
+
+      /* 联系方式标签 - 翠绿色 */
+      .md-contact {
+        color: #10b981;
+        font-weight: 600;
+        font-family: "SF Mono", Consolas, monospace;
+        font-size: 15px;
+        background: #ecfdf5;
+        padding: 0 4px;
+        border-radius: 3px;
+      }
+
+      /* 地点标签 - 优雅紫 */
+      .md-loc {
+        color: #8b5cf6;
+        font-weight: 600;
+        background: rgba(139, 92, 246, 0.08);
+        padding: 0 4px;
+        border-radius: 4px;
+      }
+      .markdown-body a {
+        color: #3b82f6;
+        text-decoration: none;
+        font-weight: 500;
+        border-bottom: 1px solid transparent;
+        transition: border-bottom-color 0.2s;
+        cursor: pointer;
+        background: #eff6ff;
+        word-break: break-all;
+        white-space: normal;
+      }
+
+      .markdown-body a:hover {
+        border-bottom-color: #3b82f6; /* 鼠标悬停时显示下划线 */
+      }
+
+      /* ================= EasyMDE 编辑器样式覆盖 ================= */
+      .EasyMDEContainer {
+        --easymde-bg: #fafafa;
+        --easymde-border: #e5e7eb;
+        --easymde-text: #1f2937;
+        --easymde-accent: #408ff7;
+      }
+
+      .EasyMDEContainer .CodeMirror {
+        background: var(--easymde-bg);
+        border: 1px solid var(--easymde-border);
+        border-radius: 10px;
+        font-family: "SF Mono", "Menlo", "Monaco", "Consolas", monospace;
+        font-size: 13px;
+        line-height: 1.6;
+        color: var(--easymde-text);
+        min-height: 300px;
+        padding: 12px;
+      }
+
+      .EasyMDEContainer .CodeMirror-focused {
+        outline: none;
+        border-color: var(--easymde-accent);
+        box-shadow: 0 0 0 3px rgba(64, 143, 247, 0.15);
+      }
+
+      .EasyMDEContainer .editor-toolbar {
+        background: #fff;
+        border: 1px solid var(--easymde-border);
+        border-bottom: none;
+        border-radius: 10px 10px 0 0;
+        padding: 8px 10px;
+      }
+
+      .EasyMDEContainer .editor-toolbar button {
+        color: #6b7280;
+        border-radius: 6px;
+        transition: all 0.15s ease;
+      }
+
+      .EasyMDEContainer .editor-toolbar button:hover,
+      .EasyMDEContainer .editor-toolbar button.active {
+        background: #f3f4f6;
+        color: var(--easymde-accent);
+      }
+
+      .EasyMDEContainer .editor-toolbar i.separator {
+        border-left-color: #e5e7eb;
+        border-right-color: transparent;
+      }
+
+      .EasyMDEContainer .editor-preview {
+        background: #fff;
+        border: 1px solid var(--easymde-border);
+        border-radius: 0 0 10px 10px;
+        padding: 16px;
+      }
+
+      .EasyMDEContainer .editor-preview-side {
+        background: #fff;
+        border: 1px solid var(--easymde-border);
+        border-radius: 10px;
+        padding: 16px;
+      }
+
+      /* EasyMDE 会自动隐藏原始 textarea，无需额外样式 */
+      /* 确保 EasyMDE 容器正确定位 */
+      .EasyMDEContainer {
+        position: relative;
+      }
+
+      /* ================= 摘要编辑容器样式 ================= */
+      .summary-edit-container {
+        margin-bottom: 20px;
+      }
+
+      .summary-edit-container .EasyMDEContainer .CodeMirror {
+        min-height: 250px;
+        border-radius: 12px;
+      }
+
+      .summary-edit-container .EasyMDEContainer .editor-toolbar {
+        border-radius: 12px 12px 0 0;
+        border: none;
+        background: #f9fafb;
+        padding: 6px 8px;
+      }
+
+      .summary-edit-container .EasyMDEContainer .editor-toolbar button {
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .edit-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid #e5e7eb;
+      }
+
+      .edit-actions .action-btn {
+        padding: 8px 20px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .edit-actions .btn-secondary {
+        background: #f3f4f6;
+        border: 1px solid #d1d5db;
+        color: #374151;
+      }
+
+      .edit-actions .btn-secondary:hover {
+        background: #e5e7eb;
+      }
+
+      .edit-actions .btn-primary {
+        background: #408ff7;
+        border: 1px solid #3b82f6;
+        color: #fff;
+      }
+
+      .edit-actions .btn-primary:hover {
+        background: #3b82f6;
+      }
+
+      /* ================= 新增：搜索摘录档案卡片 ================= */
+      .search-snippet-box {
+        margin-top: 24px;
+        background: #f8fafc; /* 极浅的蓝灰色，区别于主背景的纯白 */
+        border: 1px solid #e2e8f0;
+        border-radius: 7px;
+        overflow: hidden;
+        /* 增加一点内阴影，让它看起来像一个凹下去的代码框 */
+        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02);
+      }
+
+      .snippet-header {
+        background: #f1f5f9;
+        padding: 8px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #64748b;
+        border-bottom: 1px dashed #cbd5e1;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .snippet-header svg {
+        width: 14px;
+        height: 14px;
+        color: #94a3b8;
+      }
+
+      .snippet-content {
+        padding: 12px 14px;
+        font-size: 13px;
+        line-height: 1.6;
+        color: #475569;
+        font-family:
+          "SF Mono", Consolas, "Liberation Mono", Menlo, monospace; /* 使用等宽代码字体，凸显原始感 */
+      }
+
+      /* 🌟 荧光笔高亮特效：这会让匹配到的关键词在灰色文字中极其耀眼 */
+      .snippet-content strong {
+        background-color: #fef08a; /* 荧光黄 */
+        color: #854d0e;
+        padding: 0 4px;
+        border-radius: 4px;
+        font-weight: 600;
+      }
+
+      /* 底部悬浮栏 */
+      .detail-footer {
+        padding: 12px 24px;
+        background: #fafafa;
+        border-top: 1px solid var(--border-color);
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .disclaimer {
+        font-size: 11px;
+        color: #aeb3bd;
+        line-height: 1.6;
+        display: flex;
+        flex-direction: column;
+        transition: color 0.3s ease; /* 新增平滑过渡 */
+      }
+      .disclaimer:hover {
+        color: #6b7280; /* 鼠标放上去时，颜色稍微变深一点，提升可读性 */
+      }
+      /* 让免责声明的每一行内部实现 Flex 居中对齐 */
+      .disclaimer span {
+        display: flex;
+        align-items: center;
+        gap: 6px; /* 控制 SVG 图标和文字之间的间距 */
+      }
+
+      /* 保护 SVG 不会在小屏幕下被文字挤压变形 */
+      .disclaimer-icon {
+        flex-shrink: 0;
+      }
+      .btn-group {
+        display: flex;
+        gap: 10px;
+      }
+      /* ================= 底部操作按钮 (纯图标胶囊风格) ================= */
+      .action-btn {
+        position: relative;
+        width: 60px; /* 强制固定为宽胶囊 */
+        height: 38px;
+        padding: 0;
+        border: none;
+        border-radius: 19px; /* 胶囊圆角 */
+        cursor: pointer;
+        color: white;
+        transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+
+      .action-btn:hover {
+        transform: scale(1.08);
+      }
+      .action-btn:active {
+        transform: scale(0.92);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+
+      /* ============================================================
+         测试API连接状态样式
+         ============================================================ */
+      .connection-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        font-size: 12px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+      }
+
+      .icon-antenna {
+        width: 16px;
+        height: 16px;
+        transition:
+          color 0.4s cubic-bezier(0.25, 1, 0.5, 1),
+          filter 0.4s ease;
+      }
+
+      .status-text {
+        white-space: nowrap;
+      }
+
+      /* 默认/空闲状态 - 次级灰 */
+      .connection-status.idle {
+        color: #8e8e93;
+      }
+      .connection-status.idle .wave-outer,
+      .connection-status.idle .wave-inner {
+        opacity: 0.3;
+      }
+
+      /* 成功/已连接 - Apple System Green */
+      .connection-status.success {
+        color: #34c759;
+      }
+      .connection-status.success .icon-antenna {
+        filter: drop-shadow(0 2px 6px rgba(52, 199, 89, 0.35));
+      }
+
+      /* 错误/断开 - Apple System Red */
+      .connection-status.error {
+        color: #ff3b30;
+      }
+      .connection-status.error .wave-outer,
+      .connection-status.error .wave-inner {
+        opacity: 0.1;
+      }
+      .connection-status.error .icon-antenna {
+        filter: drop-shadow(0 2px 6px rgba(255, 59, 48, 0.35));
+      }
+
+      /* 测试中状态 - Apple System Blue */
+      .connection-status.testing {
+        color: #007aff;
+      }
+      .connection-status.testing .icon-antenna {
+        filter: drop-shadow(0 2px 8px rgba(0, 122, 255, 0.4));
+      }
+
+      .connection-status.testing .wave-inner {
+        animation: antenna-pulse 1.2s infinite ease-in-out;
+      }
+
+      .connection-status.testing .wave-outer {
+        animation: antenna-pulse 1.2s infinite ease-in-out 0.15s;
+      }
+
+      @keyframes antenna-pulse {
+        0% {
+          opacity: 0.15;
+        }
+        40% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0.15;
+        }
+      }
+
+      .btn-icon {
+        width: 22px;
+        height: 22px;
+        flex-shrink: 0;
+        position: absolute;
+        transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+
+      /* 🟢 1. 复制按钮动画 */
+      .btn-copy {
+        background: #65c466;
+      }
+      .btn-copy:hover {
+        background: #54a255;
+      }
+      .btn-copy .icon-copy {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+      .btn-copy .icon-check {
+        opacity: 0;
+        transform: scale(0.5) rotate(-45deg);
+      }
+
+      .btn-copy.is-copied {
+        background: #65c466;
+        transform: scale(1.05);
+      }
+      .btn-copy.is-copied .icon-copy {
+        opacity: 0;
+        transform: scale(0) translateY(12px);
+      }
+      .btn-copy.is-copied .icon-check {
+        opacity: 1;
+        transform: scale(1) rotate(0deg);
+      }
+
+      /* 🟡 2. 查看原文按钮动画 */
+      .btn-view {
+        background: #f2ca44;
+      }
+      .btn-view:hover {
+        background: #c9a738;
+      }
+      .btn-view:hover .icon-view {
+        transform: translate(2px, -2px);
+      }
+      .btn-view.is-launching .icon-view {
+        animation: shoot-out 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+      }
+
+      @keyframes shoot-out {
+        0% {
+          transform: translate(0, 0) scale(1);
+          opacity: 1;
+        }
+        40% {
+          transform: translate(20px, -20px) scale(0.8);
+          opacity: 0;
+        }
+        41% {
+          transform: translate(-20px, 20px) scale(0.5);
+          opacity: 0;
+        }
+        100% {
+          transform: translate(0, 0) scale(1);
+          opacity: 1;
+        }
+      }
+
+      /* 🔴 3. 关闭按钮动画 */
+      .btn-back {
+        background: #ec6765;
+      }
+      .btn-back:hover {
+        background: #c45554;
+      }
+      .btn-back.is-closing {
+        transform: scale(0);
+        opacity: 0;
+        pointer-events: none;
+      }
+      .btn-back.is-closing .icon-close {
+        transform: rotate(90deg);
+      }
+
+      /* 🗑️ 删除按钮（黑色，默认透明，悬停显示） */
+      .btn-delete {
+        background: transparent;
+        opacity: 0;
+        transition: all 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+      }
+      .btn-delete:hover {
+        background: rgba(0, 0, 0, 0.85);
+        opacity: 1;
+      }
+      .btn-delete:active {
+        background: rgba(0, 0, 0, 0.95);
+      }
+
+      /* 父容器悬停时删除按钮浅浅显示 */
+      .btn-group:hover .btn-delete {
+        opacity: 0.35;
+      }
+      .btn-group:hover .btn-delete:hover {
+        opacity: 1;
+      }
+
+      /* 🗑️ 垃圾桶盖子动画（延迟 0.1s 让用户先看到完整图标） */
+      .trash-icon .lid {
+        transition: transform 0.4s cubic-bezier(0.19, 1, 0.22, 1) 0.3s;
+        transform-origin: 10.96px 6.32px;
+      }
+
+      /* 🗑️ 垃圾桶桶身动画（延迟 0.1s） */
+      .trash-icon .body {
+        transition: transform 0.4s cubic-bezier(0.19, 1, 0.22, 1) 0.1s;
+        transform-origin: center center;
+      }
+
+      /* 悬停时盖子抬起（延迟 0.1s） */
+      .btn-delete:hover .trash-icon .lid {
+        transform: translateY(-4px) rotate(-8deg);
+      }
+
+      /* 悬停时桶身微拉伸（延迟 0.1s） */
+      .btn-delete:hover .trash-icon .body {
+        transform: scaleY(1.01);
+      }
+
+      /* 点击时盖子高高跳起（无延迟，响应迅速） */
+      .btn-delete:active .trash-icon .lid {
+        transform: translateY(-24px) rotate(-20deg);
+        transition: transform 0.2s cubic-bezier(0.1, 0.9, 0.2, 1) 0s;
+      }
+
+      /* 点击时桶身收缩（无延迟） */
+      .btn-delete:active .trash-icon .body {
+        transform: scale(0.9) translateY(4px);
+        transition: transform 0.2s cubic-bezier(0.1, 0.9, 0.2, 1) 0s;
+      }
+
+      /* 🗑️ 删除确认弹窗 */
+      .delete-confirm-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        animation: fade-in 0.2s ease;
+      }
+
+      .delete-confirm-modal {
+        background: var(--card-bg, #ffffff);
+        border-radius: 16px;
+        padding: 24px;
+        max-width: 320px;
+        width: 90%;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        animation: scale-in 0.2s ease;
+      }
+
+      @keyframes fade-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+
+      @keyframes scale-in {
+        from { transform: scale(0.9); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+      }
+
+      .delete-confirm-header {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+
+      .delete-confirm-icon {
+        width: 48px;
+        height: 48px;
+        color: #666;
+        margin-bottom: 8px;
+      }
+
+      .delete-confirm-header h3 {
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text-primary, #333);
+        margin: 0;
+      }
+
+      .delete-confirm-message {
+        text-align: center;
+        color: var(--text-secondary, #999);
+        font-size: 13px;
+        margin-bottom: 20px;
+      }
+
+      .delete-confirm-options {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .delete-option {
+        padding: 14px 18px;
+        border: none;
+        border-radius: 12px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s ease;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+        text-align: left;
+      }
+
+      /* 🟢 重新抓取 - 绿色（推荐） */
+      .delete-option-hard {
+        background: #e8f5e9;
+        color: #2e7d32;
+      }
+      .delete-option-hard:hover {
+        background: #c8e6c9;
+      }
+
+      /* 🔴 屏蔽此文 - 红色（警告） */
+      .delete-option-soft {
+        background: #ffebee;
+        color: #c62828;
+      }
+      .delete-option-soft:hover {
+        background: #ffcdd2;
+      }
+
+      .delete-option .option-title {
+        font-weight: 600;
+        font-size: 15px;
+        line-height: 1.3;
+      }
+
+      .delete-option .option-desc {
+        font-size: 12px;
+        opacity: 0.7;
+        font-weight: 400;
+        line-height: 1.4;
+      }
+
+      /* 移除旧的取消按钮样式 */
+
+      .status-center {
+        text-align: center;
+        color: var(--text-sub);
+        font-size: 13px;
+        margin-top: 10px;
+      }
+      /* 底部独立附件区样式 */
+      .attachments-section {
+        margin-top: 32px;
+        padding-bottom: 10px;
+      }
+      .attachments-divider {
+        height: 1px;
+        background: var(--border-color);
+        margin-bottom: 12px;
+      }
+      .attachments-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: #111;
+        margin-bottom: 8px;
+      }
+      .attachments-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        max-width: 100%;
+      }
+
+      .attachment-card {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        background: #f9fafb;
+        border: 1px solid var(--border-color);
+        border-radius: 7px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        min-width: 400px;
+        max-width: 100%;
+      }
+      .attachment-card:hover {
+        background: #eff6ff;
+        border-color: #bfdbfe;
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.08);
+      }
+      .att-icon {
+        font-size: 24px;
+        line-height: 1;
+        flex-shrink: 0;
+      }
+      .att-info {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+      }
+      /* 🌟 响应式中间省略 */
+      .att-name {
+        display: flex;
+        font-size: 13px;
+        font-weight: 600;
+        color: #374151;
+        min-width: 0;
+        overflow: hidden;
+      }
+      /* 前半部分：可收缩 */
+      .att-name-prefix {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        flex-shrink: 1;
+        min-width: 0;
+      }
+      /* 省略号 */
+      .att-name-ellipsis {
+        white-space: nowrap;
+        flex-shrink: 0;
+        color: #6b7280;
+      }
+      /* 后半部分：不收缩 */
+      .att-name-middle {
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+      /* 后缀：不收缩 */
+      .att-name-suffix {
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+      .att-action {
+        font-size: 11px;
+        color: var(--accent-color);
+        margin-top: 4px;
+        font-weight: 600;
+        opacity: 0.8;
+      }
+      .attachment-card:hover .att-action {
+        opacity: 1;
+      }
+
+      /* ================= 设置入口动画 ================= */
+      .settings-trigger {
+        cursor: pointer;
+        transition: color 0.2s;
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .settings-trigger:hover {
+        color: var(--accent-color);
+      }
+      .gear-icon {
+        opacity: 0;
+        transform: translateX(-5px) rotate(0deg);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        font-size: 14px;
+      }
+      .settings-trigger:hover .gear-icon {
+        opacity: 1;
+        transform: translateX(0) rotate(90deg);
+      }
+
+      /* ================= 设置页面样式 ================= */
+      .settings-view {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        background: #fff;
+        overflow-y: auto;
+        animation: slideIn 0.2s ease-out;
+        padding: 24px;
+      }
+      /* ================= 设置界面：极细滚动条 ================= */
+      .settings-view::-webkit-scrollbar {
+        width: 6px; /* 将宽度极限压缩到 6px */
+      }
+      .settings-view::-webkit-scrollbar-track {
+        background: transparent; /* 轨道透明，保持界面干净 */
+      }
+      .settings-view::-webkit-scrollbar-thumb {
+        background-color: rgba(0, 0, 0, 0.1); /* 默认极浅的灰色 */
+        border-radius: 2px;
+        transition: background-color 0.2s;
+      }
+      .settings-view::-webkit-scrollbar-thumb:hover {
+        background-color: rgba(
+          0,
+          0,
+          0,
+          0.3
+        ); /* 鼠标悬浮时颜色加深，提供交互反馈 */
+      }
+      .settings-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+        border-bottom: 1px solid var(--border-color);
+        padding-bottom: 12px;
+      }
+      .settings-header h2 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+      }
+      .form-group {
+        margin-bottom: 8px;
+      }
+      .form-label {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-sub);
+        margin-bottom: 8px;
+      }
+      .form-input {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        font-size: 14px;
+        transition: border-color 0.2s;
+        font-family: inherit;
+      }
+      .form-input:focus {
+        outline: none;
+        border-color: var(--accent-color);
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+      }
+      textarea.form-input {
+        resize: vertical;
+        min-height: 120px;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      /* System Prompt textarea 细滚动条 */
+      textarea.form-input::-webkit-scrollbar {
+        width: 4px;
+      }
+      textarea.form-input::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      textarea.form-input::-webkit-scrollbar-thumb {
+        background-color: rgba(0, 0, 0, 0.12);
+        border-radius: 2px;
+      }
+      textarea.form-input::-webkit-scrollbar-thumb:hover {
+        background-color: rgba(0, 0, 0, 0.25);
+      }
+
+      .form-row {
+        display: flex;
+        gap: 16px;
+      }
+      .form-row .form-group {
+        flex: 1;
+      }
+      .helper-text {
+        font-size: 11px;
+        color: #9ca3af;
+        margin-top: 6px;
+        display: block;
+      }
+
+      .btn-secondary {
+        background: #f3f4f6;
+        color: #374151;
+      }
+      .btn-secondary:hover {
+        background: #e5e7eb;
+      }
+      .btn-primary {
+        background: var(--accent-color);
+        color: white;
+      }
+      .btn-primary:hover {
+        background: #1d4ed8;
+      }
+
+      /* ============================================================
+         🌟 新增：设置面板 (Apple Sheet 风格弹窗)
+         ============================================================ */
+      .settings-overlay {
+        position: fixed;
+        inset: 0;
+        /* 黑色半透明背景 + 轻微毛玻璃 */
+        background: rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        z-index: 999; /* 保证在所有元素之上 */
+        display: flex;
+        justify-content: center;
+        align-items: flex-end; /* 🌟 让弹窗靠底部对齐 */
+        padding: 16px;
+      }
+
+      .settings-modal {
+        width: 100%;
+        max-width: 600px;
+        height: 85vh; /* 占据屏幕 85% 高度 */
+        background: #f3f4f6;
+        border-radius: 24px;
+        box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.15);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        position: relative;
+        padding-top: 10px; /* 给拉手留出空间 */
+        transform-origin: var(--origin-x, center) var(--origin-y, center);
+        animation: growFromPoint 0.4s cubic-bezier(0.34, 1.2, 0.64, 1);
+      }
+
+      @keyframes growFromPoint {
+        0% {
+          opacity: 0;
+          transform: scale(0.2);
+        }
+        40% {
+          transform: scale(1.02);
+        }
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+
+      /* 模态框顶部的小拉手 (暗示可滑动/抽屉感) */
+      .modal-drag-handle {
+        width: 40px;
+        height: 5px;
+        background: rgba(0, 0, 0, 0.15);
+        border-radius: 4px;
+        margin: 0 auto 12px auto;
+        flex-shrink: 0;
+      }
+
+      /* 🌟 动画：遮罩层的渐隐渐现 */
+      .modal-fade-enter-active,
+      .modal-fade-leave-active {
+        transition: opacity 0.4s var(--curve-silky);
+      }
+      .modal-fade-enter-from,
+      .modal-fade-leave-to {
+        opacity: 0;
+      }
+
+      /* 🌟 动画：弹窗主体的物理弹簧滑入 */
+      .modal-spring-enter-active,
+      .modal-spring-leave-active {
+        transition:
+          transform 0.5s var(--curve-silky),
+          opacity 0.3s ease;
+      }
+      .modal-spring-enter-from,
+      .modal-spring-leave-to {
+        /* 从底部往下 100% 的位置，并略微缩小，弹上来时会有变大的视觉效果 */
+        transform: translateY(100%) scale(0.96);
+        opacity: 0;
+      }
+
+      /* ============================================================
+         🌟 灵动岛 Header 卡片 - 详细配置说明
+         ============================================================
+
+         【整体架构】
+         ┌─────────────────────────────────────────────────────────┐
+         │  main-card-header (外层容器)                             │
+         │  ┌──────────┐ ┌───────────────┐ ┌──────────┐            │
+         │  │ 搜索框   │ │ dock-group    │ │ 更新按钮 │            │
+         │  │ (左对齐) │ │ (今日/收藏/设置)│ │ (右对齐) │            │
+         │  └──────────┘ └───────────────┘ └──────────┘            │
+         └─────────────────────────────────────────────────────────┘
+
+         【图标来源】
+         所有图标均为【内联 SVG 自绘】，不依赖外部图标库。
+         使用 stroke 描边风格，通过 currentColor 继承文字颜色。
+         参考：Feather Icons 设计风格，简洁现代。
+
+         【颜色变量说明】
+         --pill-bg:      胶囊背景色 #f3f4f6 (极浅灰)
+         --pill-hover:   悬浮背景色 #e5e7eb (浅灰)
+         --btn-bg:       按钮背景色 #e5e7eb (与悬浮色一致)
+         --curve-silky:  丝滑弹性曲线 cubic-bezier(0.22, 0.85, 0.15, 1)
+         ============================================================ */
+      /* ============================================================
+         1. 统一背景色与悬浮色
+         ============================================================ */
+      :root {
+        /* 🌟 核心修复：抛弃死板的浅灰，改用半透明黑。
+           这会在玻璃上"压"出一个清晰的坑，边界瞬间明显，而且极具质感！ */
+        --pill-bg: rgba(0, 0, 0, 0.06);
+        --pill-hover: rgba(0, 0, 0, 0.1);
+        --btn-bg: rgba(0, 0, 0, 0.06);
+
+        --curve-silky: cubic-bezier(0.22, 0.85, 0.15, 1);
+        /* 🌟 核心：iPhone 系统级弹性弹簧曲线 (强烈的物理弹性，极速启动，微妙回弹) */
+        --search-curve-expand: cubic-bezier(0.3, 1.65, 0.4, 1);
+        /* 🌟 收缩曲线：稍平滑，体现阻尼感 */
+        --search-curve-collapse: cubic-bezier(0.25, 1, 0.5, 1);
+      }
+
+      /* ================= 绝杀 7：魔术底线 ================= */
+      .article-content a {
+        position: relative;
+        color: var(--accent-color);
+        text-decoration: none;
+        font-weight: 600;
+      }
+      .article-content a::after {
+        content: "";
+        position: absolute;
+        width: 100%;
+        height: 2px;
+        bottom: -2px;
+        left: 0;
+        background-color: var(--accent-color);
+        border-radius: 2px;
+        /* 核心：默认从右边消失 */
+        transform: scaleX(0);
+        transform-origin: right;
+        transition: transform 0.4s var(--curve-pop);
+      }
+      .article-content a:hover::after {
+        /* 悬浮时：从左边滑出填满 */
+        transform: scaleX(1);
+        transform-origin: left;
+      }
+
+      /* ============================================================
+         1. 完美对称外框 (消灭 justify-content 突变导致的抽动)
+         ============================================================ */
+      /* ============================================================
+         1. 优化：Apple 级高透玻璃材质 (Bottom Toolbar)
+         ============================================================ */
+      .main-card-header {
+        /* 🌟 核心修复 1：大幅降低白底浓度！从 0.65 降到 0.25，让背后的内容真正透过来 */
+        background: rgba(255, 255, 255, 0.15);
+
+        /* 🌟 核心修复 2：全靠底层的"模糊"和"色彩提纯"来形成遮挡感，而不是靠白漆 */
+        backdrop-filter: blur(20px) saturate(180%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
+
+        border-radius: 30px;
+        padding: 6px 8px;
+
+        /* 🌟 核心修复 3：降低内侧高光白边的亮度（从0.7降到0.4），防止边缘过曝发白 */
+        box-shadow:
+          0 16px 40px rgba(0, 0, 0, 0.08),
+          0 4px 12px rgba(0, 0, 0, 0.04),
+          inset 0 1px 1px rgba(255, 255, 255, 0.4);
+
+        /* 边框也相应减弱一点点 */
+        border: 1px solid rgba(255, 255, 255, 0.3);
+
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        position: fixed;
+        bottom: 16px;
+        left: 16px;
+        right: 16px;
+        z-index: 100;
+        max-width: 600px;
+        margin: 0 auto;
+        overflow: hidden;
+        min-width: 0;
+        box-sizing: border-box;
+        --search-spring: cubic-bezier(0.32, 0, 0.2, 1);
+        --search-settle: cubic-bezier(0.28, 0.84, 0.32, 1);
+
+        transition:
+          all 0.6s var(--curve-pop),
+          border-radius 0.6s ease;
+      }
+
+      .main-card-header.is-searching {
+        /* 搜索时微微悬浮放大，带来强烈的聚焦感 */
+        transform: scale(1.02) translateY(-4px);
+        /* 增加一层主题色的微光外晕，模拟灵动岛激活 */
+        box-shadow:
+          0 24px 48px rgba(0, 0, 0, 0.12),
+          0 0 0 4px rgba(59, 134, 247, 0.15),
+          inset 0 1px 1px rgba(255, 255, 255, 0.6);
+        /* 变形成更圆润的形态 */
+        border-radius: 20px;
+      }
+
+      /* 左、右护法容器：平时各占 50%，把中间元素死死挤在中心 */
+      .header-side {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        min-width: 0; /* 🌟 防止子元素撑开容器 */
+        overflow: hidden; /* 🌟 隐藏溢出内容 */
+        transition: flex 0.54s var(--search-spring);
+      }
+      .header-side.left {
+        justify-content: flex-start;
+      }
+      .header-side.right {
+        justify-content: flex-end;
+        z-index: 2; /* 🌟 高于中间按钮组，让折叠动画从下方滑过 */
+      }
+      /* 🌟 加载状态时允许彩虹圆外扩显示 */
+      .header-side.right.is-loading {
+        overflow: visible !important;
+      }
+
+      .header-center {
+        flex: 0 0 auto;
+        display: flex;
+        justify-content: center;
+        /* 🌟 减小间距，让布局更紧凑 */
+        margin: 0 4px;
+        min-width: 0; /* 🌟 防止溢出 */
+        z-index: 1; /* 🌟 低于右侧更新按钮，让展开动画从下方滑过 */
+        transition: margin 0.54s var(--search-spring);
+      }
+
+      /* 搜索激活时：左侧护法疯狂膨胀，接管全屏 */
+      .main-card-header.is-searching {
+        overflow: visible; /* 🌟 允许搜索框圆角正常显示 */
+      }
+
+      .main-card-header.is-searching .header-side.left {
+        flex: 145; /* 以绝对优势挤压其余空间 */
+        border-radius: 22px; /* 🌟 添加圆角，与搜索框圆角匹配 */
+        overflow: visible; /* 🌟 允许搜索框圆角正常显示 */
+      }
+
+      /* 搜索展开时，右侧更新按钮挤压 */
+      .main-card-header.is-searching .header-side.right {
+        transform-origin: right center;
+        animation: apple-squish 0.6s var(--curve-apple-squish) forwards;
+      }
+
+      /* 搜索收起时，右侧回弹 */
+      .main-card-header:not(.is-searching) .header-side.right {
+        transform-origin: right center;
+        animation: apple-vacuum 0.6s var(--curve-apple-squish) forwards;
+      }
+
+      /* 🌟 中间按钮组：不参与挤压动画，由 dock-group 自身过渡处理，避免白色矩形 */
+      .main-card-header.is-searching .header-center {
+        opacity: 0.7;
+        transform: scale(0.95);
+        margin-left: 10px; /* 🌟 搜索展开时增加左边距，与搜索框保持间距 */
+        margin-right: 0px; /* 🌟 搜索展开时减小右边距，让今日按钮更靠右 */
+        transition:
+          opacity 0.3s ease,
+          transform 0.3s ease,
+          margin 0.54s var(--search-spring);
+      }
+
+      .main-card-header:not(.is-searching) .header-center {
+        opacity: 1;
+        transform: scale(1);
+        transition:
+          opacity 0.3s ease,
+          transform 0.3s ease;
+      }
+
+      /* 撞墙形变关键帧：X轴压扁，Y轴拉长 */
+      @keyframes apple-squish {
+        0% {
+          transform: scale(1);
+        }
+        25% {
+          transform: scaleX(0.82) scaleY(1.1) translateX(2px);
+        } /* 被左边冲过来的搜索框撞扁 */
+        55% {
+          transform: scaleX(1.04) scaleY(0.96) translateX(-1px);
+        } /* 弹性反弹 */
+        75% {
+          transform: scaleX(0.98) scaleY(1.02);
+        } /* 微弱余震 */
+        100% {
+          transform: scale(1);
+        }
+      }
+
+      /* 真空回拉关键帧 */
+      @keyframes apple-vacuum {
+        0% {
+          transform: scale(1);
+        }
+        25% {
+          transform: scaleX(1.1) scaleY(0.92) translateX(-3px);
+        } /* 被缩回的搜索框往左扯长 */
+        55% {
+          transform: scaleX(0.96) scaleY(1.04) translateX(1px);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+
+      /* ============================================================
+         响应式布局：小屏幕适配（470px 以下）
+         ============================================================ */
+      @media (max-width: 470px) {
+        .main-card-header {
+          padding: 4px;
+        }
+        .header-center {
+          margin: 0 4px;
+        }
+        .dock-item {
+          width: 40px;
+          height: 34px;
+        }
+        .btn-check {
+          width: 42px !important;
+          height: 42px !important;
+        }
+        .btn-check svg {
+          width: 26px !important;
+          height: 26px !important;
+        }
+        .search-morph-container {
+          /* 基础状态保持不变 */
+          transition:
+            width 0.6s var(--curve-apple-move),
+            background 0.3s ease,
+            box-shadow 0.3s ease;
+        }
+        .search-morph-container.is-active {
+          /* Apple 质感密码：微弱白底 + 极细内凹阴影雕刻感 + 蓝色外发光光晕 */
+          background: rgba(255, 255, 255, 0.75) !important;
+          box-shadow:
+            inset 0 1px 4px rgba(0, 0, 0, 0.05),
+            inset 0 0 0 1px rgba(0, 0, 0, 0.02),
+            0 0 0 3px rgba(87, 155, 240, 0.2) !important; /* 呼应你的 --accent-color */
+          cursor: text;
+        }
+        .btn-check:disabled,
+        .btn-check.read-only-btn {
+          width: 56px !important;
+          height: 38px !important;
+          font-size: 11px !important;
+        }
+      }
+
+      /* ============================================================
+         2. 搜索框同频弹性引擎 (替换原有的 search-morph-container)
+         ============================================================ */
+      /* ============================================================
+         2. 搜索框同频弹性引擎 (Morphing 形变物理引擎)
+         ============================================================ */
+      .search-morph-container {
+        display: flex;
+        align-items: center;
+        height: 44px;
+        background: var(--btn-bg);
+        border-radius: 22px;
+        overflow: hidden;
+        position: relative;
+        width: 44px; /* 完美的起始正圆 */
+        flex-grow: 0;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+
+        /* 🌟 收缩时的阻尼感曲线 (失去焦点时平滑退回正圆) */
+        transition:
+          width 0.45s var(--search-curve-collapse),
+          background-color 0.3s ease,
+          border-radius 0.45s var(--search-curve-collapse),
+          box-shadow 0.3s ease,
+          transform 0.45s var(--search-curve-collapse);
+      }
+
+      .search-morph-container.is-active {
+        width: 100%;
+        flex-grow: 1;
+        background: var(--pill-bg);
+        border-radius: 22px;
+        box-shadow:
+          inset 0 1px 1px rgba(255, 255, 255, 0.65),
+          0 8px 20px rgba(15, 23, 42, 0.08);
+
+        /* 🌟 展开时的爆发弹簧曲线 (极速拉伸并带有完美回弹) */
+        transition:
+          width 0.6s var(--search-curve-expand),
+          background-color 0.4s ease,
+          border-radius 0.6s var(--search-curve-expand),
+          box-shadow 0.4s ease,
+          transform 0.6s var(--search-curve-expand);
+      }
+
+      /* ============================================================
+         🌟 细节补全：搜索按钮的悬浮微交互 (Hover State)
+         ============================================================ */
+
+      /* 1. 容器本体：只有在“未展开”的正圆状态下，才响应悬浮放大 */
+      .search-morph-container:not(.is-active):hover {
+        transform: scale(1.05); /* 与右侧的更新按钮保持完美对称的放大比例 */
+        background: var(--pill-hover); /* 提亮底色 */
+        /* 增加一层极其微弱的悬浮阴影，让它看起来像是稍微浮起了一点 */
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 255, 255, 0.4),
+          0 4px 12px rgba(0, 0, 0, 0.05);
+      }
+
+      /* 2. 点睛之笔：内部的放大镜图标做微小的“探头/招手”动作 */
+      .search-morph-container:not(.is-active):hover .search-icon-wrapper svg {
+        /* 图标跟着微微放大，并潇洒地向左倾斜 5 度，仿佛在向你招手 */
+        transform: scale(1.08) rotate(-5deg);
+        /* 这里的 transition 时间要稍微短一点，显得更敏捷 */
+        transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+
+      /* ============================================================
+         3. 图标组容器 dock-group
+         ============================================================ */
+      .dock-group {
+        display: flex;
+        align-items: center;
+        background: var(--pill-bg);
+        border-radius: 30px;
+        padding: 2px;
+        gap: 4px;
+        overflow: hidden;
+        position: relative; /* 🌟 创建层叠上下文 */
+        z-index: 1; /* 🌟 确保在更新按钮下方 */
+        transition:
+          gap 0.54s var(--search-spring),
+          padding 0.54s var(--search-spring),
+          background-color 0.38s var(--search-settle);
+      }
+
+      /* 悬浮项：轻微放大 + 背景高亮 */
+      .dock-item:hover {
+        transform: scale(1.1);
+        background: var(--pill-hover);
+        z-index: 2; /* 🌟 相对于 dock-group 内部，不会超过更新按钮 */
+      }
+
+      /* ============================================================
+         4. 修复中间三个元素的"僵硬"点击动画
+         ============================================================ */
+      .dock-item:active {
+        transform: scale(0.95) !important;
+        transition: transform 0.1s ease;
+      }
+
+      /* 🌟 滑块背景效果 - 选中状态显示背景 */
+      .dock-item.is-active {
+        background: rgba(0, 0, 0, 0.1);
+        box-shadow:
+          inset 0 1px 2px rgba(255, 255, 255, 0.5),
+          0 1px 4px rgba(0, 0, 0, 0.08);
+      }
+
+      /* 🌟 搜索展开时隐藏所有滑块 */
+      .dock-group.is-collapsed .dock-item.is-active {
+        background: transparent;
+        box-shadow: none;
+      }
+
+      /* ============================================================
+         4. 外部 SVG 专属遮罩渲染类 (完美解决不居中与颜色问题)
+         ============================================================ */
+      .svg-icon-mask {
+        width: 20px;
+        height: 20px;
+        background-color: var(--text-main);
+        display: block;
+
+        /* WebKit 内核兼容 */
+        -webkit-mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+
+        /* 标准属性（彻底消除 IDE 警告） */
+        mask-size: contain;
+        mask-repeat: no-repeat;
+        mask-position: center;
+      }
+
+      /* 🌟 图标尺寸调整：sm 为小号 */
+      .svg-icon-mask.sm {
+        width: 18px;
+        height: 18px;
+        z-index: 2;
+      }
+
+      /* 🌟 图标位置微调示例：取消注释并调整数值即可
+         .icon-search { transform: translate(1px, -1px); }
+         .icon-today { transform: translate(0, 1px); }
+         使用 translate(X, Y) 微调，X正右Y正下 */
+
+      /* ✅ 新增：内联搜索图标样式 */
+      .inline-search-icon {
+        width: 18px;
+        height: 18px;
+        flex-shrink: 0;
+        /* color: inherit 会自动让 currentColor 生效 */
+      }
+
+      /* ============================================================
+         【单个图标按钮】dock-item
+         ------------------------------------------------------------
+         宽度：          44px - 与独立按钮等宽
+         高度：          38px - 短长条矩形（非正方形）
+         圆角：          12px - 圆角矩形
+         底色：          transparent - 透明，继承父容器背景
+         居中方式：      flex + align-items/justify-content: center
+
+         【图标尺寸】
+         SVG 宽高：      20px × 20px
+         描边宽度：      2px
+         颜色：          currentColor - 继承文字颜色 var(--text-main)
+         ============================================================ */
+      .dock-item {
+        width: 44px;
+        height: 44px;
+        /* 🌟 核心防御：绝对不允许按钮在小屏幕或拥挤时被挤压变形 */
+        flex-shrink: 0;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        background: transparent;
+        border: none;
+        color: var(--text-main);
+        position: relative;
+        transition:
+          width 0.54s var(--search-spring),
+          opacity 0.36s var(--search-settle),
+          transform 0.54s var(--search-spring),
+          background-color 0.3s ease;
+      }
+      /* ✅ 确保你有这段代码（如果没有就加上） */
+      .dock-item svg {
+        width: 20px;
+        height: 20px;
+        color: inherit;
+      }
+
+      /* ============================================================
+         【搜索激活态】dock-group.is-collapsed
+         ------------------------------------------------------------
+         搜索展开时，dock-group 坍塌为单一的"今日"按钮：
+         - 背景渐变透明
+         - 收藏、设置按钮优雅消失
+         - 今日按钮变为圆形关闭按钮
+         ============================================================ */
+      .dock-group.is-collapsed {
+        /* 🌟 收缩时变成正圆，避免胶囊形变到正圆过程中出现矩形 */
+        background: var(--pill-bg);
+        border-radius: 100%;
+        padding: 0;
+        gap: 0;
+        pointer-events: none;
+        transition:
+          gap 0.54s var(--search-spring),
+          padding 0.54s var(--search-spring),
+          background-color 0.38s var(--search-settle),
+          border-radius 0.4s ease;
+      }
+
+      .dock-group.is-collapsed .dock-item.hide-on-search {
+        width: 0;
+        opacity: 0;
+        margin: 0;
+        padding: 0;
+        transform: translateX(-14px) scale(0.92);
+        pointer-events: none;
+      }
+      .dock-group.is-collapsed .dock-item.today-btn {
+        /* 🌟 保持正圆，不受父容器影响 */
+        width: 44px !important;
+        height: 44px !important;
+        border-radius: 50% !important;
+        background: var(--btn-bg);
+        transform: scale(1) !important;
+        opacity: 1;
+        pointer-events: auto;
+        flex-shrink: 0;
+      }
+      .dock-group.is-collapsed .dock-item.today-btn:active {
+        transform: scale(0.9) !important;
+      }
+
+      /* ============================================================
+         🛠️ 终极修复：绝对空间隔离引擎 (彻底告别光标跳动)
+         ============================================================ */
+      .search-input {
+        flex: 1;
+        height: 100%;
+        border: none;
+        background: transparent;
+        outline: none;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-main);
+        /* 🌟 核心修复 1：增加右侧 44px 的 padding，防止文字在展开后被绝对定位的图标遮住 */
+        padding: 0 44px 0 16px;
+        min-width: 0;
+        opacity: 0;
+        transition:
+          opacity 0.26s ease,
+          padding 0.54s var(--search-spring);
+      }
+      .search-morph-container.is-active .search-input {
+        opacity: 1;
+        transform: translateX(0);
+        /* 延迟 0.05秒 触发弹跳，视觉上会极其顺滑 */
+        transition:
+          opacity 0.4s ease 0.1s,
+          transform 0.6s var(--curve-apple-squish) 0.05s;
+      }
+      .search-input::placeholder {
+        color: #9ca3af;
+        font-weight: 500;
+      }
+
+      /* ============================================================
+         【搜索图标按钮】search-icon-wrapper
+         ------------------------------------------------------------
+         宽高：          44px × 44px (默认正圆)
+         激活态：        36px × 36px (缩小并添加背景)
+         图标尺寸：      18px × 18px
+         描边宽度：      2.2px
+         ============================================================ */
+      /* ============================================================
+         【搜索图标按钮】search-icon-wrapper
+         ============================================================ */
+      .search-icon-wrapper {
+        position: absolute;
+        right: 0;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        flex-shrink: 0;
+        background: transparent;
+        color: var(--text-main);
+
+        transition:
+          width 0.45s var(--search-curve-collapse),
+          height 0.45s var(--search-curve-collapse),
+          margin 0.45s var(--search-curve-collapse),
+          transform 0.4s var(--search-curve-collapse);
+      }
+
+      .search-morph-container.is-active .search-icon-wrapper {
+        margin: 4px;
+        width: 36px;
+        height: 36px;
+        /* 展开时图标容器应用爆发弹簧 */
+        transition:
+          width 0.6s var(--search-curve-expand),
+          height 0.6s var(--search-curve-expand),
+          margin 0.6s var(--search-curve-expand),
+          transform 0.6s var(--search-curve-expand);
+      }
+
+      .search-morph-container.is-active .search-icon-wrapper:active {
+        transform: scale(0.85); /* 更加清脆的下压感 */
+      }
+
+      /* 🌟 内部 SVG 图标的灵性旋转 */
+      .search-icon-wrapper svg {
+        width: 18px;
+        height: 18px;
+        stroke-width: 2.2px;
+        transform: scale(1) rotate(0deg);
+        transition: transform 0.45s var(--search-curve-collapse);
+      }
+
+      .search-morph-container.is-active .search-icon-wrapper svg {
+        /* 当从大圆变成小按钮时，放大镜会轻微缩小，并带有一个 -15度 的潇洒侧位回旋 */
+        transform: scale(0.9) rotate(-15deg);
+        transition: transform 0.6s var(--search-curve-expand);
+      }
+
+      /* ============================================================
+         【右侧按钮容器】right-actions
+         ------------------------------------------------------------
+         定位：          flex-shrink: 0 - 不被压缩
+         居中：          align-items: center - 垂直居中
+         ============================================================ */
+      .right-actions {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        position: relative; /* 🌟 创建层叠上下文 */
+        z-index: 10; /* 🌟 确保在中间按钮组之上 */
+      }
+
+      /* ============================================================
+         【更新按钮】btn-check
+         ------------------------------------------------------------
+         默认态（可点击）：
+           宽高：        44px × 44px - 正圆形
+           圆角：        50% - 完美正圆
+           底色：        var(--btn-bg) #e5e7eb
+           图标：        自绘刷新 SVG，20px × 20px
+
+         冷却态（倒计时）：
+           宽高：        44px × 44px - 正圆形
+           圆角：        50% - 完美正圆
+           底色：        var(--pill-bg) #f3f4f6
+           文字颜色：    #9ca3af (灰色)
+           字体大小：    12px
+
+         只读态：
+           与冷却态样式一致
+
+         悬浮效果：
+           放大：        scale(1.05)
+           底色：        var(--pill-hover)
+         ============================================================ */
+      .btn-check {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: var(--btn-bg);
+        color: var(--text-main);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: none;
+        cursor: pointer;
+        flex-shrink: 0;
+        position: relative;
+        z-index: 3; /* 🌟 高于中间按钮组，确保展开动画从下方滑过 */
+        overflow: hidden;
+        transition:
+          transform 0.3s ease 0.5s,
+          opacity 0.3s ease 0.5s,
+          background-color 0.24s ease,
+          width 0.32s var(--search-settle),
+          height 0.32s var(--search-settle);
+      }
+
+      .btn-check svg {
+        width: 20px;
+        height: 20px;
+      }
+
+      .btn-check:hover {
+        background: var(--pill-hover);
+        transform: scale(1.05);
+      }
+      .btn-check:active {
+        transform: scale(0.95);
+      }
+
+      /* ============================================================
+         3. 冷却按钮样式 - 保持正圆不变
+         ============================================================ */
+      /* 冷却/只读状态：保持正圆形 */
+      .btn-check:disabled,
+      .btn-check.read-only-btn {
+        width: 44px !important;
+        height: 44px !important;
+        border-radius: 50% !important;
+        background: var(--pill-bg) !important;
+        color: #9ca3af !important;
+        font-size: 12px !important;
+        font-weight: 600;
+        border: none !important;
+        cursor: not-allowed;
+        letter-spacing: -0.5px;
+      }
+
+      /* 🌟 搜索展开时隐藏更新按钮 */
+      .main-card-header.is-searching .btn-check {
+        opacity: 0;
+        transform: scale(0.6);
+        pointer-events: none;
+        transition:
+          transform 0.3s ease 0s,
+          opacity 0.3s ease 0s;
+      }
+
+      /* ============================================================
+         🚀 核心黑科技：纯 CSS 弹性 Tooltip 引擎
+         ============================================================ */
+
+      /* 1. 文字气泡主体 (::after) */
+      /* 🌟 恢复为枚举旧的散装独立类名 */
+      .dock-item::after,
+      .btn-check::after,
+      .badge-attachment::after,
+      .badge-snapshot::after,
+      .badge-refresh::after,
+      .badge-favorite::after,
+      .badge-pin::after,
+      .badge-edit::after,
+      .badge-home::after,
+      .badge-clear::after,
+      .action-btn::after {
+        /* 👈 新增这一行 */
+        content: attr(data-tooltip); /* 自动读取 HTML 上的 data-tooltip 文本 */
+        position: absolute;
+        top: calc(100% + 10px);
+        left: 50%;
+
+        /* 初始状态：缩小 + 隐藏 */
+        transform: translateX(-50%) scale(0.8);
+        opacity: 0;
+        visibility: hidden;
+
+        /* 气泡 UI 样式 */
+        background: rgba(17, 24, 39, 0.85); /* 半透明黑 */
+        backdrop-filter: blur(8px); /* 毛玻璃质感 */
+        color: #ffffff;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 6px 12px;
+        border-radius: 8px;
+        white-space: nowrap; /* 绝对禁止文字换行 */
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        pointer-events: none; /* 防止鼠标误触气泡导致闪烁 */
+        z-index: 100;
+
+        /* 以气泡的顶部中心为原点进行缩放 */
+        transform-origin: top center;
+
+        /* 离开时的动画：极速消失，无延迟 */
+        transition: all 0.2s ease;
+        transition-delay: 0s;
+      }
+
+      /* 2. 气泡的小三角指针 (::before) */
+      .dock-item::before,
+      .btn-check::before,
+      .badge-attachment::before,
+      .badge-snapshot::before,
+      .badge-refresh::before,
+      .badge-favorite::before,
+      .badge-pin::before,
+      .badge-edit::before,
+      .badge-home::before,
+      .badge-clear::before,
+      .action-btn::before {
+        /* 👈 新增这一行 */
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+
+        /* 初始状态：隐藏 */
+        transform: translateX(-50%);
+        opacity: 0;
+        visibility: hidden;
+
+        /* 利用 CSS 边框画三角形 */
+        border: 5px solid transparent;
+        border-bottom-color: rgba(17, 24, 39, 0.85);
+        pointer-events: none;
+        z-index: 100;
+
+        /* 离开时的动画：无延迟 */
+        transition: all 0.2s ease;
+        transition-delay: 0s;
+      }
+
+      /* 3. 🌟 鼠标悬浮时的激活状态 (Hover) */
+      .dock-item:hover::after,
+      .btn-check:hover::after,
+      .badge-attachment:hover::after,
+      .badge-snapshot:hover::after,
+      .badge-refresh:hover::after,
+      .badge-favorite:hover::after,
+      .badge-pin:hover::after,
+      .badge-edit:hover::after,
+      .badge-home:hover::after,
+      .action-btn:hover::after, /* 👈 新增这两行 */
+      .badge-clear:hover::after {
+        opacity: 1;
+        visibility: visible;
+        /* 弹性放大到原尺寸 */
+        transform: translateX(-50%) scale(1);
+        /* 展开时的动画：使用物理弹性曲线，并强制延迟 100ms (0.1s) */
+        transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        transition-delay: 0.1s;
+      }
+
+      .dock-item:hover::before,
+      .btn-check:hover::before,
+      .badge-attachment:hover::before,
+      .badge-snapshot:hover::before,
+      .badge-refresh:hover::before,
+      .badge-favorite:hover::before,
+      .badge-pin:hover::before,
+      .badge-edit:hover::before,
+      .badge-home:hover::before,
+      .badge-clear:hover::before {
+        opacity: 1;
+        visibility: visible;
+        /* 小三角跟随气泡同步显示 */
+        transition: all 0.4s ease;
+        transition-delay: 0.1s;
+      }
+
+      /* 4. 🚫 禁用特定按钮的 Tooltip */
+      .no-tooltip::after,
+      .no-tooltip::before,
+      .no-tooltip:hover::after,
+      .no-tooltip:hover::before {
+        content: none !important;
+        display: none !important;
+        opacity: 0 !important;
+        visibility: hidden !important;
+      }
+
+      .settings-title {
+        display: flex;
+        align-items: center;
+        gap: 10px; /* 图标和文字的间距 */
+        color: var(--accent-color); /* 自动变成你的 #B72A5C */
+      }
+
+      .icon-setting {
+        width: 24px;
+        height: 24px;
+        /* 确保 SVG 内部的 stroke="currentColor" 生效 */
+        color: inherit;
+      }
+      /* 👇 将这部分直接粘贴在这里 👇 */
+      #load-more-anchor {
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        color: #9ca3af; /* 使用灰字 */
+        letter-spacing: 1px; /* 增加一点字间距提升质感 */
+      }
+
+      /* 可选：加两条细细的横线作为装饰 */
+      #load-more-anchor::before,
+      #load-more-anchor::after {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: #e5e7eb;
+        margin: 0 15px;
+      }
+
+      /* ================= 新增：收藏模式标题样式 ================= */
+      .favorite-title {
+        font-size: 22px;
+        font-weight: 600;
+        color: var(--text-main);
+        padding: 0 4px;
+        margin-bottom: 14px;
+        letter-spacing: 0.5px;
+      }
+
+      /* ============================================================
+         🌟 优化：顶部导航栏 (Apple 原生级动态胶囊 Dynamic Pill)
+         ============================================================ */
+
+      .filter-scroll-container {
+        /* 🌟 核心升级 1：换上 iOS 级别的果冻弹簧曲线，时间微调至 0.55s 让回弹更紧凑 */
+        --chip-motion-duration: 0.55s;
+        --chip-motion-ease: var(--curve-pop, cubic-bezier(0.34, 1.56, 0.64, 1));
+
+        --chip-compact-width: 52px;
+        --chip-expanded-width: 204px;
+
+        display: flex;
+        overflow-x: auto;
+        align-items: center;
+        gap: 10px;
+        padding-block: 2px;
+        padding-inline: 0;
+        margin-top: 0;
+        margin-bottom: 14px;
+        scrollbar-width: none;
+        scroll-behavior: smooth;
+        scroll-padding-inline: 0;
+        overscroll-behavior-x: contain;
+        -webkit-overflow-scrolling: touch;
+      }
+      .filter-scroll-container::-webkit-scrollbar {
+        display: none;
+      }
+
+      /* 筛选标签 - 物理实体感 */
+      .filter-chip {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: var(--chip-compact-width);
+        padding: 8px 14px;
+        border-radius: 999px;
+        background: #ebebf0;
+        color: #3c3c43;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        white-space: nowrap;
+        border: none;
+        outline: none;
+        user-select: none;
+        flex-shrink: 0;
+        overflow: hidden;
+
+        /* 🌟 核心升级 2：将尺寸动画与颜色动画解耦。
+           尺寸用弹簧曲线 (Q弹)，颜色用线性曲线 (丝滑) */
+        transition:
+          width var(--chip-motion-duration) var(--chip-motion-ease),
+          padding-inline var(--chip-motion-duration) var(--chip-motion-ease),
+          background-color 0.3s ease,
+          color 0.3s ease,
+          transform 0.4s var(--chip-motion-ease); /* 为下压回弹做准备 */
+      }
+
+      /* 🌟 核心升级 3：极其真实的物理下压反馈 (Spatial Crush) */
+      .filter-chip:active {
+        transform: scale(0.92); /* 强烈的肉感下压 */
+        background: #e1e1e8;
+        transition:
+          transform 0.1s ease,
+          background-color 0.1s ease; /* 按下时极其敏捷 */
+      }
+
+      /* 保持你的位置对齐逻辑 */
+      .filter-chip.is-first,
+      .filter-chip.is-first.active,
+      .filter-chip.is-last,
+      .filter-chip.is-last.active,
+      .filter-chip.is-middle {
+        justify-content: center;
+      }
+
+      .filter-chip-inner {
+        display: inline-flex;
+        align-items: center;
+        justify-content: inherit;
+        gap: 0;
+        min-width: 0;
+        transition: gap var(--chip-motion-duration) var(--chip-motion-ease);
+      }
+
+      .filter-chip.active .filter-chip-inner {
+        gap: 8px;
+      }
+      .filter-chip.is-middle.active .filter-chip-inner {
+        gap: 6px;
+      }
+      .filter-chip.is-last.active .filter-chip-inner {
+        gap: 8px;
+      }
+
+      .filter-chip-icon {
+        width: 16px;
+        height: 16px;
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: inherit;
+        transition:
+          color 0.3s ease,
+          opacity var(--chip-motion-duration) var(--chip-motion-ease),
+          transform 0.4s var(--chip-motion-ease);
+      }
+      .filter-chip-icon svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      .filter-chip[data-source-key="source-4"] .filter-chip-icon {
+        width: 20px;
+      }
+
+      /* 🌟 核心升级 4：文字的视差滑入 (Parallax Slide) */
+      .filter-chip-text {
+        display: inline-block;
+        overflow: hidden;
+        max-width: 0;
+        opacity: 0;
+        /* 文字初始状态稍微向左偏移，并在 Y 轴微缩，准备被“拉出” */
+        transform: translateX(-8px) scale(0.95);
+        white-space: nowrap;
+        will-change: max-width, opacity, transform;
+        transition:
+          max-width var(--chip-motion-duration) var(--chip-motion-ease),
+          opacity 0.3s ease,
+          /* 透明度变化快一点，防止拖泥带水 */ transform
+            var(--chip-motion-duration) var(--chip-motion-ease);
+      }
+
+      /* 取消原有的 origin 缩放，用位移代替，更加自然 */
+      .filter-chip.active .filter-chip-text {
+        max-width: calc(var(--chip-expanded-width) - 64px);
+        opacity: 1;
+        /* 文字伴随着胶囊拉长，顺滑地滑入中心并放大到正常 */
+        transform: translateX(0) scale(1);
+      }
+
+      .filter-chip.active {
+        width: var(--chip-expanded-width);
+        background: var(--chip-active-bg, #007aff);
+        color: #ffffff;
+        padding-inline: 18px;
+        /* 去掉 saturate(1.02)，这种极其微小的滤镜极其消耗 GPU，且肉眼不可见 */
+      }
+
+      .filter-chip.active .filter-chip-icon,
+      .filter-chip.active .filter-chip-text {
+        color: #ffffff;
+      }
+
+      .filter-chip:not(.active) .filter-chip-icon,
+      .filter-chip:not(.active) .filter-chip-text {
+        color: #6e6e73;
+      }
+
+      .filter-chip:hover:not(.active) {
+        background: #e1e1e8;
+      }
+
+      /* 悬浮时图标微动招手 */
+      .filter-chip:hover:not(.active) .filter-chip-icon {
+        transform: scale(1.1) rotate(-3deg);
+      }
+
+      /* 🎯 进度条外框 */
+      .progress-track {
+        height: 4px;
+        background: #e5e7eb;
+        border-radius: 2px;
+        margin-bottom: 1px;
+        overflow: hidden;
+        width: 100%;
+      }
+
+      /* ================= 升级 5：渴望感进度条引擎 ================= */
+      .progress-fill {
+        height: 100%;
+        background: var(--accent-color);
+        width: 0%;
+        /* 这种曲线会像跑车一样瞬间加速，然后在终点前优雅刹车 */
+        transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+        /* 进度条末端加一点圆角，更精致 */
+        border-radius: 0 2px 2px 0;
+      }
+
+      /* 🌟 爬虫阶段的不确定进度动画（脉冲效果） */
+      .progress-indeterminate {
+        width: 30% !important;
+        animation: progress-pulse 1.5s ease-in-out infinite;
+      }
+      @keyframes progress-pulse {
+        0% {
+          width: 10%;
+          opacity: 0.6;
+        }
+        50% {
+          width: 50%;
+          opacity: 1;
+        }
+        100% {
+          width: 10%;
+          opacity: 0.6;
+        }
+      }
+
+      /* 进度条左侧文本（自动省略） */
+      .progress-left-text {
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+      }
+      /* 进度条右侧数字（强制不换行） */
+      .progress-right-stats {
+        white-space: nowrap;
+        flex-shrink: 0;
+        margin-left: 12px;
+      }
+
+      .spinner {
+        animation: spin 1s linear infinite;
+        width: 14px;
+        height: 14px;
+        display: inline-block;
+        vertical-align: middle;
+      }
+
+      /* ============================================================
+           截图状态冻结：强制停止所有动画（防止旋转按钮消失）
+        ============================================================ */
+      body.is-capturing *,
+      body.is-capturing *::before,
+      body.is-capturing *::after {
+        animation: none !important;
+        transition: none !important;
+        /* transform: none !important; 取消这行，防止破坏正常的排版定位 */
+      }
+
+      /* ================= 极致美化的设置界面 ================= */
+      .settings-view {
+        background: #f3f4f6 !important; /* 改变底色为浅灰，凸显纯白卡片 */
+      }
+
+      .settings-section-title {
+        font-size: 12.5px;
+        font-weight: 600;
+        color: #6b7280;
+        margin: 16px 0 8px 4px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .settings-card {
+        background: #ffffff;
+        border-radius: 24px;
+        padding: 20px;
+        border: 1px solid rgba(0, 0, 0, 0.05);
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+        margin-bottom: 20px;
+      }
+
+      /* 高级输入框 */
+      .form-input {
+        background-color: #f9fafb;
+        border: 1px solid #e5e7eb;
+        transition: all 0.25s ease;
+      }
+      .form-input:hover {
+        background-color: #ffffff;
+        border-color: #d1d5db;
+      }
+      .form-input:focus {
+        background-color: #ffffff;
+        border-color: var(--accent-color);
+        box-shadow: 0 0 0 4px rgba(52, 120, 246, 0.15) !important;
+      }
+
+      /* 隐藏原生 Radio */
+      .custom-radio input[type="radio"] {
+        display: none;
+      }
+      .custom-radio {
+        position: relative;
+        overflow: hidden;
+      }
+      /* 选中状态右上角小角标 (可选增强) */
+      .custom-radio.active::after {
+        content: "✓";
+        position: absolute;
+        top: -2px;
+        right: 6px;
+        color: var(--accent-color);
+        font-weight: 900;
+        font-size: 16px;
+      }
+
+      /* ================= 升级 2：iOS 原生 Toggle 挤压引擎 ================= */
+      .ios-toggle {
+        position: relative;
+        width: 46px; /* 原生稍宽一点 */
+        height: 28px;
+        appearance: none;
+        -webkit-appearance: none;
+        background: #e9e9eb;
+        border-radius: 24px;
+        outline: none;
+        cursor: pointer;
+        /* 背景色过渡要快且平滑 */
+        transition: background 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .ios-toggle::after {
+        content: "";
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 24px;
+        height: 24px;
+        background: white;
+        border-radius: 50%;
+        box-shadow:
+          0 2px 5px rgba(0, 0, 0, 0.15),
+          0 1px 1px rgba(0, 0, 0, 0.05);
+        /* 给宽度和位移赋予弹簧曲线 */
+        transition:
+          transform 0.4s var(--curve-pop),
+          width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .ios-toggle:checked {
+        background: #34c759; /* Apple 原生高亮绿 */
+      }
+      .ios-toggle:checked::after {
+        transform: translateX(18px);
+      }
+      /* 🌟 灵魂注入：按下时的物理挤压变形 */
+      .ios-toggle:active::after {
+        width: 32px; /* 变扁长 */
+      }
+      .ios-toggle:checked:active::after {
+        transform: translateX(10px); /* 往左补偿挤压的宽度 */
+      }
+
+      /* ================= 新增：iOS 风格行列表 (用于字体选择) ================= */
+      .list-row-group {
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        overflow: hidden;
+        background: #ffffff;
+      }
+      .list-row-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 16px;
+        cursor: pointer;
+        transition: background 0.2s;
+        border-bottom: 1px solid #f3f4f6;
+      }
+      .list-row-item:last-child {
+        border-bottom: none;
+      }
+      .list-row-item:hover {
+        background: #f9fafb;
+      }
+      .list-row-item:active {
+        background: #f3f4f6;
+      }
+
+      /* 原生风格单选勾号 */
+      .row-check {
+        color: transparent;
+        font-weight: 900;
+        font-size: 16px;
+        transition: color 0.2s;
+      }
+      .list-row-item.active .row-check {
+        color: var(--accent-color);
+      }
+
+      /* ================= 新增：分段控制器 (用于追踪模式) ================= */
+      .segmented-control {
+        display: flex;
+        background: #f3f4f6;
+        padding: 3px;
+        border-radius: 8px;
+      }
+      .segment-item {
+        flex: 1;
+        text-align: center;
+        padding: 8px 0;
+        font-size: 13px;
+        font-weight: 600;
+        color: #6b7280;
+        cursor: pointer;
+        border-radius: 6px;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .segment-item.active {
+        background: #ffffff;
+        color: #111827;
+        box-shadow:
+          0 1px 3px rgba(0, 0, 0, 0.08),
+          0 1px 2px rgba(0, 0, 0, 0.04);
+      }
+
+      /* 胶囊式多选按钮 (订阅管理) */
+      .subs-chip {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 14px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 600;
+        background: #f3f4f6;
+        color: #4b5563;
+        border: 1px solid transparent;
+        cursor: pointer;
+        transition: all 0.2s;
+        user-select: none;
+        gap: 12px;
+      }
+      .subs-chip:hover {
+        background: #e5e7eb;
+      }
+      .subs-chip:active {
+        transform: scale(0.95);
+      }
+      .subs-chip input[type="checkbox"] {
+        display: none;
+      }
+
+      /* 🌟 订阅管理选中态（统一白色字体，背景色由 :style 动态设置） */
+      .subs-chip.subs-chip-active {
+        color: #ffffff;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      }
+
+      /* 🌟 订阅管理图标样式 */
+      .subs-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        transition: background-color 0.2s ease;
+      }
+
+      .subs-icon svg {
+        width: 18px;
+        height: 18px;
+      }
+
+      /* ================= 新增：置顶图钉按钮 ================= */
+      .badge-pin {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        color: #ff6b78;
+        background: #f5b7b7;
+        padding: 4px 6px;
+        border-radius: 7px; /* 增加圆润度和宽度 */
+        border: 1px solid #ed848d;
+        cursor: pointer;
+        position: relative;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        opacity: 1;
+      }
+      .badge-pin:hover {
+        background: #f5b7b7;
+        color: #ff6b78;
+        opacity: 1;
+      }
+
+      /* 激活状态 (已置顶)： */
+      .badge-pin.is-pinned {
+        /* 从原先的厚重纯色背景解放，改为精致的"白底 + 主题色内容" */
+        color: #ff6b78; /* 图标变为品牌主题色，自动适配 DeepSeek 蓝/GPT 绿 */
+        background: #f5b7b7; /* 背景保持干净的白色，融入详情页卡片 */
+        border-color: #ff6b78; /* 边框使用品牌主题色强调 */
+        opacity: 1;
+
+        /* 增加一个带有品牌色的柔和发光投影，而不是生硬的阴影 */
+        box-shadow: 0 6px 20px -5px rgba(0, 0, 0, 0.08); /* 基础柔和投影 */
+      }
+      .badge-pin.is-pinned:hover {
+        background: #f5b7b7;
+        border-color: #ff6b78;
+        transform: scale(1.05); /* 悬停时稍微放大，物理反馈更好 */
+        box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.12);
+      }
+
+      /* 图钉专属的物理点击动画 */
+      @keyframes pin-push {
+        0% {
+          transform: scale(1) translateY(0);
+        }
+        40% {
+          transform: scale(0.85) translateY(2px) rotate(-15deg);
+        }
+        100% {
+          transform: scale(1) translateY(0) rotate(0deg);
+        }
+      }
+      .pin-anim {
+        animation: pin-push 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+
+      /* 加载状态：变圆并在极光中心 */
+      .btn-check.loading {
+        width: 38px !important;
+        height: 38px !important; /* 🌟 修复：必须同时设置高度才能保持正圆 */
+        border-radius: 50% !important;
+        background: transparent !important;
+        color: transparent !important;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06) !important;
+        /* 🌟 确保不会被其他 transform 影响 */
+        transform: none !important;
+        /* 🌟 允许彩虹外扩显示 */
+        overflow: visible !important;
+      }
+      /* 4. 🌈 彩虹极光动画：柔和、旋转 */
+      .aurora-light {
+        position: absolute;
+        inset: -4px;
+        border-radius: 50%;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.5s ease;
+        overflow: hidden;
+        z-index: 10; /* 置顶显示 */
+      }
+      /* 彩虹渐变放在伪元素中，可以被 overflow: hidden 裁剪成圆形 */
+      .aurora-light::before {
+        content: "";
+        position: absolute;
+        inset: -15px; /* 比 blur 大，确保模糊后仍覆盖整个区域 */
+        background: conic-gradient(
+          from 0deg,
+          #ffb3ba,
+          #ffffba,
+          #baffc9,
+          #bae1ff,
+          #d5baff,
+          #ffb3ba
+        );
+        filter: blur(10px);
+      }
+
+      .btn-check.loading .aurora-light {
+        opacity: 0.85;
+        animation: aurora-spin 4s linear infinite; /* 极光转速不宜过快 */
+      }
+      @keyframes aurora-spin {
+        0% {
+          transform: rotate(0deg) translateZ(0);
+        }
+        100% {
+          transform: rotate(360deg) translateZ(0);
+        }
+      }
+
+      /* =========================================
+           公文列表筛选过渡动画（已禁用）
+           ========================================= */
+      /* 确保外层容器有相对定位 */
+      .relative-container {
+        position: relative;
+      }
+
+      /* ============================================================
+         🌟 详情页右上角功能徽章：V2 高级物理微交互动画
+         ============================================================ */
+      :root {
+        --curve-apple-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+
+      /* 强制所有徽章开启硬件加速，防止动画期间文字和图标抖动 */
+      .badge-attachment,
+      .badge-snapshot,
+      .badge-refresh,
+      .badge-favorite,
+      .badge-home,
+      .badge-pin {
+        will-change: transform;
+      }
+
+      /* 1. 【附件】：向下俯冲 (Dive Down) */
+      @keyframes dive-down-v2 {
+        0% {
+          transform: translateY(0);
+        }
+        15% {
+          transform: scaleY(1.08);
+        }
+        55% {
+          transform: translateY(10px) scaleY(0.7);
+        }
+        100% {
+          transform: translateY(0) scaleY(1);
+        }
+      }
+      .badge-attachment.is-animating {
+        animation: dive-down-v2 0.5s var(--curve-apple-spring) !important;
+      }
+
+      /* 2. 【截图】：快门闪烁与重力按压 (Shutter Press) */
+      @keyframes shutter-press-v2 {
+        0% {
+          transform: scale(1);
+        }
+        15% {
+          transform: scale(0.8);
+        }
+        85% {
+          transform: scale(0.96);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+      .badge-snapshot.is-animating {
+        animation: shutter-press-v2 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+        transform: none;
+      }
+
+      /* 3. 【刷新 / AI生成】：弹性回旋 (Elastic Spin) */
+      @keyframes elastic-spin-v2 {
+        0% {
+          transform: rotate(0deg) scale(1);
+        }
+        50% {
+          transform: rotate(180deg) scale(0.7);
+        }
+        100% {
+          transform: rotate(360deg) scale(1);
+        }
+      }
+      /* 注意刷新动画作用于 svg 图标本身 */
+      .badge-refresh.is-animating .icon-svg {
+        animation: elastic-spin-v2 1.2s cubic-bezier(0.68, -0.55, 0.26, 1.55) !important;
+      }
+      .badge-refresh.is-animating {
+        transform: none; /* 防止外层容器缩小，只让内部图标旋转 */
+      }
+
+      /* 4. 【收藏】：心跳爆破 (Pop & Burst) */
+      @keyframes star-pop-v2 {
+        0% {
+          transform: scale(1);
+        }
+        20% {
+          transform: scale(0.65);
+        }
+        55% {
+          transform: scale(1.45) rotate(15deg);
+        }
+        80% {
+          transform: scale(0.9) rotate(-3deg);
+        }
+        100% {
+          transform: scale(1) rotate(0deg);
+        }
+      }
+      .badge-favorite.is-animating {
+        animation: star-pop-v2 0.6s var(--curve-apple-spring) !important;
+        transform: none;
+      }
+
+      /* 5. 【Home / 返回】：向左抽离 (Swoop Back) */
+      @keyframes swoop-back-v2 {
+        0% {
+          transform: translateX(0) scale(1) rotate(0);
+        }
+        15% {
+          transform: scale(1.03);
+        }
+        50% {
+          transform: translateX(-10px) scale(0.85) rotate(-6deg);
+        }
+        80% {
+          transform: translateX(2px) scale(1.02) rotate(1deg);
+        }
+        100% {
+          transform: translateX(0) scale(1) rotate(0deg);
+        }
+      }
+      .badge-home.is-animating {
+        animation: swoop-back-v2 0.5s var(--curve-apple-spring) !important;
+        transform: none;
+      }
+      /* ================= 绝杀 2：瀑布流阻尼入场 ================= */
+      @keyframes cardStaggerIn {
+        0% {
+          opacity: 0;
+          transform: translateY(40px) scale(0.96);
+        }
+        100% {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+
+      .list-card,
+      .announcement-card {
+        /* backwards 确保在动画延迟期间，卡片保持在 0% 的透明隐藏状态 */
+        animation: cardStaggerIn 0.65s var(--curve-pop) backwards;
+      }
+
+      /* 设置卡片使用更流畅的专用动画 */
+      .settings-card {
+        animation: settingsCardIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+        animation-delay: var(--delay, 0s);
+      }
+
+      /* 设置分隔线入场动画 */
+      .settings-section-divider {
+        animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+      }
+
+      @keyframes settingsCardIn {
+        0% {
+          opacity: 0;
+          transform: translateY(16px) scale(0.98);
+        }
+        100% {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+
+      @keyframes fadeInUp {
+        0% {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        100% {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      /* 利用 CSS 子选择器，为前 10 个卡片自动分配时间差 */
+      .list-card:nth-child(1) {
+        animation-delay: 0s;
+      }
+      .list-card:nth-child(2) {
+        animation-delay: 0.04s;
+      }
+      .list-card:nth-child(3) {
+        animation-delay: 0.08s;
+      }
+      .list-card:nth-child(4) {
+        animation-delay: 0.12s;
+      }
+      .list-card:nth-child(5) {
+        animation-delay: 0.16s;
+      }
+      .list-card:nth-child(6) {
+        animation-delay: 0.2s;
+      }
+      .list-card:nth-child(7) {
+        animation-delay: 0.24s;
+      }
+      .list-card:nth-child(8) {
+        animation-delay: 0.28s;
+      }
+      .list-card:nth-child(9) {
+        animation-delay: 0.32s;
+      }
+      .list-card:nth-child(10) {
+        animation-delay: 0.36s;
+      }
+
+      /* ============================================================
+         📸 【彩色虹膜快照】：机械下压与绞合动效 (Colorful Iris Morph)
+         ============================================================ */
+
+      /* 🌟 物理模拟 1：内部图标的"Q弹虹膜绞合" */
+      /* 动画核心：旋转 + 收缩 = 物理闭合感 */
+      @keyframes colorful-iris-morph {
+        0% {
+          transform: rotate(0deg) scale(1);
+        }
+        15% {
+          transform: rotate(120deg) scale(0.6);
+        } /* 极速旋转蓄力，并收缩成点，产生极致的闭合物理压强 */
+        30% {
+          transform: rotate(115deg) scale(0.62);
+        } /* 微小的过冲和稳定，模拟机械到达终点 */
+        100% {
+          transform: rotate(0deg) scale(1);
+        } /* 伴随着强烈的弹簧惯性，Q弹地弹回初始状态 */
+      }
+
+      /* 当 JS 添加 is-animating 类时，触发内部 svg 图标动画 */
+      .badge-snapshot.is-animating .icon-svg {
+        transform-origin: center center; /* 确保围绕正中心旋转 */
+        /* 使用你项目里自带的 Apple Store 级物理回弹曲线 */
+        animation: colorful-iris-morph 0.6s var(--curve-pop);
+      }
+
+      /* 🌟 物理模拟 2：按钮本体的"重力下压" */
+      @keyframes hard-press-v3 {
+        0% {
+          transform: scale(1);
+        }
+        15% {
+          transform: scale(0.92);
+        } /* 快速按到底，产生清脆的物理反馈 */
+        100% {
+          transform: scale(1);
+        } /* 弹簧般恢复 */
+      }
+
+      /* 应用按钮整体的下压动画 */
+      .badge-snapshot.is-animating {
+        /* 使用强力的阻尼曲线模拟手指重按 */
+        animation: hard-press-v3 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+        transform: none; /* 强制覆盖悬浮态的放大效果，确保按压清脆 */
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); /* 按下时降低阴影，模拟贴近背景 */
+      }
+
+      /* ============================================================
+         🌟 新增：原生 App 级未读角标 (高级立体微光版)
+         ============================================================ */
+      .unread-badge {
+        position: absolute;
+        top: 0px; /* 稍微往上提一点，显得更轻盈 */
+        right: -6px;
+
+        /* 🌟 质感升级 1：废弃死板的纯色，改用极微弱的斜向渐变，模拟球面的立体光泽 */
+        background: linear-gradient(135deg, #ff5a54 0%, #ff3b30 100%);
+        color: #ffffff;
+        font-size: 10px;
+        font-weight: 700;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+
+        /* 🌟 形状升级：让 height 和 min-width 完全相等，这样单个数字时绝对是完美的正圆 */
+        height: 18px;
+        min-width: 18px;
+        padding: 0 5px; /* 当数字变成 99+ 时，两边会自然撑开成优雅的胶囊 */
+        border-radius: 18px;
+        box-sizing: border-box;
+
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+
+        /* 🌟 质感升级 2：彻底砍掉生硬的白边，改为高级的内外光影叠加 */
+        border: none;
+        box-shadow:
+          0 4px 10px rgba(255, 59, 48, 0.4),
+          /* 底部：柔和的红色漫反射光晕（苹果味的核心） */ inset 0 1px 1px
+            rgba(255, 255, 255, 0.35); /* 顶部：一道极细的纯白高光，像玻璃珠的反光 */
+
+        pointer-events: none;
+        z-index: 10;
+
+        /* 使用你项目里的 Q弹 曲线 */
+        animation: badge-pop 0.5s var(--curve-pop);
+      }
+
+      @keyframes badge-pop {
+        0% {
+          transform: scale(0);
+          opacity: 0;
+        }
+        50% {
+          transform: scale(1.15);
+        } /* 稍微收敛一点放大倍数，更精致 */
+        100% {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+      /* ============================================================
+         🌟 新增：Apple 级优雅消息提醒引擎 (基于现有的 #app)
+         ============================================================ */
+
+      /* 入场动画：从上方掉落 + 果冻弹跳 */
+      .toast-enter-active {
+        transition:
+          transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1),
+          opacity 0.3s ease-out;
+      }
+
+      /* 入场起点：从上方 -50px 掉落（使用组合选择器提高优先级） */
+      .apple-toast.toast-enter-from {
+        opacity: 0 !important;
+        transform: translateY(-50px) scale(0.95) !important;
+      }
+
+      /* 入场终点：归位到原位 */
+      .apple-toast.toast-enter-to {
+        opacity: 1 !important;
+        transform: translateY(0) scale(1) !important;
+      }
+
+      /* 退场动画：向上滑出并淡出 */
+      .toast-leave-active {
+        transition:
+          opacity 0.35s ease-out,
+          transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      /* 🌟 使用组合选择器提高优先级，确保退场动画生效 */
+      .apple-toast.toast-leave-to {
+        opacity: 0 !important;
+        transform: translateY(-20px) scale(0.95) !important;
+      }
+
+      /* 通知悬浮池：全局遮罩层 */
+      .notification-pool {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        padding-top: 16px;
+        z-index: 10001;
+        pointer-events: none;
+      }
+
+      /* 🌟 堆叠容器：垂直排列 */
+      .toast-stack {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        position: relative;
+        width: 100%;
+        max-width: 400px;
+      }
+
+      /* 🌟 move 动画：当元素位置变化时的平滑过渡 */
+      .toast-move {
+        transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+
+      /* 横幅本体：继承你现有的高级毛玻璃体系 */
+      .apple-toast {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 20px 10px 12px;
+        border-radius: 32px; /* 更圆润 */
+        pointer-events: auto;
+
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(25px) saturate(180%);
+        -webkit-backdrop-filter: blur(24px) saturate(200%);
+
+        box-shadow:
+          0 8px 28px rgba(0, 0, 0, 0.12),
+          0 0 0 0.5px rgba(0, 0, 0, 0.02),
+          inset 0 0.5px 0 rgba(255, 255, 255, 0.6);
+
+        /* 默认状态（非动画时的最终状态） */
+        transform: translateY(0) scale(1);
+        opacity: 1;
+
+        /* 提前创建合成层，防止过渡闪烁 */
+        will-change: transform, opacity;
+      }
+
+      /* ============================================================
+         🎨 Apple 级 Toast 图标与色彩体系
+         ============================================================ */
+      .toast-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        color: #ffffff; /* 统一内部图标为纯白色 */
+        flex-shrink: 0;
+        transition: all 0.3s ease;
+      }
+
+      /* 统一调整图标尺寸：14px 能让实心图标和线框图标达到视觉重量的平衡 */
+      .toast-icon svg {
+        width: 14px;
+        height: 14px;
+      }
+
+      /* 1. 成功 (Success) - Apple System Green */
+      .toast-icon.success {
+        background: #34c759;
+        box-shadow: 0 4px 10px rgba(52, 199, 89, 0.3); /* 独家秘方：同色系弥散光晕 */
+      }
+
+      /* 2. 警告 (Warning) - Apple System Orange */
+      /* 注意：系统警告在浅色模式下绝对不用黄色，黄色白字看不清，必须用橙色 */
+      .toast-icon.warning {
+        background: #ff9500;
+        box-shadow: 0 4px 10px rgba(255, 149, 0, 0.3);
+      }
+
+      /* 3. 错误 (Error) - Apple System Red */
+      .toast-icon.error {
+        background: #ff3b30;
+        box-shadow: 0 4px 10px rgba(255, 59, 48, 0.3);
+      }
+
+      /* 4. 信息 (Info) - Apple System Blue */
+      .toast-icon.info {
+        background: #007aff;
+        box-shadow: 0 4px 10px rgba(0, 122, 255, 0.3);
+      }
+
+      /* 5. 收藏 (Favorite) - Apple Deep Yellow / Dark Orange */
+      /* 为了保证在白字下的对比度，使用了比纯黄略深的橘黄色 */
+      .toast-icon.favorite {
+        background: #ff9f0a;
+        box-shadow: 0 4px 10px rgba(255, 159, 10, 0.3);
+      }
+
+      .toast-content {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      .toast-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: #1d1d1f;
+        line-height: 1.2;
+      }
+      .toast-message {
+        font-size: 12px;
+        font-weight: 400;
+        color: #86868b;
+        margin-top: 2px;
+        white-space: nowrap;
+      }
+
+      /* 设置卡片容器 */
+      .settings-cards-container {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .settings-card {
+        cursor: default !important;
+        padding: 16px 20px;
+        display: block;
+      }
+
+      .settings-card:hover {
+        transform: translateY(-2px);
+        border-color: rgba(0, 0, 0, 0.06);
+        box-shadow:
+          0 4px 8px rgba(0, 0, 0, 0.03),
+          0 8px 16px rgba(0, 0, 0, 0.05);
+      }
+
+      .settings-card:active {
+        transform: translateY(0) scale(0.96);
+        background-color: #f9fafb;
+        transition:
+          transform 0.2s cubic-bezier(0.2, 0.9, 0.4, 1.1),
+          filter 0.2s ease,
+          background-color 0.2s ease;
+      }
+
+      .settings-card-title {
+        font-size: 15px;
+        font-weight: 600;
+        margin-bottom: 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .value-indicator {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--accent-color);
+      }
+
+      .range-slider {
+        width: 100%;
+        accent-color: var(--accent-color);
+        cursor: pointer;
+        margin: 8px 0;
+      }
+
+      .range-labels {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        color: #9ca3af;
+        font-weight: 500;
+        margin-top: 4px;
+      }
+
+      .settings-hint {
+        font-size: 11px;
+        color: #6b7280;
+        margin-top: 8px;
+        text-align: center;
+      }
+
+      .subs-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      /* 🌟 订阅管理网格布局（公文通单独一行，其余两列） */
+      .subs-grid-container {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .subs-row-first {
+        display: flex;
+        width: 100%;
+      }
+
+      .subs-row-first .subs-chip {
+        flex: 1;
+      }
+
+      .subs-grid-columns {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+      }
+
+      .subscriber-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 8px;
+      }
+
+      .subscriber-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        background: #f3f4f6;
+        border-radius: 6px;
+        font-size: 12px;
+      }
+
+      .remove-tag {
+        cursor: pointer;
+        color: #9ca3af;
+        font-weight: bold;
+      }
+
+      .remove-tag:hover {
+        color: #ef4444;
+      }
+
+      .toggle-visibility-btn {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--accent-color);
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .settings-card-actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      .test-connection-btn,
+      .test-email-btn,
+      .diagnose-email-btn,
+      .push-test-btn {
+        background: #f3f4f6;
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+        padding: 6px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-sub);
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .test-connection-btn:hover,
+      .test-email-btn:hover,
+      .diagnose-email-btn:hover,
+      .push-test-btn:hover {
+        background: #e5e7eb;
+      }
+
+      .test-connection-btn:active,
+      .test-email-btn:active,
+      .diagnose-email-btn:active,
+      .push-test-btn:active {
+        transform: scale(0.96);
+      }
+
+      .diagnose-email-btn:disabled,
+      .push-test-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      /* System Prompt 预览卡片 */
+      .prompt-preview-card {
+        cursor: pointer !important;
+      }
+
+      .prompt-preview-card:hover {
+        background: #fef9e6;
+        border-color: #ffd966;
+      }
+
+      .edit-badge {
+        font-size: 11px;
+        font-weight: 500;
+        background: rgba(0, 0, 0, 0.05);
+        padding: 2px 8px;
+        border-radius: 12px;
+        color: #666;
+      }
+
+      .prompt-preview {
+        font-size: 13px;
+        color: #6b7280;
+        line-height: 1.5;
+        max-height: 25px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        line-clamp: 3;
+        -webkit-box-orient: vertical;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      /* 模块标题样式 */
+      .settings-section-divider {
+        display: flex;
+        align-items: center;
+        margin: 8px 12px 2px; /* 负 margin-bottom 抵消容器的 gap */
+        color: #9ca3af;
+      }
+
+      /* 第一个模块标题顶部间距减小 */
+      .settings-section-divider:first-of-type {
+        margin-top: 2px;
+      }
+
+      /* 去掉分界线 */
+      .settings-section-divider::before,
+      .settings-section-divider::after {
+        display: none;
+      }
+
+      /* ============================================================
+   🍎 Apple 风格设置卡片优化
+   ============================================================ */
+
+      /* 卡片容器整体圆角与间距优化 */
+      .settings-cards-container {
+        gap: 12px;
+      }
+
+      .settings-card {
+        border-radius: 20px !important;
+        padding: 14px 16px !important;
+        margin-bottom: 0 !important;
+        background: #ffffff;
+        box-shadow:
+          0 2px 8px rgba(0, 0, 0, 0.02),
+          0 1px 2px rgba(0, 0, 0, 0.03);
+        transition: all 0.35s var(--curve-pop);
+        border: none !important;
+      }
+
+      /* 紧凑卡片 - 更小的padding */
+      .settings-card.compact {
+        padding: 10px 16px !important;
+      }
+
+      .settings-card:hover {
+        transform: translateY(-2px);
+        box-shadow:
+          0 8px 20px rgba(0, 0, 0, 0.04),
+          0 2px 4px rgba(0, 0, 0, 0.02);
+      }
+
+      .settings-card:active {
+        transform: translateY(0) scale(0.98);
+      }
+
+      /* 水平布局行 - 用于标签+输入的组合 */
+      .settings-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      /* 卡片标签样式 - 淡色细字 */
+      .settings-label {
+        font-size: 13px;
+        font-weight: 400;
+        color: #86868b;
+        flex-shrink: 0;
+        white-space: nowrap;
+      }
+
+      /* 输入区域容器 */
+      .settings-input-area {
+        flex: 1;
+        max-width: 280px;
+        display: flex;
+        justify-content: flex-end;
+      }
+
+      /* 卡片标题样式 - 保持兼容旧结构 */
+      .settings-card-title {
+        font-size: 13px;
+        font-weight: 400;
+        color: #86868b;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      /* 旧版标题样式覆盖 - 当标题单独一行时 */
+      .settings-card > .settings-card-title:only-child {
+        font-size: 13px;
+        font-weight: 400;
+        color: #86868b;
+      }
+
+      /* 输入框 Apple 风格优化 */
+      .form-input {
+        background-color: #f5f5f7 !important;
+        border: none !important;
+        border-radius: 12px !important;
+        padding: 8px 12px !important;
+        font-size: 14px;
+        font-weight: 500;
+        color: #1d1d1f;
+        transition: all 0.2s ease;
+        width: 100%;
+      }
+
+      .form-input:hover {
+        background-color: #ffffff !important;
+      }
+
+      .form-input:focus {
+        background-color: #ffffff !important;
+        box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1) !important;
+        outline: none;
+      }
+
+      .form-input::placeholder {
+        color: #c7c7cc;
+        font-weight: 400;
+      }
+
+      /* API Key 输入框基础样式 */
+      .api-key-input {
+        padding-right: 44px !important;
+      }
+
+      /* API Key 密码掩码间距 - 更稀疏的圆点 */
+      .api-key-input.password-masked {
+        letter-spacing: 3px;
+      }
+
+      /* 眼睛图标按钮 */
+      .toggle-visibility-btn.icon-only {
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%) !important;
+        background: transparent !important;
+        border: none !important;
+        border-radius: 0 !important;
+        padding: 6px !important;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #8e8e93;
+        font-size: inherit;
+        font-weight: inherit;
+        transition: color 0.2s ease;
+        z-index: 1;
+      }
+
+      .toggle-visibility-btn.icon-only:hover {
+        color: #1d1d1f;
+        background: transparent !important;
+        transform: translateY(-50%) !important;
+      }
+
+      .toggle-visibility-btn.icon-only:active {
+        transform: translateY(-50%) scale(0.95) !important;
+      }
+
+      .eye-icon {
+        width: 18px;
+        height: 12px;
+        pointer-events: none;
+      }
+
+      /* 设置卡片操作区域 */
+      .settings-card-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      /* 添加订阅者按钮 */
+      .add-subscriber-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border: none;
+        border-radius: 10px;
+        background: transparent;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        padding: 0;
+      }
+
+      .add-subscriber-btn:hover {
+        background: rgba(52, 199, 89, 0.1);
+      }
+
+      .add-subscriber-btn:active {
+        transform: scale(0.95);
+      }
+
+      .add-subscriber-btn .add-icon {
+        width: 20px;
+        height: 20px;
+      }
+
+      /* 设置卡片提示文字 */
+      .settings-hint {
+        font-size: 12px;
+        color: #86868b;
+        margin-top: 8px;
+      }
+
+      /* ==================== 🕷️ 自定义爬虫规则样式 ==================== */
+
+      /* 规则列表容器 */
+      .custom-rules-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      /* 单条规则 */
+      .custom-rule-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+        background: #f5f5f7;
+        border-radius: 10px;
+        transition: all 0.2s ease;
+      }
+
+      .custom-rule-item:hover {
+        background: #ebedf0;
+      }
+
+      .rule-info {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .rule-name {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-main);
+        margin-bottom: 4px;
+      }
+
+      .rule-url {
+        font-size: 12px;
+        color: #86868b;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .rule-meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: #86868b;
+      }
+
+      .rule-purpose {
+        background: rgba(0, 122, 255, 0.1);
+        color: #007aff;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        white-space: nowrap;
+      }
+
+      .rule-actions {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        margin-left: 16px;
+      }
+
+      .rule-actions .btn-icon {
+        position: relative;
+        width: 34px;
+        height: 34px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        color: #86868b;
+        transition: all 0.2s ease;
+      }
+
+      .rule-actions .btn-icon:hover {
+        background: rgba(0, 122, 255, 0.1);
+        color: #007aff;
+      }
+
+      .rule-actions .btn-icon.btn-danger:hover {
+        background: rgba(255, 59, 48, 0.1);
+        color: #ff3b30;
+      }
+
+      /* 空状态 */
+      .custom-rules-empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        color: #86868b;
+        gap: 8px;
+      }
+
+      .custom-rules-empty span {
+        font-size: 13px;
+      }
+
+      /* ============================================================
+         备选模型配置卡片样式
+         ============================================================ */
+      .secondary-models-card {
+        overflow: hidden;
+      }
+
+      .secondary-models-content {
+        overflow: hidden;
+        transition: all 0.3s ease;
+      }
+
+      .secondary-models-list {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .secondary-model-item {
+        background: #f5f5f7;
+        border-radius: 10px;
+        padding: 14px;
+        border: 1px solid #e9e9ef;
+      }
+
+      .model-item-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+
+      .model-index {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-main);
+      }
+
+      .btn-remove-model {
+        background: transparent;
+        border: none;
+        color: #86868b;
+        cursor: pointer;
+        padding: 4px;
+        border-radius: 6px;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .btn-remove-model:hover {
+        background: #ff3b30;
+        color: white;
+      }
+
+      .model-field {
+        margin-bottom: 10px;
+      }
+
+      .model-field:last-of-type {
+        margin-bottom: 0;
+      }
+
+      .model-field label {
+        display: block;
+        font-size: 12px;
+        color: #86868b;
+        margin-bottom: 4px;
+        font-weight: 500;
+      }
+
+      .model-field .settings-input {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #e9e9ef;
+        border-radius: 6px;
+        font-size: 13px;
+        background: white;
+        transition: all 0.2s;
+      }
+
+      .model-field .settings-input:focus {
+        outline: none;
+        border-color: #007aff;
+        box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+      }
+
+      .model-field .input-with-toggle {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .model-field .input-with-toggle .settings-input {
+        flex: 1;
+      }
+
+      .model-test-row {
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid #e9e9ef;
+        display: flex;
+        justify-content: flex-end;
+      }
+
+      .btn-add-secondary-model {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        width: 100%;
+        padding: 12px;
+        background: #f5f5f7;
+        border: 1px dashed #d1d1d6;
+        border-radius: 8px;
+        color: #007aff;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        margin-top: 8px;
+      }
+
+      .btn-add-secondary-model:hover {
+        background: #e8f4fd;
+        border-color: #007aff;
+      }
+
+      .model-count-hint {
+        color: #86868b;
+        font-weight: 400;
+      }
+
+      .model-limit-hint {
+        text-align: center;
+        color: #86868b;
+        font-size: 12px;
+        margin-top: 12px;
+        padding: 8px;
+        background: #f5f5f7;
+        border-radius: 6px;
+      }
+
+      /* 规则向导弹窗 */
+      .custom-rule-modal {
+        max-width: 560px;
+        width: 90%;
+      }
+
+      .rule-form {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+
+      .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+
+      .form-label {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-main);
+      }
+
+      .form-input {
+        width: 100%;
+        padding: 10px 14px;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        font-size: 14px;
+        transition: all 0.2s ease;
+        background: #fafafa;
+      }
+
+      .form-input:focus {
+        outline: none;
+        border-color: var(--accent-color);
+        background: #fff;
+        box-shadow: 0 0 0 3px rgba(64, 143, 247, 0.1);
+      }
+
+      /* 动态字段区域 */
+      .dynamic-fields {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .field-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .field-row .form-input {
+        flex: 1;
+      }
+
+      /* 样本预览区 */
+      .preview-section {
+        animation: fadeIn 0.3s ease;
+      }
+
+      .preview-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 16px;
+        background: linear-gradient(135deg, #10b981, #059669);
+        border-radius: 10px;
+        color: #fff;
+        font-weight: 500;
+        margin-bottom: 16px;
+      }
+
+      .preview-data {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        max-height: 320px;
+        overflow-y: auto;
+      }
+
+      .preview-item {
+        background: #f9fafb;
+        border-radius: 10px;
+        padding: 12px 16px;
+        border: 1px solid #e5e7eb;
+      }
+
+      .preview-item-header {
+        font-size: 11px;
+        font-weight: 600;
+        color: #6b7280;
+        text-transform: uppercase;
+        margin-bottom: 10px;
+        letter-spacing: 0.5px;
+      }
+
+      .preview-item-content {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .preview-field {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        font-size: 13px;
+      }
+
+      .preview-key {
+        font-weight: 600;
+        color: #374151;
+        min-width: 80px;
+        flex-shrink: 0;
+      }
+
+      .preview-value {
+        color: #6b7280;
+        word-break: break-all;
+      }
+
+      /* 选择器微调面板 */
+      .selector-tuning-panel {
+        margin-top: 16px;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        overflow: hidden;
+        background: #fff;
+      }
+
+      .tuning-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 16px;
+        background: #f9fafb;
+        cursor: pointer;
+        user-select: none;
+        transition: background 0.2s ease;
+      }
+
+      .tuning-header:hover {
+        background: #f3f4f6;
+      }
+
+      .tuning-header svg {
+        color: #6b7280;
+      }
+
+      .tuning-header span {
+        flex: 1;
+        font-size: 13px;
+        font-weight: 500;
+        color: #374151;
+      }
+
+      .tuning-header .chevron {
+        transition: transform 0.2s ease;
+      }
+
+      .tuning-header .chevron.rotated {
+        transform: rotate(180deg);
+      }
+
+      .tuning-content {
+        padding: 16px;
+        border-top: 1px solid #e5e7eb;
+      }
+
+      .tuning-hint {
+        font-size: 12px;
+        color: #6b7280;
+        margin-bottom: 12px;
+        padding: 8px 12px;
+        background: #fef3c7;
+        border-radius: 6px;
+        border: 1px solid #fcd34d;
+      }
+
+      .selector-inputs {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .selector-group {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .selector-group label {
+        font-size: 12px;
+        font-weight: 500;
+        color: #374151;
+      }
+
+      .selector-group input {
+        padding: 8px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 13px;
+        font-family: 'SF Mono', 'Consolas', monospace;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      .selector-group input:focus {
+        outline: none;
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+      }
+
+      .selector-group input::placeholder {
+        color: #9ca3af;
+      }
+
+      .selector-inputs .divider {
+        height: 1px;
+        background: #e5e7eb;
+        margin: 4px 0;
+      }
+
+      .btn-retest {
+        margin-top: 16px;
+        width: 100%;
+        padding: 10px 16px;
+        background: linear-gradient(135deg, #3b82f6, #2563eb);
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      .btn-retest:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+      }
+
+      .btn-retest:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .btn-retest .spinner {
+        animation: spin 1s linear infinite;
+      }
+
+      /* 自定义爬虫规则弹窗中的按钮图标样式 */
+      .custom-rule-modal .btn-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border: none;
+        border-radius: 8px;
+        background: transparent;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        color: #6b7280;
+      }
+
+      .custom-rule-modal .btn-icon:hover {
+        background: #f3f4f6;
+      }
+
+      /* 专属 AI 提示词输入框 */
+      .custom-prompt-group {
+        padding: 12px;
+        background: #f9fafb;
+        border-radius: 8px;
+        border: 1px solid #e5e7eb;
+      }
+
+      .custom-prompt-group label {
+        font-size: 13px;
+        font-weight: 500;
+        color: #374151;
+      }
+
+      .custom-prompt-group .form-textarea {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 13px;
+        line-height: 1.5;
+        resize: vertical;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      .custom-prompt-group .form-textarea:focus {
+        outline: none;
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+      }
+
+      .custom-prompt-group .form-textarea::placeholder {
+        color: #9ca3af;
+      }
+
+      .custom-rule-modal .btn-icon.btn-danger:hover {
+        background: #fef2f2;
+        color: #ef4444;
+      }
+
+      /* 模态框样式补充 */
+      .modal-content {
+        background: #fff;
+        border-radius: 16px;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        max-height: 85vh;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 20px 24px;
+        border-bottom: 1px solid #e5e7eb;
+      }
+
+      .modal-header h3 {
+        font-size: 18px;
+        font-weight: 600;
+        margin: 0;
+        color: var(--text-main);
+      }
+
+      .modal-body {
+        padding: 24px;
+        overflow-y: auto;
+        flex: 1;
+      }
+
+      .modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+        padding: 16px 24px;
+        border-top: 1px solid #e5e7eb;
+        background: #fafafa;
+      }
+
+      /* 模态框遮罩层 */
+      .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        animation: fadeIn 0.2s ease;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      /* 按钮基础样式 */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 20px;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: none;
+      }
+
+      .btn-primary {
+        background: var(--accent-color);
+        color: #fff;
+      }
+
+      .btn-primary:hover {
+        background: #3070d9;
+      }
+
+      .btn-primary:disabled {
+        background: #93c5fd;
+        cursor: not-allowed;
+      }
+
+      .btn-ghost {
+        background: transparent;
+        color: #6b7280;
+        border: 1px solid #e5e7eb;
+      }
+
+      .btn-ghost:hover {
+        background: #f3f4f6;
+      }
+
+      /* Loading spinner */
+      .spinner {
+        animation: spin 1s linear infinite;
+      }
+
+      /* 模块标题样式调整 */
+      .settings-section-divider {
+        margin: 8px 0 -12px; /* 负 margin-bottom 抵消容器的 gap */
+      }
+
+      .settings-section-divider:first-of-type {
+        margin-top: 4px;
+      }
+
+      .divider-text {
+        margin: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        color: #6b7280;
+        text-transform: uppercase;
+      }
+
+      .btn-add-rule {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        margin-left: auto;
+        border: none;
+        border-radius: 6px;
+        background: rgba(0, 122, 255, 0.1);
+        color: #007aff;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+      }
+
+      .btn-add-rule:hover {
+        background: rgba(0, 122, 255, 0.2);
+        transform: scale(1.05);
+      }
+
+      .btn-add-rule:active {
+        transform: scale(0.95);
+      }
+
+      /* 卡片右上角的添加按钮 */
+      .btn-add-rule-corner {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        border: none;
+        border-radius: 8px;
+        background: rgba(0, 122, 255, 0.1);
+        color: #007aff;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        z-index: 10;
+      }
+
+      .btn-add-rule-corner:hover {
+        background: rgba(0, 122, 255, 0.2);
+        transform: scale(1.08);
+      }
+
+      .btn-add-rule-corner:active {
+        transform: scale(0.95);
+      }
+
+      /* 按钮统一样式优化 */
+      .toggle-visibility-btn,
+      .test-connection-btn,
+      .test-email-btn,
+      .diagnose-email-btn,
+      .push-test-btn {
+        background: #f5f5f7;
+        border: 1px solid #e9e9ef;
+        border-radius: 8px;
+        padding: 8px 16px;
+        font-size: 13px;
+        font-weight: 500;
+        color: #007aff;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .toggle-visibility-btn:hover,
+      .test-connection-btn:hover,
+      .test-email-btn:hover,
+      .diagnose-email-btn:hover,
+      .push-test-btn:hover {
+        background: #ffffff;
+        border-color: #007aff;
+        transform: scale(0.98);
+      }
+
+      /* 分段控制器（追踪模式） */
+      .segmented-control {
+        background: #f5f5f7;
+        border-radius: 8px;
+        padding: 2px;
+      }
+
+      .segment-item {
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 500;
+        transition: all 0.2s;
+      }
+
+      .segment-item.active {
+        background: #ffffff;
+        color: #007aff;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+      }
+
+      /* 滑块样式 */
+      .range-slider {
+        accent-color: #007aff;
+      }
+
+      /* 订阅管理列表 */
+      .subs-list {
+        gap: 12px;
+      }
+
+      .subs-chip {
+        border-radius: 12px;
+        transition: all 0.2s ease;
+      }
+
+      .subs-chip-active {
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+      }
+
+      /* 订阅管理对号样式 */
+      .subs-check-mark {
+        font-weight: 900;
+        font-size: 16px;
+        opacity: 0.9;
+        margin-left: 4px;
+      }
+
+      /* 已添加邮箱标签 */
+      .subscriber-tag {
+        background: #f5f5f7;
+        border-radius: 16px;
+        padding: 5px 12px;
+        font-size: 13px;
+      }
+
+      .remove-tag {
+        margin-left: 6px;
+        font-size: 14px;
+        font-weight: 600;
+        opacity: 0.6;
+      }
+
+      .remove-tag:hover {
+        opacity: 1;
+        color: #ff3b30;
+      }
+
+      /* ============================================================
+   🔽 Apple 级下拉菜单 (原生 Select 美化)
+   ============================================================ */
+      .apple-select-wrapper {
+        position: relative;
+        width: 100%;
+      }
+
+      /* 🌟 核心魔法：用极其精致的 SVG 双箭头盖住原生丑陋的黑三角 */
+      .apple-select-wrapper::after {
+        content: "";
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 12px;
+        height: 12px;
+        background-color: #8e8e93;
+        /* 利用 mask-image 渲染纯色 SVG 图标，完美适配各种底色 */
+        mask-image: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><polyline points="8 15 12 19 16 15"></polyline><polyline points="16 9 12 5 8 9"></polyline></svg>');
+        -webkit-mask-image: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><polyline points="8 15 12 19 16 15"></polyline><polyline points="16 9 12 5 8 9"></polyline></svg>');
+        mask-size: contain;
+        -webkit-mask-size: contain;
+        mask-repeat: no-repeat;
+        -webkit-mask-repeat: no-repeat;
+        pointer-events: none; /* 必须加这行，否则点击箭头时无法触发下拉菜单 */
+      }
+
+      .apple-select {
+        width: 100%;
+        box-sizing: border-box;
+        background: rgba(118, 118, 128, 0.08); /* 经典底灰 */
+        border: 1px solid transparent;
+        border-radius: 8px;
+        padding: 8px 32px 8px 12px; /* 右侧留出 32px 给箭头让路 */
+        font-size: 14px;
+        color: #111;
+        font-family: inherit;
+        font-weight: 500;
+        cursor: pointer;
+        /* 🌟 强行剥夺浏览器默认样式 */
+        appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        transition: all 0.25s cubic-bezier(0.25, 1, 0.5, 1);
+      }
+
+      /* 点击时的焦点光环 (Focus Ring) */
+      .apple-select:focus {
+        background: #ffffff;
+        border-color: var(--accent-color);
+        box-shadow: 0 0 0 3px rgba(64, 143, 247, 0.25);
+        outline: none;
+      }
