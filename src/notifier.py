@@ -13,6 +13,7 @@ import subprocess
 import logging
 import threading
 from typing import Optional
+from src.utils.text_cleaner import strip_emoji
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,10 @@ class NotificationManager:
             subtitle: 副标题（可选）
         """
         with self._notification_lock:
+            title = strip_emoji(title)
+            message = strip_emoji(message)
+            subtitle = strip_emoji(subtitle)
+
             # 先关闭上一条通知（如果有）
             self._dismiss_previous()
 

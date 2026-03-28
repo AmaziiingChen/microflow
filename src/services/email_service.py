@@ -5,13 +5,13 @@ import os
 import re
 import smtplib
 import base64
-import random
 import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+from src.utils.text_cleaner import strip_emoji
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,8 @@ class EmailService:
     )
     # RFC 5321 邮箱最大长度
     EMAIL_MAX_LENGTH = 254
+    # 免费方案下建议的单次批量发送上限
+    MAX_RECIPIENTS_PER_BATCH = 20
 
     def __init__(
         self, smtp_host: str, smtp_port: int, smtp_user: str, smtp_password: str
@@ -63,6 +65,22 @@ class EmailService:
         return bool(EmailService.EMAIL_REGEX.match(email))
 
     @staticmethod
+    def _normalize_email(email: str) -> str:
+        """
+        规范化邮箱地址：去除首尾空格。
+        """
+        return email.strip() if email else ""
+
+    @staticmethod
+    def _chunk_emails(emails: List[str], chunk_size: int) -> List[List[str]]:
+        """
+        将邮箱列表按指定大小切片。
+        """
+        if chunk_size <= 0:
+            return [emails]
+        return [emails[i : i + chunk_size] for i in range(0, len(emails), chunk_size)]
+
+    @staticmethod
     def _filter_valid_emails(emails: List[str]) -> List[str]:
         """
         清洗拦截器：过滤并返回合法的邮箱列表
@@ -74,11 +92,16 @@ class EmailService:
             List[str]: 清洗后的合法邮箱列表
         """
         valid_emails = []
+        seen = set()
         for email in emails:
             # 剥离首尾空格
-            cleaned = email.strip() if email else ""
+            cleaned = EmailService._normalize_email(email)
             # 校验合法性
             if EmailService._is_valid_email(cleaned):
+                key = cleaned.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
                 valid_emails.append(cleaned)
 
         # 记录过滤日志
@@ -86,7 +109,9 @@ class EmailService:
         valid_count = len(valid_emails)
         if original_count != valid_count:
             filtered_count = original_count - valid_count
-            logger.warning(f"📧 邮箱清洗：过滤了 {filtered_count} 个非法邮箱地址")
+            logger.warning(
+                f"📧 邮箱清洗：过滤/去重了 {filtered_count} 个邮箱地址"
+            )
 
         return valid_emails
 
@@ -231,13 +256,80 @@ class EmailService:
 
         # 提取摘要纯文本预览（去除 HTML 标签）
         summary_text = re.sub(r"<[^>]+>", "", summary)
-        summary_preview = summary_text[:200]
+        summary_preview = strip_emoji(summary_text[:200])
 
         # 邮件主题
         subject = f"【MicroFlow】：{title[:30]}{'...' if len(title) > 30 else ''}"
 
         sent_count = 0
         failed = []
+        smtp = None
+
+        def send_single_message(to_addr: str, retries: int = 3) -> bool:
+            nonlocal sent_count
+            last_error = None
+            for retry in range(retries):
+                try:
+                    msg = self._create_html_email(
+                        to_addr=to_addr,
+                        subject=subject,
+                        title=title,
+                        source_name=source_name,
+                        category=category,
+                        date=date,
+                        summary_preview=summary_preview,
+                        image_path=image_path,
+                        article_url=url,
+                    )
+
+                    send_result = smtp.sendmail(
+                        self.smtp_user, [to_addr], msg.as_string()
+                    )
+                    if send_result:
+                        raise smtplib.SMTPRecipientsRefused(send_result)
+                    sent_count += 1
+                    logger.info(f"📧 邮件发送成功: {to_addr}")
+                    return True
+
+                except Exception as e:
+                    last_error = e
+                    if retry < retries - 1:
+                        wait_time = retry + 1
+                        logger.info(
+                            f"📧 邮件发送失败，{wait_time} 秒后重试 ({retry+1}/{retries}): {to_addr}"
+                        )
+                        time.sleep(wait_time)
+
+            failed.append(
+                {
+                    "email": to_addr,
+                    "error": str(last_error) if last_error else "未知错误",
+                }
+            )
+            logger.warning(f"📧 邮件发送失败 ({to_addr}): {last_error}")
+            return False
+
+        def send_batch(batch_addrs: List[str]) -> bool:
+            batch_header = "Undisclosed recipients:;"
+            msg = self._create_html_email(
+                to_addr=batch_header,
+                subject=subject,
+                title=title,
+                source_name=source_name,
+                category=category,
+                date=date,
+                summary_preview=summary_preview,
+                image_path=image_path,
+                article_url=url,
+            )
+
+            send_result = smtp.sendmail(self.smtp_user, batch_addrs, msg.as_string())
+            if send_result:
+                raise smtplib.SMTPRecipientsRefused(send_result)
+            logger.info(
+                f"📧 批量邮件发送成功: {len(batch_addrs)} 个收件人 ({', '.join(batch_addrs[:3])}{'...' if len(batch_addrs) > 3 else ''})"
+            )
+            return True
 
         try:
             # 创建 SMTP 连接
@@ -252,56 +344,63 @@ class EmailService:
             # 登录
             smtp.login(self.smtp_user, self.smtp_password)
 
-            # 逐个发送（带间隔，避免触发反垃圾机制）
-            for i, to_addr in enumerate(valid_addrs):
-                # 🌟 从第二封开始，每次发送前等待 1-2 秒随机间隔
-                if i > 0:
-                    delay = random.uniform(1.0, 2.0)
-                    logger.info(f"📧 等待 {delay:.1f} 秒后发送下一封...")
-                    time.sleep(delay)
+            batch_size = self.MAX_RECIPIENTS_PER_BATCH
+            batches = self._chunk_emails(valid_addrs, batch_size)
+            logger.info(
+                f"📧 邮件通知进入批量模式: {len(valid_addrs)} 个收件人，按 {batch_size} 个/批发送，共 {len(batches)} 批"
+            )
 
-                # 🌟 重试机制：最多重试 3 次
-                max_retries = 3
-                last_error = None
-                for retry in range(max_retries):
+            try:
+                for batch_index, batch in enumerate(batches):
+                    if batch_index > 0:
+                        # 批次之间留极短间隔，兼顾免费模式稳定性和总体速度
+                        time.sleep(0.2)
+
+                    batch_attempts = 3
+                    last_error = None
+                    batch_sent = False
+
+                    for retry in range(batch_attempts):
+                        try:
+                            batch_sent = send_batch(batch)
+                            sent_count += len(batch)
+                            break
+                        except Exception as e:
+                            last_error = e
+                            logger.warning(
+                                f"📧 批量发送失败 ({batch_index+1}/{len(batches)}), 重试 {retry+1}/{batch_attempts}: {e}"
+                            )
+                            if retry < batch_attempts - 1:
+                                time.sleep(retry + 1)
+
+                    if batch_sent:
+                        continue
+
+                    if len(batch) == 1:
+                        failed.append({"email": batch[0], "error": str(last_error)})
+                        logger.warning(f"📧 单个收件人发送失败: {batch[0]}")
+                        continue
+
+                    logger.warning(
+                        f"📧 批量发送多次失败，降级为单发: {len(batch)} 个收件人"
+                    )
+                    for to_addr in batch:
+                        send_single_message(to_addr)
+            finally:
+                # 关闭连接
+                try:
+                    smtp.quit()
+                except Exception:
                     try:
-                        msg = self._create_html_email(
-                            to_addr=to_addr,
-                            subject=subject,
-                            title=title,
-                            source_name=source_name,
-                            category=category,
-                            date=date,
-                            summary_preview=summary_preview,
-                            image_path=image_path,
-                            article_url=url,
-                        )
-
-                        smtp.sendmail(self.smtp_user, to_addr, msg.as_string())
-                        sent_count += 1
-                        logger.info(f"📧 邮件发送成功: {to_addr}")
-                        break  # 成功，跳出重试循环
-
-                    except Exception as e:
-                        last_error = e
-                        if retry < max_retries - 1:
-                            # 还有重试机会，等待后重试
-                            wait_time = retry + 1  # 1 秒, 2 秒
-                            logger.info(f"📧 邮件发送失败，{wait_time} 秒后重试 ({retry+1}/{max_retries}): {to_addr}")
-                            time.sleep(wait_time)
-                        else:
-                            # 最后一次重试仍失败
-                            failed.append({"email": to_addr, "error": str(e)})
-                            logger.warning(f"📧 邮件发送失败 ({to_addr}): {e}")
-
-            # 关闭连接
-            smtp.quit()
+                        smtp.close()
+                    except Exception:
+                        pass
 
             return {
                 "success": sent_count > 0,
                 "sent_count": sent_count,
                 "failed": failed,
-                "message": f"成功发送 {sent_count}/{len(to_addrs)} 封邮件",
+                "message": f"成功发送 {sent_count}/{len(valid_addrs)} 个有效邮箱",
             }
 
         except smtplib.SMTPAuthenticationError:
@@ -372,7 +471,7 @@ class EmailService:
 <head><meta charset="UTF-8"></head>
 <body style="font-family: sans-serif; padding: 20px;">
     <div style="max-width: 500px; margin: 0 auto; padding: 24px; background: #ffffff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-        <h1 style="color: #408ff7; margin: 0 0 16px;">✅ 邮件配置成功</h1>
+        <h1 style="color: #408ff7; margin: 0 0 16px;">邮件配置成功</h1>
         <p style="color: #374151; line-height: 1.6;">
             恭喜！您的 MicroFlow 邮件推送配置已生效。
         </p>

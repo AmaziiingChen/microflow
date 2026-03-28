@@ -49,22 +49,23 @@ _parse_date_safe = parse_date_safe
 
 
 # 爬虫注册表：(爬虫类, 板块数量, 描述, 是否需要校园网)
+# 说明：这里的静态注册源均属于校内信息源，公网环境下一律跳过
 # 顺序：公文通 -> 中德智能制造 -> 人工智能 -> 新材料与新能源 -> 城市交通与物流 -> 健康与环境工程 -> 工程物理 -> 药学院 -> 集成电路与光电芯片 -> 未来技术 -> 创意设计 -> 商学院 -> 外国语 -> 音乐学院
 SPIDER_REGISTRY: List[Tuple[Type[BaseSpider], int, str, bool]] = [
     (GwtSpider, 1, "公文通", True),  # 公文通需要校园网
-    (SgimSpider, 2, "中德智能制造学院", False),
-    (AiSpider, 2, "人工智能学院", False),
-    (NmneSpider, 6, "新材料与新能源学院", False),
-    (UtlSpider, 2, "城市交通与物流学院", False),
-    (HseeSpider, 2, "健康与环境工程学院", False),
-    (CepSpider, 2, "工程物理学院", False),
-    (CopSpider, 2, "药学院", False),
-    (IcocSpider, 3, "集成电路与光电芯片学院", False),
-    (FutureTechSpider, 6, "未来技术学院", False),
-    (DesignSpider, 6, "创意设计学院", False),
-    (BusinessSpider, 4, "商学院", False),
-    (SflSpider, 2, "外国语学院", False),
-    (MusicSpider, 3, "音乐学院", False),
+    (SgimSpider, 2, "中德智能制造学院", True),
+    (AiSpider, 2, "人工智能学院", True),
+    (NmneSpider, 6, "新材料与新能源学院", True),
+    (UtlSpider, 2, "城市交通与物流学院", True),
+    (HseeSpider, 2, "健康与环境工程学院", True),
+    (CepSpider, 2, "工程物理学院", True),
+    (CopSpider, 2, "药学院", True),
+    (IcocSpider, 3, "集成电路与光电芯片学院", True),
+    (FutureTechSpider, 6, "未来技术学院", True),
+    (DesignSpider, 6, "创意设计学院", True),
+    (BusinessSpider, 4, "商学院", True),
+    (SflSpider, 2, "外国语学院", True),
+    (MusicSpider, 3, "音乐学院", True),
 ]
 
 

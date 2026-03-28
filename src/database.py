@@ -38,6 +38,7 @@ import logging
 import threading
 import queue
 import re
+from src.utils.text_cleaner import strip_emoji
 from typing import Optional, Dict, Any, List, Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -404,6 +405,8 @@ class DatabaseManager:
                     is_favorite INTEGER DEFAULT 0,
                     is_deleted INTEGER DEFAULT 0,
                     source_name TEXT DEFAULT '公文通',
+                    rule_id TEXT DEFAULT '',
+                    custom_summary_prompt TEXT DEFAULT '',
                     created_at TIMESTAMP DEFAULT (datetime('now', 'localtime'))
                 )
             ''')
@@ -435,6 +438,16 @@ class DatabaseManager:
                 logger.info("正在执行 is_deleted 字段迁移...")
                 cursor.execute("ALTER TABLE articles ADD COLUMN is_deleted INTEGER DEFAULT 0")
                 logger.info("is_deleted 字段迁移完成")
+
+            if 'rule_id' not in columns:
+                logger.info("正在执行 rule_id 字段迁移...")
+                cursor.execute("ALTER TABLE articles ADD COLUMN rule_id TEXT DEFAULT ''")
+                logger.info("rule_id 字段迁移完成")
+
+            if 'custom_summary_prompt' not in columns:
+                logger.info("正在执行 custom_summary_prompt 字段迁移...")
+                cursor.execute("ALTER TABLE articles ADD COLUMN custom_summary_prompt TEXT DEFAULT ''")
+                logger.info("custom_summary_prompt 字段迁移完成")
 
             return True
 
@@ -503,7 +516,7 @@ class DatabaseManager:
 
             total = date_cn_count + date_slash_count + fill_count + cn_count + slash_count + time_fill_count
             if total > 0:
-                logger.info(f"✅ 时间数据清洗完成: 日期格式 {date_cn_count + date_slash_count} 条, 填充空值 {fill_count} 条, 时间格式 {cn_count + slash_count + time_fill_count} 条")
+                logger.info(f"时间数据清洗完成: 日期格式 {date_cn_count + date_slash_count} 条, 填充空值 {fill_count} 条, 时间格式 {cn_count + slash_count + time_fill_count} 条")
             return total
 
         try:
@@ -918,9 +931,12 @@ class DatabaseManager:
 
     def insert_or_update_article(self, title: str, url: str, date: str, exact_time: str,
                                   category: str, department: str, attachments: str,
-                                  summary: str, raw_content: str, source_name: str = '公文通'):
+                                  summary: str, raw_content: str, source_name: str = '公文通',
+                                  rule_id: str = '', custom_summary_prompt: str = ''):
         """插入或更新文章（异步写入）"""
         current_hash = self.generate_hash(raw_content)
+        summary = strip_emoji(summary)
+        custom_summary_prompt = strip_emoji(custom_summary_prompt)
 
         # 🌟 标准化日期和时间格式
         date = self._normalize_date(date)
@@ -929,9 +945,9 @@ class DatabaseManager:
         def do_insert(cursor: sqlite3.Cursor):
             cursor.execute('''
                 REPLACE INTO articles
-                (title, url, date, exact_time, category, department, attachments, summary, raw_text, raw_hash, is_read, source_name)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
-            ''', (title, url, date, exact_time, category, department, attachments, summary, raw_content, current_hash, source_name))
+                (title, url, date, exact_time, category, department, attachments, summary, raw_text, raw_hash, is_read, source_name, rule_id, custom_summary_prompt)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+            ''', (title, url, date, exact_time, category, department, attachments, summary, raw_content, current_hash, source_name, rule_id, custom_summary_prompt))
             return True
 
         # 提交到写队列，不等待结果（异步写入）
@@ -943,9 +959,12 @@ class DatabaseManager:
 
     def insert_or_update_article_sync(self, title: str, url: str, date: str, exact_time: str,
                                         category: str, department: str, attachments: str,
-                                        summary: str, raw_content: str, source_name: str = '公文通') -> bool:
+                                        summary: str, raw_content: str, source_name: str = '公文通',
+                                        rule_id: str = '', custom_summary_prompt: str = '') -> bool:
         """插入或更新文章（同步版本，等待写入完成）"""
         current_hash = self.generate_hash(raw_content)
+        summary = strip_emoji(summary)
+        custom_summary_prompt = strip_emoji(custom_summary_prompt)
 
         # 🌟 标准化日期和时间格式
         date = self._normalize_date(date)
@@ -954,9 +973,9 @@ class DatabaseManager:
         def do_insert(cursor: sqlite3.Cursor):
             cursor.execute('''
                 REPLACE INTO articles
-                (title, url, date, exact_time, category, department, attachments, summary, raw_text, raw_hash, is_read, source_name)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
-            ''', (title, url, date, exact_time, category, department, attachments, summary, raw_content, current_hash, source_name))
+                (title, url, date, exact_time, category, department, attachments, summary, raw_text, raw_hash, is_read, source_name, rule_id, custom_summary_prompt)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+            ''', (title, url, date, exact_time, category, department, attachments, summary, raw_content, current_hash, source_name, rule_id, custom_summary_prompt))
             return True
 
         try:
@@ -988,7 +1007,7 @@ class DatabaseManager:
             result = self._write_worker.submit(do_backfill, wait=True, timeout=30.0)
             count = result.result() if hasattr(result, 'result') else result
             if count and count > 0:
-                logger.info(f"✅ 已为 {count} 篇文章填充默认时间")
+                logger.info(f"已为 {count} 篇文章填充默认时间")
             return count or 0
         except Exception as e:
             logger.error(f"填充默认时间失败: {e}")
@@ -1039,6 +1058,8 @@ class DatabaseManager:
 
     def update_summary(self, article_id: int, new_summary: str) -> bool:
         """更新文章摘要（同步）"""
+        new_summary = strip_emoji(new_summary)
+
         def do_update(cursor: sqlite3.Cursor):
             cursor.execute(
                 "UPDATE articles SET summary = ? WHERE id = ?",

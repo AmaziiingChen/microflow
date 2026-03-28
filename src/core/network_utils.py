@@ -9,6 +9,27 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+_SRUN_PORTAL_URLS = (
+    "http://172.19.0.5/srun_portal_pc?ac_id=18&theme=ctcc",
+    "http://172.19.0.5/srun_portal_pc",
+)
+
+_SRUN_PORTAL_MARKERS = (
+    "网络准入认证",
+    "srun_portal",
+    "login-account",
+    "self-service",
+    "用户名",
+    "账号",
+    "密码",
+    "记住密码",
+    "忘记密码",
+    "自助服务",
+    "注销",
+    "已用流量",
+    "已用时长",
+)
+
 
 class NetworkStatus(Enum):
     """网络状态枚举"""
@@ -88,7 +109,10 @@ def _check_intranet(timeout: float = 3.0) -> bool:
     """
     测试校园网内网连通性
 
-    只需能成功访问公文通网站即可判定为校园网环境
+    判定策略：
+    1. 优先识别深澜认证页/已认证页特征
+    2. 再尝试访问公文通固定入口
+    3. 任一条件满足，即认为是校园网环境
 
     Args:
         timeout: 超时时间（秒），默认 3 秒
@@ -96,45 +120,111 @@ def _check_intranet(timeout: float = 3.0) -> bool:
     Returns:
         True 如果能访问公文通网站
     """
-    # 公文通网站（仅校园网可访问）
+    # 1) 深澜认证页：更稳定的校园网特征
+    for portal_url in _SRUN_PORTAL_URLS:
+        if _probe_url_for_portal(portal_url, timeout=timeout):
+            logger.debug(f"内网测试成功：识别到深澜认证页特征 ({portal_url})")
+            return True
+
+    # 2) 公文通网站：仅校园网环境可稳定访问
     intranet_url = "https://nbw.sztu.edu.cn/list.jsp?urltype=tree.TreeTempUrl&wbtreeid=1029"
+    if _probe_url_for_access(intranet_url, timeout=timeout):
+        logger.debug("内网测试成功：能访问公文通网站")
+        return True
 
+    return False
+
+
+def _build_request(url: str) -> urllib.request.Request:
+    request = urllib.request.Request(
+        url,
+        method="GET",
+    )
+    request.add_header(
+        "User-Agent",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    )
+    request.add_header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+    request.add_header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
+    return request
+
+
+def _read_response_text(
+    response: urllib.response.addinfourl, limit: int = 65536
+) -> tuple[str, str, int]:
+    body = response.read(limit)
+    status_code = response.status if hasattr(response, "status") else response.getcode()
+    final_url = getattr(response, "url", "") or response.geturl()
     try:
-        request = urllib.request.Request(
-            intranet_url,
-            method="GET"
-        )
-        request.add_header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        text = body.decode("utf-8", errors="ignore")
+    except Exception:
+        text = body.decode("latin-1", errors="ignore")
+    return text, final_url, status_code
 
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            status_code = response.status if hasattr(response, 'status') else response.getcode()
 
-            # 只要能成功访问（200 或重定向），就说明在校园网内
-            if status_code == 200:
-                logger.debug("内网测试成功：能访问公文通网站")
+def _probe_url_for_portal(url: str, timeout: float = 3.0) -> bool:
+    """
+    探测 URL 是否表现为深澜认证页/认证门户。
+
+    仅要出现稳定指纹即可判定，不要求登录成功。
+    """
+    try:
+        with urllib.request.urlopen(_build_request(url), timeout=timeout) as response:
+            text, final_url, status_code = _read_response_text(response)
+
+            if status_code not in (200, 301, 302, 303, 307, 308):
+                return False
+
+            haystack = f"{final_url}\n{text}".lower()
+            if any(marker.lower() in haystack for marker in _SRUN_PORTAL_MARKERS):
                 return True
 
-            logger.debug(f"内网测试返回状态码: {status_code}")
-            return False
+            # 某些版本会直接展示“已认证/自助服务”面板，带这些关键结构也可判定
+            if "panel-login" in haystack or "change-lang" in haystack:
+                return True
 
+            return False
+    except urllib.error.HTTPError as e:
+        if e.code in (301, 302, 303, 307, 308):
+            location = getattr(e, "headers", {}).get("Location", "") or ""
+            haystack = f"{url}\n{location}".lower()
+            return any(marker.lower() in haystack for marker in _SRUN_PORTAL_MARKERS)
+        return False
+    except Exception:
+        return False
+
+
+def _probe_url_for_access(url: str, timeout: float = 3.0) -> bool:
+    """
+    探测目标 URL 是否可正常访问。
+
+    只要拿到有效响应即可视为校内连通特征之一。
+    """
+    try:
+        with urllib.request.urlopen(_build_request(url), timeout=timeout) as response:
+            status_code = response.status if hasattr(response, "status") else response.getcode()
+            final_url = getattr(response, "url", "") or response.geturl()
+            if status_code == 200:
+                return True
+            if status_code in (301, 302, 303, 307, 308):
+                return True
+            if "srun_portal" in final_url.lower():
+                return True
+            return False
     except urllib.error.HTTPError as e:
         # 某些情况下 302 重定向会触发 HTTPError，但说明服务器响应了
         if e.code in (301, 302, 303, 307, 308):
-            logger.debug("内网测试成功：服务器返回重定向")
             return True
-        logger.debug(f"内网测试 HTTP 错误: {e.code} {e.reason}")
         return False
     except urllib.error.URLError as e:
-        logger.debug(f"内网测试 URL 错误: {e.reason}")
         return False
     except socket.timeout:
-        logger.debug("内网测试超时")
         return False
     except OSError as e:
-        logger.debug(f"内网测试网络错误: {e}")
         return False
     except Exception as e:
-        logger.warning(f"内网测试未知错误: {e}")
+        logger.debug(f"内网测试未知错误: {e}")
         return False
 
 

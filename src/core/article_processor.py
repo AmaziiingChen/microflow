@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, Any, Optional, Tuple, Callable, TYPE_CHECKING
+from src.utils.text_cleaner import strip_emoji
 
 if TYPE_CHECKING:
     from src.spiders import BaseSpider
@@ -30,6 +31,7 @@ class ArticleContext:
     department: str = ""
     require_ai_summary: bool = True  # 🌟 是否需要 AI 摘要（动态爬虫可设置为 False）
     custom_summary_prompt: str = ""  # 🌟 专属 AI 提示词（用于定制摘要输出格式）
+    rule_id: str = ""  # 🌟 规则 ID（用于摘要重生成时反查专属提示词）
 
 
 @dataclass
@@ -54,7 +56,7 @@ class ArticleProcessor:
     架构设计：
     ┌─────────────┐      ┌──────────────┐      ┌─────────────┐
     │  Producer   │ ───▶ │  Task Queue  │ ───▶ │   Workers   │
-    │ (scheduler) │      │  (threadsafe)│      │  (4 线程)   │
+    │ (scheduler) │      │  (threadsafe)│      │  (2 线程)   │
     └─────────────┘      └──────────────┘      └─────────────┘
                                                       │
                                                       ▼
@@ -98,7 +100,8 @@ class ArticleProcessor:
     PURE_IMAGE_SUMMARY = ""
 
     # Worker 配置
-    WORKER_COUNT = 1
+    # 批量摘要并发：2 路，配合 LLMService 的批量槽位
+    WORKER_COUNT = 2
 
     def __init__(
         self,
@@ -215,7 +218,7 @@ class ArticleProcessor:
                         f"Worker #{worker_id} 处于取消状态，快速丢弃任务: {task.ctx.title if task else 'None'}"
                     )
                     self._task_queue.task_done()
-                    continue  # ✅ 关键：使用 continue 而不是 break！丢弃任务后回去继续监听队列！
+                    continue  # 关键：使用 continue 而不是 break！丢弃任务后回去继续监听队列！
 
                 # 处理任务（正常流程）
                 try:
@@ -440,7 +443,7 @@ class ArticleProcessor:
             if self.on_progress and ai_total > 0:
                 try:
                     self.on_progress(ai_completed, ai_total, f"[纯图片] {ctx.title}")
-                    logger.info(f"✅ 纯图片进度回调已发送")
+                    logger.info("纯图片进度回调已发送")
                 except Exception as e:
                     logger.warning(f"纯图片进度回调失败: {e}")
         elif skip_ai_summary:
@@ -480,7 +483,10 @@ class ArticleProcessor:
             try:
                 # 🌟 传递专属 AI 提示词
                 summary = self.llm.summarize_article(
-                    ctx.title, raw_text, custom_prompt=ctx.custom_summary_prompt
+                    ctx.title,
+                    raw_text,
+                    custom_prompt=ctx.custom_summary_prompt,
+                    priority="batch",
                 )
             except Exception as e:
                 logger.warning(f"AI 摘要生成异常 ({ctx.title}): {e}")
@@ -511,6 +517,8 @@ class ArticleProcessor:
                 logger.warning(f"AI 分析失败，本次不入库: {ctx.title}")
                 return False, "ai_failed", None
 
+        summary = strip_emoji(summary)
+
         # 7. 添加时间戳（已禁用）
         # timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         # summary = summary + f"\n\n---\n**🤖 AI 生成时间: {timestamp}**"
@@ -533,9 +541,11 @@ class ArticleProcessor:
             summary=summary,
             raw_content=raw_text,
             source_name=ctx.source_name,
+            rule_id=ctx.rule_id,
+            custom_summary_prompt=ctx.custom_summary_prompt,
         )
 
-        logger.info(f"✅ [{ctx.source_name}] 文章入库成功: {ctx.title}")
+        logger.info(f"[{ctx.source_name}] 文章入库成功: {ctx.title}")
 
         # 10. 构建完整的文章数据并触发回调
         article_data = {
@@ -553,6 +563,8 @@ class ArticleProcessor:
             "raw_content": raw_text,
             "is_read": 0,
             "model_name": self.config_service.get('modelName', 'AI'),  # 🌟 传递模型名称用于快照
+            "rule_id": ctx.rule_id,
+            "custom_summary_prompt": ctx.custom_summary_prompt,
         }
         logger.info(f"📸 article_data.model_name = {article_data.get('model_name')}")
 
@@ -701,6 +713,7 @@ class ArticleProcessor:
             department=department,
             require_ai_summary=article.get("require_ai_summary", True),
             custom_summary_prompt=article.get("custom_summary_prompt", ""),
+            rule_id=article.get("rule_id", ""),
         )
 
     def get_stats(self) -> Dict[str, int]:
@@ -883,11 +896,11 @@ class ArticleProcessor:
 
             # 5. 🌟 处理发送结果，失败时通知用户
             if result.get('success'):
-                logger.info(f"📧 ✅ 邮件推送成功: {result.get('sent_count', 0)} 封")
+                logger.info(f"邮件推送成功: {result.get('sent_count', 0)} 封")
             else:
                 failed_list = result.get('failed', [])
                 error_msg = result.get('message', '未知错误')
-                logger.error(f"📧 ❌ 邮件推送失败: {error_msg}")
+                logger.error(f"邮件推送失败: {error_msg}")
 
                 # 通知用户邮件发送失败
                 if failed_list:

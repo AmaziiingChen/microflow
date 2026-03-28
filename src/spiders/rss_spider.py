@@ -60,8 +60,11 @@ class RssSpider(BaseSpider):
         self.BASE_URL = self.url
 
         # AI 摘要配置
-        self.require_ai_summary = rule_dict.get('require_ai_summary', False)
         self.custom_summary_prompt = rule_dict.get('custom_summary_prompt', '')
+        self.require_ai_summary = bool(
+            rule_dict.get('require_ai_summary', False)
+            or str(self.custom_summary_prompt).strip()
+        )
 
         # 动态爬虫标记（用于 ArticleProcessor 识别）
         self._is_dynamic_spider = True

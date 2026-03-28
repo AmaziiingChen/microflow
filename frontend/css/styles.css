@@ -352,8 +352,10 @@
         box-shadow:
           0 1px 3px rgba(0, 0, 0, 0.02),
           0 4px 12px rgba(0, 0, 0, 0.02);
-        /* 强制硬件加速，防止文字在缩放时产生亚像素抖动模糊 */
-        will-change: transform, box-shadow;
+        /* 隔离单卡片的布局和绘制，避免整列列表一起重排 */
+        contain: layout paint;
+        content-visibility: auto;
+        contain-intrinsic-size: 124px;
         transition:
           transform 0.4s var(--curve-pop),
           box-shadow 0.4s ease,
@@ -497,8 +499,9 @@
         box-shadow:
           0 1px 3px rgba(0, 0, 0, 0.02),
           0 4px 12px rgba(0, 0, 0, 0.02);
-        /* 强制硬件加速，防止文字在缩放时产生亚像素抖动模糊 */
-        will-change: transform, box-shadow;
+        contain: layout paint;
+        content-visibility: auto;
+        contain-intrinsic-size: 124px;
         transition:
           transform 0.4s var(--curve-pop),
           box-shadow 0.4s ease,
@@ -547,6 +550,41 @@
         opacity: 0;
         transform: translateY(10px);
         pointer-events: none;
+      }
+
+      .article-stack.is-switching .list-card,
+      .article-stack.is-switching .announcement-card {
+        animation: none !important;
+        transition: opacity 0.15s ease, transform 0.15s ease !important;
+        will-change: auto;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .article-stack,
+        .list-card,
+        .announcement-card,
+        .filter-chip,
+        .filter-chip-inner,
+        .filter-chip-icon,
+        .filter-chip-text,
+        .search-morph-container,
+        .settings-card,
+        .toast-stack .toast,
+        .spinner {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+          scroll-behavior: auto !important;
+        }
+
+        .article-stack.is-switching {
+          transform: none;
+        }
+
+        .article-stack.is-switching .list-card,
+        .article-stack.is-switching .announcement-card {
+          animation: none !important;
+        }
       }
 
       .announcement-icon {
@@ -758,15 +796,36 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 8px;
+        gap: 12px;
+        width: 100%;
+        margin-bottom: 6px;
       }
       .provider-info {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 3px;
+        padding: 0;
+        border-radius: 0;
         font-size: 12px;
         color: #9ca3af;
         font-weight: 600;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.25px;
+        line-height: 1.15;
         white-space: nowrap;
+        text-shadow: none;
+        box-shadow: none;
+        filter: none;
+        transition:
+          background-color 0.28s ease,
+          color 0.28s ease;
+        margin-left: 0;
+        margin-top: 1px;
+        flex-shrink: 0;
+      }
+      .provider-info:hover {
+        background-color: rgba(0, 0, 0, 0.02);
+        color: #7b8494;
       }
       /* 🌟 核心补丁：确保内联 SVG 图标完美对齐文字 */
       .inline-ai-icon {
@@ -775,11 +834,27 @@
         justify-content: center;
         width: 14px;
         height: 14px;
-        margin-right: 4px;
         flex-shrink: 0; /* 🌟 强制图标不许被挤压 */
         overflow: hidden; /* 🌟 核心：即便里面是长文本，也绝对不许溢出到外面 */
-        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
         vertical-align: middle; /* 🌟 物理级垂直对齐 */
+        transform: translateY(1px);
+        text-shadow: none;
+        box-shadow: none;
+        filter: none;
+        transition:
+          transform 0.24s cubic-bezier(0.22, 1, 0.36, 1),
+          opacity 0.28s ease;
+      }
+      .inline-ai-icon-fallback {
+        font-size: 12px;
+        line-height: 1;
+        transform: translateY(1px);
+      }
+      .provider-info:hover .inline-ai-icon {
+        transform: scale(1.08);
+      }
+      .provider-info:hover .inline-ai-icon-fallback {
+        transform: scale(1.06);
       }
 
       /* 强制 SVG 充满容器，彻底解决快照时尺寸丢失导致的"白框"Bug */
@@ -1027,12 +1102,23 @@
         background: #e9d5ff;
         border-color: #c4b5fd;
       }
+      .badge-refresh.is-loading:hover {
+        background: #fee2e2;
+        border-color: #fca5a5;
+        color: #dc2626;
+      }
+      .badge-refresh.is-loading::after {
+        background: #111827;
+        backdrop-filter: none;
+      }
+      .badge-refresh.is-loading::before {
+        border-bottom-color: #111827;
+      }
       .badge-refresh:active {
         transform: scale(0.95);
       }
       .badge-refresh.is-loading {
-        opacity: 0.7;
-        pointer-events: none;
+        cursor: pointer;
       }
 
       /* 🌟 收藏按钮样式 */
@@ -1095,6 +1181,8 @@
         align-items: center;
         /* 🌟 统一间距：严格控制为 6px，紧凑且有呼吸感 */
         gap: 6px;
+        margin-left: auto;
+        justify-content: flex-end;
       }
 
       /* 统一按钮的基础形态 (无视原来的任何边框和大小) */
@@ -1305,6 +1393,10 @@
         color: var(--app-color) !important;
         /* 1.2s 的周期，让呼吸感更加绵长优雅 */
         animation: breathing-spin 1.2s linear infinite !important;
+      }
+      .badge-refresh.is-loading:hover .icon-svg {
+        color: #dc2626 !important;
+        filter: drop-shadow(0 0 6px rgba(220, 38, 38, 0.35));
       }
 
       @keyframes breathing-spin {
@@ -2198,6 +2290,46 @@
         opacity: 0.7;
         font-weight: 400;
         line-height: 1.4;
+      }
+
+      .secondary-model-delete-modal {
+        max-width: 340px;
+      }
+
+      .secondary-delete-actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 4px;
+      }
+
+      .secondary-delete-cancel,
+      .secondary-delete-confirm {
+        flex: 1;
+        border: none;
+        border-radius: 12px;
+        padding: 12px 14px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .secondary-delete-cancel {
+        background: #f3f4f6;
+        color: #374151;
+      }
+
+      .secondary-delete-cancel:hover {
+        background: #e5e7eb;
+      }
+
+      .secondary-delete-confirm {
+        background: #ff3b30;
+        color: #ffffff;
+      }
+
+      .secondary-delete-confirm:hover {
+        background: #e0312a;
       }
 
       /* 移除旧的取消按钮样式 */
@@ -3276,8 +3408,8 @@
         visibility: hidden;
 
         /* 气泡 UI 样式 */
-        background: rgba(17, 24, 39, 0.85); /* 半透明黑 */
-        backdrop-filter: blur(8px); /* 毛玻璃质感 */
+        background: #111827; /* 实心黑 */
+        backdrop-filter: none;
         color: #ffffff;
         font-size: 12px;
         font-weight: 600;
@@ -3321,7 +3453,7 @@
 
         /* 利用 CSS 边框画三角形 */
         border: 5px solid transparent;
-        border-bottom-color: rgba(17, 24, 39, 0.85);
+        border-bottom-color: #111827;
         pointer-events: none;
         z-index: 100;
 
@@ -3942,57 +4074,293 @@
         animation: pin-push 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
       }
 
-      /* 加载状态：变圆并在极光中心 */
+      /* 加载状态：星轨数据核 */
       .btn-check.loading {
-        width: 38px !important;
-        height: 38px !important; /* 🌟 修复：必须同时设置高度才能保持正圆 */
+        width: 42px !important;
+        height: 42px !important;
         border-radius: 50% !important;
-        background: transparent !important;
+        background:
+          radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.16) 35%, rgba(255, 255, 255, 0.05) 60%, rgba(255, 255, 255, 0) 76%) !important;
         color: transparent !important;
-        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06) !important;
-        /* 🌟 确保不会被其他 transform 影响 */
+        border: none !important;
+        box-shadow:
+          0 10px 22px rgba(15, 23, 42, 0.06),
+          inset 0 1px 0 rgba(255, 255, 255, 0.65) !important;
         transform: none !important;
-        /* 🌟 允许彩虹外扩显示 */
         overflow: visible !important;
+        isolation: isolate;
       }
-      /* 4. 🌈 彩虹极光动画：柔和、旋转 */
-      .aurora-light {
-        position: absolute;
-        inset: -4px;
-        border-radius: 50%;
+      .btn-check.loading .btn-text {
         opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.5s ease;
-        overflow: hidden;
-        z-index: 10; /* 置顶显示 */
-      }
-      /* 彩虹渐变放在伪元素中，可以被 overflow: hidden 裁剪成圆形 */
-      .aurora-light::before {
-        content: "";
-        position: absolute;
-        inset: -15px; /* 比 blur 大，确保模糊后仍覆盖整个区域 */
-        background: conic-gradient(
-          from 0deg,
-          #ffb3ba,
-          #ffffba,
-          #baffc9,
-          #bae1ff,
-          #d5baff,
-          #ffb3ba
-        );
-        filter: blur(10px);
       }
 
-      .btn-check.loading .aurora-light {
-        opacity: 0.85;
-        animation: aurora-spin 4s linear infinite; /* 极光转速不宜过快 */
+      .btn-check.loading .btn-check-default-icon {
+        display: none;
       }
-      @keyframes aurora-spin {
+
+      .btn-check.loading .btn-check-loading-icon {
+        display: block;
+        transform-origin: center center;
+        width: 22px !important;
+        height: 22px !important;
+        animation: rainbow-spin 1.05s linear infinite !important;
+        will-change: transform;
+      }
+
+      .btn-check-loading-icon path {
+        transform-box: fill-box;
+        transform-origin: center center;
+        transition:
+          fill 0.2s ease,
+          filter 0.2s ease,
+          opacity 0.2s ease;
+        opacity: 0.96;
+        will-change: transform, opacity, filter;
+      }
+
+      .btn-check.loading .btn-check-loading-icon path:nth-of-type(1) {
+        fill: #ff5b7a;
+        --path-shadow: rgba(255, 91, 122, 0.22);
+        filter: drop-shadow(0 0 2px rgba(255, 91, 122, 0.22));
+      }
+      .btn-check.loading .btn-check-loading-icon path:nth-of-type(2) {
+        fill: #ff9f43;
+        --path-shadow: rgba(255, 159, 67, 0.2);
+        filter: drop-shadow(0 0 2px rgba(255, 159, 67, 0.2));
+      }
+      .btn-check.loading .btn-check-loading-icon path:nth-of-type(3) {
+        fill: #ffd166;
+        --path-shadow: rgba(255, 209, 102, 0.2);
+        filter: drop-shadow(0 0 2px rgba(255, 209, 102, 0.2));
+      }
+      .btn-check.loading .btn-check-loading-icon path:nth-of-type(4) {
+        fill: #4ade80;
+        --path-shadow: rgba(74, 222, 128, 0.2);
+        filter: drop-shadow(0 0 2px rgba(74, 222, 128, 0.2));
+      }
+      .btn-check.loading .btn-check-loading-icon path:nth-of-type(5) {
+        fill: #2dd4bf;
+        --path-shadow: rgba(45, 212, 191, 0.2);
+        filter: drop-shadow(0 0 2px rgba(45, 212, 191, 0.2));
+      }
+      .btn-check.loading .btn-check-loading-icon path:nth-of-type(6) {
+        fill: #38bdf8;
+        --path-shadow: rgba(56, 189, 248, 0.22);
+        filter: drop-shadow(0 0 2px rgba(56, 189, 248, 0.22));
+      }
+      .btn-check.loading .btn-check-loading-icon path:nth-of-type(7) {
+        fill: #818cf8;
+        --path-shadow: rgba(129, 140, 248, 0.22);
+        filter: drop-shadow(0 0 2px rgba(129, 140, 248, 0.22));
+      }
+      .btn-check.loading .btn-check-loading-icon path:nth-of-type(8) {
+        fill: #c084fc;
+        --path-shadow: rgba(192, 132, 252, 0.22);
+        filter: drop-shadow(0 0 2px rgba(192, 132, 252, 0.22));
+      }
+
+      .btn-check.loading .btn-check-loading-icon g {
+        transform-box: fill-box;
+        transform-origin: center center;
+        animation: rainbow-breath 2.15s ease-in-out infinite;
+      }
+
+      .btn-check.loading .btn-check-loading-icon.is-entering path {
+        animation: rainbow-fly-in 0.72s cubic-bezier(0.16, 0.98, 0.22, 1)
+          both;
+      }
+
+      .btn-check.loading .btn-check-loading-icon.is-exiting path {
+        animation: rainbow-mist-out 0.52s cubic-bezier(0.22, 0.76, 0.36, 1)
+          both;
+      }
+
+      .btn-check.loading::before,
+      .btn-check.loading::after {
+        content: none !important;
+        display: none !important;
+      }
+
+      @keyframes rainbow-spin {
         0% {
-          transform: rotate(0deg) translateZ(0);
+          transform: rotate(0deg);
         }
         100% {
-          transform: rotate(360deg) translateZ(0);
+          transform: rotate(360deg);
+        }
+      }
+
+      @keyframes rainbow-breath {
+        0%,
+        100% {
+          transform: scale(0.95);
+          opacity: 0.82;
+        }
+        50% {
+          transform: scale(1.08);
+          opacity: 1;
+        }
+      }
+
+      @keyframes rainbow-fly-in {
+        0% {
+          opacity: 0;
+          transform:
+            translate(var(--fly-x, 0px), var(--fly-y, 0px))
+            rotate(var(--fly-rot, 0deg))
+            scale(0.18);
+          filter:
+            blur(2.2px)
+            drop-shadow(0 0 0 rgba(0, 0, 0, 0));
+        }
+        62% {
+          opacity: 1;
+          transform:
+            translate(calc(var(--fly-x, 0px) * 0.14), calc(var(--fly-y, 0px) * 0.14))
+            rotate(calc(var(--fly-rot, 0deg) * 0.18))
+            scale(1.06);
+          filter:
+            blur(0.55px)
+            drop-shadow(0 0 3px var(--path-shadow, rgba(255, 255, 255, 0.18)));
+        }
+        100% {
+          opacity: 0.96;
+          transform: translate(0, 0) rotate(0deg) scale(1);
+          filter:
+            blur(0px)
+            drop-shadow(0 0 2px var(--path-shadow, rgba(255, 255, 255, 0.18)));
+        }
+      }
+
+      @keyframes rainbow-mist-out {
+        0% {
+          opacity: 0.96;
+          transform: translate(0, 0) rotate(0deg) scale(1);
+          filter:
+            blur(0px)
+            drop-shadow(0 0 2px var(--path-shadow, rgba(255, 255, 255, 0.18)));
+        }
+        38% {
+          opacity: 0.74;
+          transform:
+            translate(calc(var(--exit-x, 0px) * 0.18), calc(var(--exit-y, 0px) * 0.18))
+            rotate(calc(var(--exit-rot, 0deg) * 0.18))
+            scale(0.96);
+          filter:
+            blur(0.4px)
+            drop-shadow(0 0 2px var(--path-shadow, rgba(255, 255, 255, 0.14)));
+        }
+        100% {
+          opacity: 0;
+          transform:
+            translate(var(--exit-x, 0px), var(--exit-y, 0px))
+            rotate(var(--exit-rot, 0deg))
+            scale(0.32);
+          filter:
+            blur(2.4px)
+            drop-shadow(0 0 0 rgba(0, 0, 0, 0));
+        }
+      }
+
+      .btn-check.loading .btn-check-loading-icon path:nth-of-type(1) {
+        --fly-x: 20px;
+        --fly-y: -15px;
+        --fly-rot: -110deg;
+        --exit-x: 10px;
+        --exit-y: -8px;
+        --exit-rot: -35deg;
+        --enter-delay: 0.28s;
+        --exit-delay: 0s;
+      }
+      .btn-check.loading .btn-check-loading-icon path:nth-of-type(2) {
+        --fly-x: 26px;
+        --fly-y: 0px;
+        --fly-rot: -90deg;
+        --exit-x: 16px;
+        --exit-y: 0px;
+        --exit-rot: -20deg;
+        --enter-delay: 0.24s;
+        --exit-delay: 0.02s;
+      }
+      .btn-check.loading .btn-check-loading-icon path:nth-of-type(3) {
+        --fly-x: 20px;
+        --fly-y: 15px;
+        --fly-rot: -70deg;
+        --exit-x: 12px;
+        --exit-y: 10px;
+        --exit-rot: -10deg;
+        --enter-delay: 0.2s;
+        --exit-delay: 0.04s;
+      }
+      .btn-check.loading .btn-check-loading-icon path:nth-of-type(4) {
+        --fly-x: 0px;
+        --fly-y: 24px;
+        --fly-rot: -50deg;
+        --exit-x: 0px;
+        --exit-y: 14px;
+        --exit-rot: 0deg;
+        --enter-delay: 0.16s;
+        --exit-delay: 0.06s;
+      }
+      .btn-check.loading .btn-check-loading-icon path:nth-of-type(5) {
+        --fly-x: -20px;
+        --fly-y: 15px;
+        --fly-rot: -30deg;
+        --exit-x: -12px;
+        --exit-y: 10px;
+        --exit-rot: 10deg;
+        --enter-delay: 0.12s;
+        --exit-delay: 0.08s;
+      }
+      .btn-check.loading .btn-check-loading-icon path:nth-of-type(6) {
+        --fly-x: -26px;
+        --fly-y: 0px;
+        --fly-rot: -10deg;
+        --exit-x: -16px;
+        --exit-y: 0px;
+        --exit-rot: 20deg;
+        --enter-delay: 0.08s;
+        --exit-delay: 0.1s;
+      }
+      .btn-check.loading .btn-check-loading-icon path:nth-of-type(7) {
+        --fly-x: -20px;
+        --fly-y: -15px;
+        --fly-rot: 15deg;
+        --exit-x: -10px;
+        --exit-y: -8px;
+        --exit-rot: 35deg;
+        --enter-delay: 0.04s;
+        --exit-delay: 0.12s;
+      }
+      .btn-check.loading .btn-check-loading-icon path:nth-of-type(8) {
+        --fly-x: 0px;
+        --fly-y: -24px;
+        --fly-rot: 35deg;
+        --exit-x: 0px;
+        --exit-y: -14px;
+        --exit-rot: 50deg;
+        --enter-delay: 0s;
+        --exit-delay: 0.14s;
+      }
+
+      .btn-check.loading .btn-check-loading-icon.is-entering path {
+        animation-delay: var(--enter-delay, 0s);
+      }
+
+      .btn-check.loading .btn-check-loading-icon.is-exiting path {
+        animation-delay: var(--exit-delay, 0s);
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .btn-check:not(:disabled):not(.loading)::before,
+        .btn-check.loading .btn-check-loading-icon,
+        .btn-check.loading .btn-check-loading-icon path,
+        .btn-check.loading .btn-check-loading-icon g {
+          animation: none !important;
+        }
+
+        .btn-check.loading .btn-check-loading-icon path {
+          transition: none;
         }
       }
 
@@ -4420,6 +4788,13 @@
       .toast-icon svg {
         width: 14px;
         height: 14px;
+        display: block;
+      }
+
+      .toast-icon.info .toast-info-icon {
+        width: 15px;
+        height: 15px;
+        transform: translateY(0.5px);
       }
 
       /* 1. 成功 (Success) - Apple System Green */
@@ -4615,6 +4990,30 @@
         margin-top: 12px;
       }
 
+      .email-push-actions-card {
+        padding-top: 10px !important;
+        padding-bottom: 10px !important;
+      }
+
+      .email-push-actions-card .email-push-actions-bar {
+        margin-top: 0;
+        padding: 8px;
+        gap: 8px;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        align-items: stretch;
+        background: #f7f8fa;
+        border: 1px solid #ececf1;
+        border-radius: 14px;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+      }
+
+      @media (max-width: 560px) {
+        .email-push-actions-card .email-push-actions-bar {
+          grid-template-columns: 1fr;
+        }
+      }
+
       .test-connection-btn,
       .test-email-btn,
       .diagnose-email-btn,
@@ -4642,6 +5041,51 @@
       .diagnose-email-btn:active,
       .push-test-btn:active {
         transform: scale(0.96);
+      }
+
+      .email-push-actions-card .test-email-btn,
+      .email-push-actions-card .diagnose-email-btn,
+      .email-push-actions-card .push-test-btn {
+        width: 100%;
+        min-width: 0;
+        min-height: 34px;
+        padding: 6px 10px;
+        line-height: 1;
+        justify-content: center;
+        background: #ffffff;
+        color: #4b5563;
+        border-color: #e5e7eb;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+        border-radius: 10px;
+      }
+
+      .email-push-actions-card .diagnose-email-btn {
+        font-weight: 500;
+      }
+
+      .email-push-actions-card .test-email-btn:hover,
+      .email-push-actions-card .diagnose-email-btn:hover,
+      .email-push-actions-card .push-test-btn:hover {
+        background: #ffffff;
+        border-color: #d6dae1;
+        color: #111827;
+        transform: translateY(-1px);
+      }
+
+      .email-push-actions-card .test-email-btn:active,
+      .email-push-actions-card .diagnose-email-btn:active,
+      .email-push-actions-card .push-test-btn:active {
+        transform: translateY(0) scale(0.985);
+      }
+
+      .email-push-actions-card .connection-status {
+        margin: 0;
+        gap: 5px;
+      }
+
+      .email-push-actions-card .connection-status .status-text {
+        font-size: 12px;
+        font-weight: 500;
       }
 
       .diagnose-email-btn:disabled,
@@ -4893,6 +5337,11 @@
         height: 20px;
       }
 
+      .btn-add-rule .add-icon {
+        width: 20px;
+        height: 20px;
+      }
+
       /* 设置卡片提示文字 */
       .settings-hint {
         font-size: 12px;
@@ -5015,9 +5464,28 @@
         overflow: hidden;
       }
 
+      .secondary-models-card .settings-card-title {
+        margin-bottom: 0;
+        min-height: 24px;
+      }
+
+      .secondary-models-card .settings-card-title > div {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        line-height: 1;
+      }
+
+      .secondary-models-card .settings-card-title svg,
+      .secondary-models-card .settings-card-title img {
+        display: block;
+        flex-shrink: 0;
+      }
+
       .secondary-models-content {
         overflow: hidden;
         transition: all 0.3s ease;
+        will-change: max-height, opacity;
       }
 
       .secondary-models-list {
@@ -5106,12 +5574,29 @@
         flex: 1;
       }
 
+      .secondary-models-card .settings-input-area {
+        width: 100%;
+        max-width: none;
+        justify-content: stretch;
+      }
+
+      .secondary-models-card .settings-input-area .settings-input {
+        width: 100%;
+        box-sizing: border-box;
+        padding-right: 40px;
+      }
+
       .model-test-row {
         margin-top: 12px;
         padding-top: 12px;
         border-top: 1px solid #e9e9ef;
         display: flex;
-        justify-content: flex-end;
+        justify-content: center;
+      }
+
+      .secondary-models-card .test-connection-btn {
+        min-width: 112px;
+        justify-content: center;
       }
 
       .btn-add-secondary-model {
@@ -5598,21 +6083,21 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 28px;
-        height: 28px;
+        width: 36px;
+        height: 36px;
         padding: 0;
         margin-left: auto;
         border: none;
-        border-radius: 6px;
-        background: rgba(0, 122, 255, 0.1);
-        color: #007aff;
+        border-radius: 10px;
+        background: transparent;
+        color: #34c759;
         cursor: pointer;
         transition: all 0.2s ease;
         flex-shrink: 0;
       }
 
       .btn-add-rule:hover {
-        background: rgba(0, 122, 255, 0.2);
+        background: rgba(52, 199, 89, 0.1);
         transform: scale(1.05);
       }
 
@@ -5776,7 +6261,7 @@
         box-sizing: border-box;
         background: rgba(118, 118, 128, 0.08); /* 经典底灰 */
         border: 1px solid transparent;
-        border-radius: 8px;
+        border-radius: 12px;
         padding: 8px 32px 8px 12px; /* 右侧留出 32px 给箭头让路 */
         font-size: 14px;
         color: #111;

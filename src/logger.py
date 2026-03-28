@@ -13,6 +13,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from src.core.paths import LOG_PATH
+from src.utils.text_cleaner import strip_emoji
 
 # 日志格式
 LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -20,6 +21,13 @@ DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
 
 # 是否已初始化
 _initialized = False
+
+
+class EmojiStrippingFormatter(logging.Formatter):
+    """Formatter that removes emoji from the final rendered log line."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        return strip_emoji(super().format(record))
 
 
 def setup_logging(level: int = logging.INFO) -> None:
@@ -45,7 +53,7 @@ def setup_logging(level: int = logging.INFO) -> None:
     root_logger.handlers.clear()
 
     # 创建格式化器
-    formatter = logging.Formatter(LOG_FORMAT, DATE_FORMAT)
+    formatter = EmojiStrippingFormatter(LOG_FORMAT, DATE_FORMAT)
 
     # 1. 控制台处理器 - 显示 INFO 及以上
     console_handler = logging.StreamHandler()

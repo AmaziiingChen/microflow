@@ -39,6 +39,7 @@ from typing import Dict, Any, Optional, List
 import time
 from src.database import db
 from src.llm_service import LLMService
+from src.utils.text_cleaner import strip_emoji
 from src.services import SystemService, DownloadService, ConfigService
 from src.services.rule_generator import RuleGeneratorService
 from src.services.custom_spider_rules_manager import get_rules_manager
@@ -75,9 +76,7 @@ class Api:
         self._js_queue: queue.Queue = queue.Queue(maxsize=500)
         self._js_thread_running = True
         self._js_thread = threading.Thread(
-            target=self._process_js_queue,
-            daemon=True,
-            name="JSExecutor"
+            target=self._process_js_queue, daemon=True, name="JSExecutor"
         )
         self._js_thread.start()
         logger.info("📱 JS 执行线程已启动")
@@ -119,16 +118,37 @@ class Api:
         # 线程控制
         self.is_running = True
         self._window: Optional[webview.Window] = None
+        self._summary_lock = threading.Lock()
+        self._active_summary_tokens: Dict[int, int] = {}
+        self._active_summary_events: Dict[int, threading.Event] = {}
+        self._ai_prereq_cache_lock = threading.Lock()
+        self._ai_prereq_refresh_lock = threading.Lock()
+        self._ai_prereq_cache: Dict[str, Any] = {
+            "signature": "",
+            "result": None,
+            "checked_at": 0.0,
+        }
+        self._ai_prereq_success_ttl = 300
+        self._ai_prereq_failure_ttl = 15
 
         # 加载配置并应用
         self._apply_config()
+        threading.Thread(
+            target=self._warm_ai_prereq_cache,
+            daemon=True,
+            name="AIPrereqWarmup",
+        ).start()
 
     def _get_active_dynamic_sources(self) -> list:
         """获取所有启用的动态爬虫任务名称"""
         try:
             rules = self._rules_manager.load_custom_rules()
-            sources = [rule.get('task_name') for rule in rules if rule.get('enabled', True)]
-            logger.debug(f"[DEBUG] _get_active_dynamic_sources - 规则数: {len(rules)}, 启用的来源: {sources}")
+            sources = [
+                rule.get("task_name") for rule in rules if rule.get("enabled", True)
+            ]
+            logger.debug(
+                f"[DEBUG] _get_active_dynamic_sources - 规则数: {len(rules)}, 启用的来源: {sources}"
+            )
             return sources
         except Exception as e:
             logger.error(f"获取动态来源失败: {e}", exc_info=True)
@@ -149,14 +169,20 @@ class Api:
         # 🌟 详细调试：追踪配置读取
         try:
             subscribed = self._config_service.get("subscribedSources", [])
-            logger.debug(f"[DEBUG] _get_effective_sources - config_service.get('subscribedSources') 返回: {subscribed}, type: {type(subscribed)}")
+            logger.debug(
+                f"[DEBUG] _get_effective_sources - config_service.get('subscribedSources') 返回: {subscribed}, type: {type(subscribed)}"
+            )
         except Exception as e:
-            logger.debug(f"[DEBUG] _get_effective_sources - 读取 subscribedSources 失败: {e}")
+            logger.debug(
+                f"[DEBUG] _get_effective_sources - 读取 subscribedSources 失败: {e}"
+            )
             subscribed = []
 
         try:
             dynamic = self._get_active_dynamic_sources()
-            logger.debug(f"[DEBUG] _get_effective_sources - _get_active_dynamic_sources() 返回: {dynamic}")
+            logger.debug(
+                f"[DEBUG] _get_effective_sources - _get_active_dynamic_sources() 返回: {dynamic}"
+            )
         except Exception as e:
             logger.debug(f"[DEBUG] _get_effective_sources - 获取动态来源失败: {e}")
             dynamic = []
@@ -226,7 +252,9 @@ class Api:
             except Exception as e:
                 logger.warning(f"JS 队列处理异常: {e}")
 
-    def _enqueue_js(self, js_code: str, callback: Optional[Callable[[Any], None]] = None) -> None:
+    def _enqueue_js(
+        self, js_code: str, callback: Optional[Callable[[Any], None]] = None
+    ) -> None:
         """
         将 JS 代码放入执行队列（线程安全）
 
@@ -340,7 +368,7 @@ class Api:
             ai_completed = stats.get("ai_completed", 0)
 
             logger.info(
-                f"📋 任务完成回调: success={success}, reason={reason}, processed={processed}/{submitted}, ai={ai_completed}/{ai_total}"
+                f"任务完成回调: success={success}, reason={reason}, processed={processed}/{submitted}, ai={ai_completed}/{ai_total}"
             )
 
             # 如果所有任务都处理完了
@@ -348,7 +376,7 @@ class Api:
                 # 如果没有 AI 任务，或者所有 AI 任务都完成了
                 if ai_total == 0 or ai_completed >= ai_total:
                     logger.info(
-                        f"✅ 所有任务处理完成，准备关闭加载状态: processed={processed}/{submitted}, ai_total={ai_total}"
+                        f"所有任务处理完成，准备关闭加载状态: processed={processed}/{submitted}, ai_total={ai_total}"
                     )
                     # 通知前端关闭加载状态
                     js_code = """
@@ -364,7 +392,7 @@ class Api:
                 else:
                     logger.warning("⚠️ webview.windows 为空，无法通知前端")
         except Exception as e:
-            logger.error(f"❌ 任务完成回调执行失败: {e}")
+            logger.error(f"任务完成回调执行失败: {e}")
 
     def _on_article_processed(self, article_data: dict):
         """
@@ -411,7 +439,9 @@ class Api:
         except Exception as e:
             logger.warning(f"文章处理回调执行失败: {e}")
 
-    def check_updates(self, is_manual: bool = False) -> Dict[str, Any]:
+    def check_updates(
+        self, is_manual: bool = False, skip_ai_precheck: bool = False
+    ) -> Dict[str, Any]:
         """
         触发爬虫检查更新（异步提交到处理队列）
 
@@ -433,25 +463,28 @@ class Api:
                 "cooldown_remaining": 0,
             }
 
-        # 🌟 优先检查 API 余额状态（如果配置了 AI）
-        api_key = self._config_service.get("apiKey", "")
-        if api_key:  # 只有配置了 API Key 才检查余额
-            if not self._config_service.get_api_balance_ok():
-                # 余额不足，通知前端显示欠费卡片
-                logger.warning("检测到 API 余额不足，拦截更新请求")
-                try:
-                    js_code = """
-                        if (window.updateApiBalanceStatus) {
-                            window.updateApiBalanceStatus(false);
-                        }
-                    """
-                    # 🌟 使用队列执行（线程安全）
-                    self._enqueue_js(js_code)
-                except Exception as e:
-                    logger.debug(f"通知前端显示欠费卡片失败: {e}")
+        # 🌟 核心门禁：AI 前置条件未满足时，后续爬虫全部拦截
+        if not skip_ai_precheck:
+            ai_gate = self.validate_ai_prerequisites()
+            if ai_gate.get("status") != "success":
+                logger.warning(
+                    "检测到 AI 前置条件不满足，拦截更新请求: %s",
+                    ai_gate.get("message", "unknown"),
+                )
+                if ai_gate.get("stage") == "balance_error":
+                    try:
+                        js_code = """
+                            if (window.updateApiBalanceStatus) {
+                                window.updateApiBalanceStatus(false);
+                            }
+                        """
+                        self._enqueue_js(js_code)
+                    except Exception as e:
+                        logger.debug(f"通知前端显示欠费卡片失败: {e}")
                 return {
-                    "status": "api_balance_error",
-                    "message": "API 余额不足，请充值后重试",
+                    "status": "api_precheck_error",
+                    "stage": ai_gate.get("stage", "validation_failed"),
+                    "message": ai_gate.get("message", "API 前置检查失败"),
                     "submitted_count": 0,
                     "queue_size": 0,
                     "cooldown_remaining": 0,
@@ -590,7 +623,9 @@ class Api:
         if filter_sources == []:
             all_articles = []  # 如果全都取消订阅了，就返回空
         else:
-            all_articles = db.get_articles_paged(limit=20, offset=0, source_names=filter_sources)
+            all_articles = db.get_articles_paged(
+                limit=20, offset=0, source_names=filter_sources
+            )
 
         # 🌟 获取冷却剩余时间
         cooldown_remaining = self._daemon_manager.get_cooldown_remaining()
@@ -621,6 +656,32 @@ class Api:
         if remaining > 0:
             return {"status": "cooling", "remaining": remaining}
         return {"status": "ready", "remaining": 0}
+
+    def get_network_access_status(
+        self, force_refresh: bool = False
+    ) -> Dict[str, Any]:
+        """获取校园网访问状态，支持强制刷新。"""
+        snapshot = self._daemon_manager.get_network_status_snapshot(
+            force_refresh=force_refresh
+        )
+        network_status = snapshot.get("network_status")
+
+        if network_status is None:
+            return {
+                "status": "error",
+                "message": "校园网状态检测失败",
+                **snapshot,
+            }
+
+        access_ok = network_status == NetworkStatus.PUBLIC_AND_INTRANET.value
+        return {
+            "status": "success",
+            "network_status": network_status,
+            "description": snapshot.get("description", ""),
+            "checked_at": snapshot.get("checked_at", 0.0),
+            "force_refreshed": snapshot.get("force_refreshed", False),
+            "access_ok": access_ok,
+        }
 
     def get_processing_stats(self) -> Dict[str, Any]:
         """获取后台处理任务的统计信息"""
@@ -657,7 +718,9 @@ class Api:
             else:
                 filter_sources = self._get_effective_sources()
 
-            logger.debug(f"[DEBUG] get_history_paged - source_name={source_name}, filter_sources={filter_sources}")
+            logger.debug(
+                f"[DEBUG] get_history_paged - source_name={source_name}, filter_sources={filter_sources}"
+            )
 
             # 🌟 致命防御：如果什么都没订阅，直接阻断
             if filter_sources == [] and not source_name:
@@ -673,8 +736,11 @@ class Api:
 
             # 🌟 详细调试：显示返回文章的来源分布
             from collections import Counter
-            source_counts = Counter(a.get('source_name') for a in articles)
-            logger.debug(f"[DEBUG] get_history_paged - 返回文章来源分布: {dict(source_counts)}")
+
+            source_counts = Counter(a.get("source_name") for a in articles)
+            logger.debug(
+                f"[DEBUG] get_history_paged - 返回文章来源分布: {dict(source_counts)}"
+            )
 
             return {"status": "success", "data": articles}
         except Exception as e:
@@ -712,7 +778,9 @@ class Api:
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
-    def delete_article(self, article_id: int, hard_delete: bool = False) -> Dict[str, Any]:
+    def delete_article(
+        self, article_id: int, hard_delete: bool = False
+    ) -> Dict[str, Any]:
         """
         删除文章
 
@@ -730,7 +798,10 @@ class Api:
                 # 异步刷新托盘状态
                 try:
                     import threading
-                    threading.Thread(target=self._refresh_tray_status, daemon=True).start()
+
+                    threading.Thread(
+                        target=self._refresh_tray_status, daemon=True
+                    ).start()
                 except Exception:
                     pass
                 return {"status": "success"}
@@ -753,6 +824,7 @@ class Api:
             {"status": "success"} 或 {"status": "error", ...}
         """
         try:
+            new_summary = strip_emoji(new_summary)
             success = db.update_summary(article_id, new_summary)
             if success:
                 logger.info(f"文章 {article_id} 摘要已更新")
@@ -771,16 +843,53 @@ class Api:
             self._scheduler.request_cancel()  # 🌟 新增：一脚踩死爬虫抓取线程
             logger.info("【2.2】正在调用 article_processor.request_cancel()...")
             self._article_processor.request_cancel()
-            logger.info("【2.3】取消指令已发送完毕")
+            logger.info("【2.3】正在调用 llm.request_cancel()...")
+            self._llm.request_cancel()
+            logger.info("【2.4】取消指令已发送完毕")
             return {"status": "success", "message": "已请求取消 AI 任务"}
         except Exception as e:
             logger.error(f"取消 AI 任务失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def cancel_current_ai_summary(
+        self, article_id: int = 0, request_token: int = 0
+    ) -> dict:
+        """取消当前正在进行的 AI 总结"""
+        try:
+            if article_id and request_token:
+                with self._summary_lock:
+                    current_token = self._active_summary_tokens.get(article_id, 0)
+                if current_token and current_token != request_token:
+                    return {
+                        "status": "ignored",
+                        "message": "当前总结已切换，取消请求已忽略",
+                    }
+                with self._summary_lock:
+                    cancel_event = self._active_summary_events.get(article_id)
+                if cancel_event:
+                    cancel_event.set()
+                    logger.info("已请求取消当前 AI 总结（独立事件）")
+                    return {
+                        "status": "success",
+                        "message": "已请求取消当前 AI 总结",
+                    }
+                return {
+                    "status": "ignored",
+                    "message": "当前总结已结束，取消请求已忽略",
+                }
+
+            self._llm.request_cancel()
+            logger.info("已请求取消当前 AI 总结")
+            return {"status": "success", "message": "已请求取消当前 AI 总结"}
+        except Exception as e:
+            logger.error(f"取消当前 AI 总结失败: {e}")
             return {"status": "error", "message": str(e)}
 
     def clear_ai_cancel(self) -> dict:
         """清除取消标志（新一轮任务开始前调用）"""
         try:
             self._article_processor.clear_cancel()
+            self._llm.clear_cancel()
             return {"status": "success"}
         except Exception as e:
             return {"status": "error", "message": str(e)}
@@ -875,7 +984,7 @@ class Api:
             main_mod.update_tray_status(unread=count, sync_time=sync_time)
             logger.debug(f"📊 [DEBUG] update_tray_status 调用完成")
         except Exception as e:
-            logger.debug(f"❌ [DEBUG] 刷新托盘状态失败: {e}")
+            logger.debug(f"[DEBUG] 刷新托盘状态失败: {e}")
             import traceback
 
             traceback.print_exc()
@@ -1008,7 +1117,11 @@ class Api:
             "baseUrl": "https://api.deepseek.com/v1",
             "apiKey": "",
             "modelName": "deepseek-chat",
-            "prompt": self._llm.system_prompt if hasattr(self, "_llm") and self._llm else "请帮我总结以下文章内容",
+            "prompt": (
+                self._llm.system_prompt
+                if hasattr(self, "_llm") and self._llm
+                else "请帮我总结以下文章内容"
+            ),
             "autoStart": False,
             "muteMode": False,
             "trackMode": "continuous",
@@ -1031,7 +1144,9 @@ class Api:
             "skip_detail": False,
         }
         for key, default in default_config.items():
-            if key not in config_data or (isinstance(default, str) and config_data.get(key) in (None, "")):
+            if key not in config_data or (
+                isinstance(default, str) and config_data.get(key) in (None, "")
+            ):
                 config_data[key] = default
 
         # 🌟 修复：启动时恢复置顶状态，改为对属性赋值
@@ -1049,7 +1164,10 @@ class Api:
                 return {"status": "error", "message": "配置已锁定，无法保存"}
 
             if not self._config_service.save(new_config):
-                return {"status": "error", "message": "保存配置文件失败，请检查文件权限"}
+                return {
+                    "status": "error",
+                    "message": "保存配置文件失败，请检查文件权限",
+                }
 
             # 应用开机自启设置
             self._set_autostart(new_config.get("autoStart", False))
@@ -1085,6 +1203,134 @@ class Api:
         except Exception as e:
             logger.error(f"获取余额状态失败: {e}")
             return {"status": "success", "balance_ok": True}  # 出错时默认正常
+
+    def _get_ai_prereq_signature(self) -> str:
+        api_key = str(self._config_service.get("apiKey", "") or "").strip()
+        model_name = str(
+            self._config_service.get("modelName", "deepseek-chat")
+            or "deepseek-chat"
+        ).strip()
+        base_url = str(
+            self._config_service.get("baseUrl", "https://api.deepseek.com/v1")
+            or "https://api.deepseek.com/v1"
+        ).strip()
+        return "|".join([api_key, model_name, base_url])
+
+    def _get_cached_ai_prereq_result(self) -> Optional[Dict[str, Any]]:
+        with self._ai_prereq_cache_lock:
+            cache = dict(self._ai_prereq_cache)
+
+        result = cache.get("result")
+        if not result or cache.get("signature") != self._get_ai_prereq_signature():
+            return None
+
+        checked_at = float(cache.get("checked_at") or 0.0)
+        age = time.time() - checked_at
+        status = result.get("status")
+        stage = result.get("stage")
+
+        if status == "success":
+            if age <= self._ai_prereq_success_ttl and self._config_service.get_api_balance_ok():
+                return dict(result)
+            return None
+
+        if stage == "balance_error":
+            if age <= self._ai_prereq_failure_ttl and not self._config_service.get_api_balance_ok():
+                return dict(result)
+            return None
+
+        if age <= self._ai_prereq_failure_ttl:
+            return dict(result)
+        return None
+
+    def _set_ai_prereq_cache(self, result: Dict[str, Any]) -> None:
+        with self._ai_prereq_cache_lock:
+            self._ai_prereq_cache = {
+                "signature": self._get_ai_prereq_signature(),
+                "result": dict(result),
+                "checked_at": time.time(),
+            }
+
+    def _warm_ai_prereq_cache(self) -> None:
+        try:
+            self.validate_ai_prerequisites(use_cache=False)
+        except Exception as e:
+            logger.debug(f"AI 前置检查预热失败: {e}")
+
+    def validate_ai_prerequisites(self, use_cache: bool = True) -> Dict[str, Any]:
+        """
+        统一检查 AI 前置条件：
+        1. 是否配置 API Key
+        2. 是否能够连通 API
+        3. 是否处于欠费状态
+        """
+        try:
+            if use_cache:
+                cached_result = self._get_cached_ai_prereq_result()
+                if cached_result is not None:
+                    return cached_result
+
+            with self._ai_prereq_refresh_lock:
+                if use_cache:
+                    cached_result = self._get_cached_ai_prereq_result()
+                    if cached_result is not None:
+                        return cached_result
+
+                api_key = str(self._config_service.get("apiKey", "") or "").strip()
+                model_name = str(
+                    self._config_service.get("modelName", "deepseek-chat")
+                    or "deepseek-chat"
+                ).strip()
+                base_url = str(
+                    self._config_service.get("baseUrl", "https://api.deepseek.com/v1")
+                    or "https://api.deepseek.com/v1"
+                ).strip()
+
+                if not api_key:
+                    result = {
+                        "status": "error",
+                        "stage": "config_missing",
+                        "message": "未配置 API Key，请先在设置中配置",
+                    }
+                    self._set_ai_prereq_cache(result)
+                    return result
+
+                is_ok, msg = self._llm.test_connection(api_key, model_name, base_url)
+                if not is_ok:
+                    result = {
+                        "status": "error",
+                        "stage": "connection_failed",
+                        "message": msg,
+                    }
+                    self._set_ai_prereq_cache(result)
+                    return result
+
+                if not self._config_service.get_api_balance_ok():
+                    result = {
+                        "status": "error",
+                        "stage": "balance_error",
+                        "message": "API 余额不足，请先充值后重试",
+                    }
+                    self._set_ai_prereq_cache(result)
+                    return result
+
+                result = {
+                    "status": "success",
+                    "ready": True,
+                    "stage": "ready",
+                    "message": "API 就绪",
+                }
+                self._set_ai_prereq_cache(result)
+                return result
+        except Exception as e:
+            logger.error(f"AI 前置检查失败: {e}")
+            result = {
+                "status": "error",
+                "stage": "validation_failed",
+                "message": f"API 前置检查失败：{e}",
+            }
+            self._set_ai_prereq_cache(result)
+            return result
 
     def clear_api_balance_status(self) -> dict:
         """清除欠费状态（用户充值后调用）"""
@@ -1204,7 +1450,7 @@ class Api:
             if not enabled:
                 warnings.append("邮件通知未启用")
             if len(subscriber_list) == 0:
-                warnings.append("订阅者列表为空（测试邮件将发送给发件人自己）")
+                warnings.append("订阅者列表为空，邮件将只发送给自己）")
             if not smtp_host:
                 config_issues.append("SMTP 服务器未配置")
             if not smtp_user:
@@ -1440,7 +1686,9 @@ class Api:
             else:
                 filter_sources = self._get_effective_sources()
 
-            logger.debug(f"[DEBUG] search_articles - keyword={keyword}, source_name={source_name}, filter_sources={filter_sources}")
+            logger.debug(
+                f"[DEBUG] search_articles - keyword={keyword}, source_name={source_name}, filter_sources={filter_sources}"
+            )
 
             # 🌟 致命防御：如果什么都没订阅，直接阻断
             if filter_sources == [] and not source_name:
@@ -1598,7 +1846,58 @@ class Api:
             logger.error(f"获取托盘未读数量失败: {e}")
             return {"status": "error", "count": 0}
 
-    def regenerate_summary(self, article_id: int) -> Dict[str, Any]:
+    def _resolve_article_custom_prompt(self, article: Dict[str, Any]) -> str:
+        """按文章上下文解析专属摘要提示词"""
+        article_prompt = str(article.get("custom_summary_prompt") or "").strip()
+        if article_prompt:
+            return article_prompt
+
+        rule_id = str(article.get("rule_id") or "").strip()
+        article_url = str(article.get("url") or "").strip()
+        source_name = str(article.get("source_name") or "").strip()
+        department = str(article.get("department") or "").strip()
+
+        try:
+            if rule_id:
+                rule = self._rules_manager.get_rule_by_id(rule_id)
+                if rule:
+                    prompt = str(rule.get("custom_summary_prompt") or "").strip()
+                    if prompt:
+                        return prompt
+
+            rules = self._rules_manager.load_custom_rules()
+            if article_url:
+                for rule in rules:
+                    if str(rule.get("url") or "").strip() == article_url:
+                        prompt = str(rule.get("custom_summary_prompt") or "").strip()
+                        if prompt:
+                            return prompt
+
+            if source_name:
+                for rule in rules:
+                    if not rule.get("enabled", True):
+                        continue
+                    if str(rule.get("task_name") or "").strip() == source_name:
+                        prompt = str(rule.get("custom_summary_prompt") or "").strip()
+                        if prompt:
+                            return prompt
+
+            if department and department != source_name:
+                for rule in rules:
+                    if not rule.get("enabled", True):
+                        continue
+                    if str(rule.get("task_name") or "").strip() == department:
+                        prompt = str(rule.get("custom_summary_prompt") or "").strip()
+                        if prompt:
+                            return prompt
+        except Exception as e:
+            logger.debug(f"解析文章专属提示词失败: {e}")
+
+        return ""
+
+    def regenerate_summary(
+        self, article_id: int, request_token: int = 0, skip_ai_precheck: bool = False
+    ) -> Dict[str, Any]:
         """
         重新生成文章的 AI 总结
 
@@ -1624,18 +1923,48 @@ class Api:
                     "message": "原文内容过短或缺失，无法生成总结",
                 }
 
-            # 3. 🌟 获取自定义提示词（用于自定义数据源）
-            custom_prompt = article.get("custom_summary_prompt")
+            # 3. 🌟 获取文章专属提示词：优先文章自身，其次按规则反查，最后回退默认提示词
+            custom_prompt = self._resolve_article_custom_prompt(article)
 
             # 4. 调用 LLM 服务重新生成总结
             logger.info(f"正在重新生成文章总结: {title}")
             if custom_prompt:
                 logger.info(f"使用自定义提示词: {custom_prompt[:50]}...")
-            new_summary = self._llm.summarize_article(title, raw_text, custom_prompt)
+
+            summary_cancel_event = threading.Event()
+            if request_token:
+                with self._summary_lock:
+                    self._active_summary_tokens[article_id] = request_token
+                    self._active_summary_events[article_id] = summary_cancel_event
+
+            if not skip_ai_precheck:
+                ai_gate = self.validate_ai_prerequisites()
+                if ai_gate.get("status") != "success":
+                    return {
+                        "status": "error",
+                        "stage": ai_gate.get("stage", "validation_failed"),
+                        "message": ai_gate.get("message", "API 前置检查失败"),
+                    }
+
+            new_summary = self._llm.summarize_article(
+                title,
+                raw_text,
+                custom_prompt,
+                priority="manual",
+                cancel_event=summary_cancel_event,
+            )
 
             # 5. 检查是否生成成功
             if new_summary.startswith("⚠️") or new_summary.startswith("❌"):
-                return {"status": "error", "message": new_summary}
+                clean_message = strip_emoji(new_summary)
+                if "用户取消" in clean_message:
+                    return {
+                        "status": "cancelled",
+                        "message": "已中断 AI 总结",
+                    }
+                return {"status": "error", "message": clean_message}
+
+            new_summary = strip_emoji(new_summary)
 
             # 6. 更新数据库
             success = db.update_summary(article_id, new_summary)
@@ -1648,6 +1977,13 @@ class Api:
         except Exception as e:
             logger.error(f"重新生成总结失败: {e}")
             return {"status": "error", "message": str(e)}
+        finally:
+            if request_token:
+                with self._summary_lock:
+                    current_token = self._active_summary_tokens.get(article_id)
+                    if current_token == request_token:
+                        self._active_summary_tokens.pop(article_id, None)
+                        self._active_summary_events.pop(article_id, None)
 
     def import_custom_font(self) -> Dict[str, Any]:
         """呼出系统原生文件选择器，导入并持久化自定义字体"""
@@ -1872,7 +2208,7 @@ class Api:
 
         # 步骤 3：在 TTL 期内，放行
         remaining_days = (self.OFFLINE_TTL_SECONDS - elapsed_seconds) / 86400
-        logger.info(f"✅ 离线检查：TTL 有效，剩余 {remaining_days:.1f} 天")
+        logger.info(f"离线检查：TTL 有效，剩余 {remaining_days:.1f} 天")
         return self._build_success_response({})
 
     def _unlock_if_needed(self) -> None:
@@ -1916,7 +2252,7 @@ class Api:
             current_config = self._config_service.to_dict()
             current_config["isLocked"] = True
             self._config_service.save(current_config)
-            logger.info("✅ 已将配置标记为锁定")
+            logger.info("已将配置标记为锁定")
         except Exception as e:
             logger.error(f"锁定配置失败: {e}")
 
@@ -2204,9 +2540,9 @@ class Api:
                 return {"status": "error", "message": "规则数据不能为空"}
 
             # 🌟 根据 source_type 使用不同的必填字段
-            source_type = rule_dict.get('source_type', 'html')
+            source_type = rule_dict.get("source_type", "html")
 
-            if source_type == 'rss':
+            if source_type == "rss":
                 # RSS 规则只需要基础字段
                 required_fields = [
                     "rule_id",
@@ -2237,7 +2573,7 @@ class Api:
             success = self._rules_manager.save_custom_rule(rule_dict)
 
             if success:
-                logger.info(f"✅ 规则保存成功: {rule_dict.get('rule_id')}")
+                logger.info(f"规则保存成功: {rule_dict.get('rule_id')}")
                 return {
                     "status": "success",
                     "message": "规则保存成功",
@@ -2276,10 +2612,10 @@ class Api:
             if missing_fields:
                 return {
                     "status": "error",
-                    "message": f"缺少必要字段: {', '.join(missing_fields)}"
+                    "message": f"缺少必要字段: {', '.join(missing_fields)}",
                 }
 
-            url = rule_dict.get('url', '')
+            url = rule_dict.get("url", "")
             if not url:
                 return {"status": "error", "message": "RSS URL 不能为空"}
 
@@ -2289,32 +2625,37 @@ class Api:
 
             # 检查是否为有效的 RSS
             if feed.bozo and not feed.entries:
-                error_detail = str(feed.bozo_exception) if feed.bozo_exception else "未知错误"
+                error_detail = (
+                    str(feed.bozo_exception) if feed.bozo_exception else "未知错误"
+                )
                 logger.error(f"📡 RSS 验证失败: {error_detail}")
                 return {
                     "status": "error",
-                    "message": f"无效的 RSS 订阅地址: {error_detail}"
+                    "message": f"无效的 RSS 订阅地址: {error_detail}",
                 }
 
             # 声成成功：获取 feed 信息
-            feed_title = getattr(feed.feed, 'title', url)
-            feed_link = getattr(feed.feed, 'link', url)
+            feed_title = getattr(feed.feed, "title", url)
+            feed_link = getattr(feed.feed, "link", url)
             entry_count = len(feed.entries)
 
             logger.info(f"📡 RSS 验证成功: {feed_title} ({entry_count} 条目)")
 
             # 填充默认值（RSS 规则不需要 HTML 选择器字段）
-            rule_dict.setdefault('source_type', 'rss')
+            rule_dict.setdefault("source_type", "rss")
             # 🌟 不再填充冗余的 HTML 选择器字段，由 save_custom_rule 统一处理
-            rule_dict.setdefault('require_ai_summary', False)
-            rule_dict.setdefault('custom_summary_prompt', '')
-            rule_dict.setdefault('enabled', True)
+            rule_dict.setdefault("custom_summary_prompt", "")
+            if str(rule_dict.get("custom_summary_prompt") or "").strip():
+                rule_dict["require_ai_summary"] = True
+            else:
+                rule_dict.setdefault("require_ai_summary", False)
+            rule_dict.setdefault("enabled", True)
 
             # 保存规则
             success = self._rules_manager.save_custom_rule(rule_dict)
 
             if success:
-                logger.info(f"✅ RSS 规则保存成功: {rule_dict.get('rule_id')}")
+                logger.info(f"RSS 规则保存成功: {rule_dict.get('rule_id')}")
                 return {
                     "status": "success",
                     "message": "RSS 规则保存成功",
@@ -2322,15 +2663,18 @@ class Api:
                     "feed_info": {
                         "title": feed_title,
                         "link": feed_link,
-                        "entry_count": entry_count
-                    }
+                        "entry_count": entry_count,
+                    },
                 }
             else:
                 return {"status": "error", "message": "规则保存失败"}
 
         except ImportError:
             logger.error("feedparser 未安装")
-            return {"status": "error", "message": "feedparser 模块未安装，请检查 requirements.txt"}
+            return {
+                "status": "error",
+                "message": "feedparser 模块未安装，请检查 requirements.txt",
+            }
         except Exception as e:
             logger.error(f"保存 RSS 规则失败: {e}")
             return {"status": "error", "message": str(e)}

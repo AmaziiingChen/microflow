@@ -129,6 +129,32 @@ class ConfigService:
             logger.error(f"生成签名失败: {e}")
             return ""
 
+    @staticmethod
+    def _normalize_email_list(emails: Any) -> list:
+        """
+        规范化邮箱列表：去空、去重、按大小写不敏感方式合并。
+
+        保留首个出现的原始写法，便于界面展示。
+        """
+        if not isinstance(emails, list):
+            return []
+
+        normalized = []
+        seen = set()
+        for email in emails:
+            cleaned = str(email).strip() if email is not None else ""
+            if not cleaned:
+                continue
+
+            key = cleaned.lower()
+            if key in seen:
+                continue
+
+            seen.add(key)
+            normalized.append(cleaned)
+
+        return normalized
+
     def load(self) -> AppConfig:
         """
         从文件加载配置
@@ -199,7 +225,7 @@ class ConfigService:
                 smtp_port=data.get('smtpPort', 465),
                 smtp_user=data.get('smtpUser', ''),
                 smtp_password=data.get('smtpPassword', ''),
-                subscriber_list=data.get('subscriberList', []),
+                subscriber_list=self._normalize_email_list(data.get('subscriberList', [])),
                 # 🤖 多模型配置（用于 AI 爬虫多模型投票）
                 secondary_models=data.get('secondaryModels', []),
             )
@@ -237,7 +263,7 @@ class ConfigService:
                         smtp_port=data.get('smtpPort', 465),
                         smtp_user=data.get('smtpUser', ''),
                         smtp_password=data.get('smtpPassword', ''),
-                        subscriber_list=data.get('subscriberList', []),
+                        subscriber_list=self._normalize_email_list(data.get('subscriberList', [])),
                         secondary_models=data.get('secondaryModels', []),
                     )
                     self._last_load_failed = False
@@ -287,6 +313,11 @@ class ConfigService:
                     config_dict['smtpPort'] = int(config_dict['smtpPort'])
                 except (ValueError, TypeError):
                     config_dict['smtpPort'] = 465
+
+            if 'subscriberList' in config_dict:
+                config_dict['subscriberList'] = self._normalize_email_list(
+                    config_dict.get('subscriberList', [])
+                )
 
             # 如果配置从未成功加载过，避免把前端初始空白状态写回磁盘。
             # 这种情况下优先保留内存中的已知配置，防止把有效设置覆盖成空值。
@@ -396,7 +427,7 @@ class ConfigService:
                 smtp_port=config_dict.get('smtpPort', 465),
                 smtp_user=config_dict.get('smtpUser', ''),
                 smtp_password=config_dict.get('smtpPassword', ''),
-                subscriber_list=config_dict.get('subscriberList', []),
+                subscriber_list=self._normalize_email_list(config_dict.get('subscriberList', [])),
                 # 🤖 多模型配置（用于 AI 爬虫多模型投票）
                 secondary_models=config_dict.get('secondaryModels', []),
             )

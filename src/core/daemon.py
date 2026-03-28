@@ -60,6 +60,7 @@ class DaemonManager:
 
         # 网络状态追踪
         self._last_network_status: Optional[NetworkStatus] = None
+        self._last_network_checked_at: float = 0.0
         self._last_successful_run: float = 0  # 上次成功抓取的时间戳
 
         # 🌟 冷却时间获取器（可由外部设置，支持动态配置）
@@ -90,6 +91,22 @@ class DaemonManager:
             except Exception as e:
                 logger.warning(f"获取冷却时间失败: {e}")
         return self.DEFAULT_UPDATE_COOLDOWN
+
+    def _refresh_network_status(self) -> Optional[NetworkStatus]:
+        """
+        立即刷新并缓存当前网络状态。
+
+        Returns:
+            网络状态枚举，若检测失败则返回 None。
+        """
+        try:
+            current_network_status = check_network_status()
+            self._last_network_status = current_network_status
+            self._last_network_checked_at = time.time()
+            return current_network_status
+        except Exception as e:
+            logger.warning(f"刷新网络状态失败: {e}")
+            return None
 
     # ==================== 持久化冷却方法 ====================
 
@@ -293,9 +310,12 @@ class DaemonManager:
                 # 🌟 执行任务
                 if should_run:
                     # 执行网络检测
-                    current_network_status = check_network_status()
                     previous_network_status = self._last_network_status
-                    self._last_network_status = current_network_status
+                    current_network_status = self._refresh_network_status()
+                    if current_network_status is None:
+                        logger.warning("网络状态检测失败，本轮跳过")
+                        last_run_time = current_time
+                        continue
 
                     # 断线补偿逻辑
                     should_compensate = False
@@ -410,11 +430,36 @@ class DaemonManager:
             return not self._thread.is_alive()
         return True
 
-    def get_network_status(self) -> Optional[str]:
+    def get_network_status(self, force_refresh: bool = False) -> Optional[str]:
         """获取当前网络状态（用于前端展示）"""
+        if force_refresh or self._last_network_status is None:
+            current_network_status = self._refresh_network_status()
+            if current_network_status is None:
+                return None
+
         if self._last_network_status:
             return self._last_network_status.value
         return None
+
+    def get_network_status_snapshot(self, force_refresh: bool = False) -> Dict[str, Any]:
+        """获取网络状态快照，供 API 层直接返回给前端。"""
+        network_status = self.get_network_status(force_refresh=force_refresh)
+        status_enum = self._last_network_status
+
+        if status_enum is None:
+            return {
+                "network_status": None,
+                "description": "尚未检测",
+                "checked_at": int(self._last_network_checked_at * 1000),
+                "force_refreshed": force_refresh,
+            }
+
+        return {
+            "network_status": network_status,
+            "description": get_network_description(status_enum),
+            "checked_at": int(self._last_network_checked_at * 1000),
+            "force_refreshed": force_refresh,
+        }
 
     def get_cooldown_remaining(self, cooldown_seconds: int = None) -> int:
         """

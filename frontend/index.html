@@ -109,16 +109,24 @@
 
               <svg
                 v-else-if="toast.type === 'info'"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                class="toast-info-icon"
+                viewBox="0 0 20.7335 20.3788"
+                xmlns="http://www.w3.org/2000/svg"
               >
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="16" x2="12" y2="12"></line>
-                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                <g>
+                  <rect
+                    height="20.3788"
+                    opacity="0"
+                    width="20.7335"
+                    x="0"
+                    y="0"
+                  />
+                  <path
+                    d="M20.3722 10.1845C20.3722 15.8001 15.8099 20.3691 10.1845 20.3691C4.56892 20.3691 0 15.8001 0 10.1845C0 4.56226 4.56892 0 10.1845 0C15.8099 0 20.3722 4.56226 20.3722 10.1845ZM8.55546 8.43689C8.06146 8.43689 7.68019 8.81505 7.68019 9.28331C7.68019 9.78708 8.06146 10.1395 8.55546 10.1395L9.54273 10.1395L9.54273 14.0834L8.37082 14.0834C7.87637 14.0834 7.49199 14.4616 7.49199 14.9267C7.49199 15.4336 7.87637 15.786 8.37082 15.786L12.4968 15.786C12.9943 15.786 13.3756 15.4336 13.3756 14.9267C13.3756 14.4616 12.9943 14.0834 12.4968 14.0834L11.4615 14.0834L11.4615 9.53497C11.4615 8.8732 11.1384 8.43689 10.509 8.43689ZM8.69443 5.48898C8.69443 6.29017 9.34558 6.94442 10.1432 6.94442C10.9409 6.94442 11.5853 6.29017 11.5853 5.48898C11.5853 4.66915 10.9409 4.02732 10.1432 4.02732C9.34558 4.02732 8.69443 4.66915 8.69443 5.48898Z"
+                    fill="currentColor"
+                    fill-opacity="0.9"
+                  />
+                </g>
               </svg>
 
               <svg
@@ -182,6 +190,87 @@
         <div class="relative-container">
           <!-- 设置面板打开时，显示卡片列表 -->
           <div v-if="isSettingsOpen" class="settings-cards-container">
+            <!-- 模块0：网络与访问 -->
+            <div class="settings-section-divider">
+              <span class="divider-text">网络与访问</span>
+            </div>
+
+            <div class="list-card settings-card network-access-card" @click.stop>
+              <div class="settings-row" style="align-items: flex-start">
+                <div style="display: flex; flex-direction: column; gap: 6px; min-width: 0">
+                  <div
+                    :class="['connection-status', networkAccessState.status]"
+                    style="margin: 0"
+                  >
+                    <svg
+                      class="icon-antenna"
+                      viewBox="0 0 23 19"
+                      fill="currentColor"
+                      style="width: 16px; height: 16px"
+                    >
+                      <path
+                        class="wave-outer"
+                        d="M0 7.05773C0 9.60255 0.862072 11.9774 2.46764 13.6824C2.95053 14.1919 3.58435 14.1609 3.94343 13.7281C4.29009 13.3206 4.18312 12.8058 3.7974 12.3712C2.55402 10.9907 1.85886 9.11076 1.85886 7.05773C1.85886 5.00781 2.54781 3.13101 3.7974 1.75046C4.18623 1.31591 4.2963 0.801028 3.94343 0.393568C3.58125-0.0360787 2.94432-0.0764489 2.46764 0.439291C0.905547 2.11636 0 4.52222 0 7.05773ZM17.8045 13.7281C18.1635 14.1609 18.7974 14.1919 19.2803 13.6824C20.8858 11.9774 21.7479 9.60255 21.7479 7.05773C21.7479 4.52222 20.8423 2.11636 19.2803 0.439291C18.8036-0.0764489 18.1666-0.0360787 17.8045 0.393568C17.4516 0.801028 17.5617 1.31591 17.9505 1.75046C19.2001 3.13101 19.889 5.00781 19.889 7.05773C19.889 9.11076 19.1939 10.9907 17.9505 12.3712C17.5648 12.8058 17.4578 13.3206 17.8045 13.7281Z"
+                      />
+                      <path
+                        class="wave-inner"
+                        d="M4.24797 7.05773C4.24797 8.51501 4.7083 9.87775 5.53928 10.861C5.97423 11.3754 6.66265 11.3595 7.01908 10.9201C7.35021 10.5157 7.22947 10.0203 6.89833 9.56937C6.39624 8.93056 6.10683 7.9833 6.10683 7.05773C6.10683 6.13216 6.41622 5.20798 6.89833 4.54608C7.2197 4.08534 7.35021 3.59976 7.01908 3.19851C6.66265 2.7591 5.97423 2.73691 5.53928 3.25445C4.7083 4.23771 4.24797 5.60044 4.24797 7.05773ZM14.7288 10.9201C15.0852 11.3595 15.7737 11.3754 16.2086 10.861C17.0396 9.87775 17.4999 8.51501 17.4999 7.05773C17.4999 5.60044 17.0396 4.23771 16.2086 3.25445C15.7737 2.73691 15.0852 2.7591 14.7288 3.19851C14.3977 3.59976 14.5282 4.08534 14.8496 4.54608C15.3317 5.20798 15.6411 6.13216 15.6411 7.05773C15.6411 7.9833 15.3516 8.93056 14.8496 9.56937C14.5184 10.0203 14.3977 10.5157 14.7288 10.9201Z"
+                      />
+                      <path
+                        class="tower"
+                        d="M8.89277 7.05773C8.89277 7.82296 9.318 8.48433 9.96073 8.81056L9.96073 17.4066C9.96073 18.0165 10.3349 18.439 10.8804 18.439C11.4449 18.439 11.7965 18.0325 11.7965 17.4066L11.7965 8.81056C12.4294 8.48433 12.8613 7.8163 12.8613 7.05773C12.8613 5.95695 11.9812 5.06346 10.8804 5.06346C9.77294 5.06346 8.89277 5.95695 8.89277 7.05773Z"
+                      />
+                    </svg>
+                    <span class="status-text">{{ networkAccessState.label }}</span>
+                  </div>
+                  <div class="settings-hint" style="margin-top: 0; text-align: left">
+                    {{ networkAccessState.detail }}
+                  </div>
+                  <div
+                    class="settings-hint"
+                    style="margin-top: 0; text-align: left; color: #9ca3af"
+                  >
+                    {{ formatNetworkCheckedAt(networkAccessState.checkedAt) }}
+                  </div>
+                </div>
+
+                <button
+                  class="test-connection-btn"
+                  @click="refreshNetworkAccessStatus(true)"
+                  :disabled="isCheckingNetworkAccess"
+                  style="display: inline-flex; align-items: center; gap: 8px; white-space: nowrap"
+                >
+                  <template v-if="isCheckingNetworkAccess">
+                    <div class="connection-status testing" style="margin: 0">
+                      <svg
+                        class="icon-antenna"
+                        viewBox="0 0 23 19"
+                        fill="currentColor"
+                        style="width: 16px; height: 16px"
+                      >
+                        <path
+                          class="wave-outer"
+                          d="M0 7.05773C0 9.60255 0.862072 11.9774 2.46764 13.6824C2.95053 14.1919 3.58435 14.1609 3.94343 13.7281C4.29009 13.3206 4.18312 12.8058 3.7974 12.3712C2.55402 10.9907 1.85886 9.11076 1.85886 7.05773C1.85886 5.00781 2.54781 3.13101 3.7974 1.75046C4.18623 1.31591 4.2963 0.801028 3.94343 0.393568C3.58125-0.0360787 2.94432-0.0764489 2.46764 0.439291C0.905547 2.11636 0 4.52222 0 7.05773ZM17.8045 13.7281C18.1635 14.1609 18.7974 14.1919 19.2803 13.6824C20.8858 11.9774 21.7479 9.60255 21.7479 7.05773C21.7479 4.52222 20.8423 2.11636 19.2803 0.439291C18.8036-0.0764489 18.1666-0.0360787 17.8045 0.393568C17.4516 0.801028 17.5617 1.31591 17.9505 1.75046C19.2001 3.13101 19.889 5.00781 19.889 7.05773C19.889 9.11076 19.1939 10.9907 17.9505 12.3712C17.5648 12.8058 17.4578 13.3206 17.8045 13.7281Z"
+                        />
+                        <path
+                          class="wave-inner"
+                          d="M4.24797 7.05773C4.24797 8.51501 4.7083 9.87775 5.53928 10.861C5.97423 11.3754 6.66265 11.3595 7.01908 10.9201C7.35021 10.5157 7.22947 10.0203 6.89833 9.56937C6.39624 8.93056 6.10683 7.9833 6.10683 7.05773C6.10683 6.13216 6.41622 5.20798 6.89833 4.54608C7.2197 4.08534 7.35021 3.59976 7.01908 3.19851C6.66265 2.7591 5.97423 2.73691 5.53928 3.25445C4.7083 4.23771 4.24797 5.60044 4.24797 7.05773ZM14.7288 10.9201C15.0852 11.3595 15.7737 11.3754 16.2086 10.861C17.0396 9.87775 17.4999 8.51501 17.4999 7.05773C17.4999 5.60044 17.0396 4.23771 16.2086 3.25445C15.7737 2.73691 15.0852 2.7591 14.7288 3.19851C14.3977 3.59976 14.5282 4.08534 14.8496 4.54608C15.3317 5.20798 15.6411 6.13216 15.6411 7.05773C15.6411 7.9833 15.3516 8.93056 14.8496 9.56937C14.5184 10.0203 14.3977 10.5157 14.7288 10.9201Z"
+                        />
+                        <path
+                          class="tower"
+                          d="M8.89277 7.05773C8.89277 7.82296 9.318 8.48433 9.96073 8.81056L9.96073 17.4066C9.96073 18.0165 10.3349 18.439 10.8804 18.439C11.4449 18.439 11.7965 18.0325 11.7965 17.4066L11.7965 8.81056C12.4294 8.48433 12.8613 7.8163 12.8613 7.05773C12.8613 5.95695 11.9812 5.06346 10.8804 5.06346C9.77294 5.06346 8.89277 5.95695 8.89277 7.05773Z"
+                        />
+                      </svg>
+                      <span class="status-text">检查中</span>
+                    </div>
+                  </template>
+                  <template v-else>
+                    <span class="status-text">重新检测</span>
+                  </template>
+                </button>
+              </div>
+            </div>
+
             <!-- 模块1：AI引擎与提示词 -->
             <div class="settings-section-divider">
               <span class="divider-text">AI 引擎与提示词</span>
@@ -411,18 +500,13 @@
                 @click="toggleSecondaryModelsExpanded"
               >
                 <div style="display: flex; align-items: center; gap: 8px">
-                  <svg
+                  <img
+                    src="./icons/square.3.layers.3d.top.filled.svg"
+                    alt=""
                     width="18"
                     height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                  >
-                    <path
-                      d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
-                    />
-                  </svg>
+                    style="opacity: 0.55; display: block"
+                  />
                   <span>备选模型</span>
                 </div>
                 <svg
@@ -445,7 +529,7 @@
               <div
                 class="secondary-models-content"
                 :style="{
-                  maxHeight: secondaryModelsExpanded ? '800px' : '0',
+                  maxHeight: secondaryModelsExpanded ? '1400px' : '0',
                   opacity: secondaryModelsExpanded ? '1' : '0',
                   padding: secondaryModelsExpanded ? '16px 0' : '0'
                 }"
@@ -465,7 +549,7 @@
                       <span class="model-index">模型 {{ index + 1 }}</span>
                       <button
                         class="btn-remove-model"
-                        @click="removeSecondaryModel(index)"
+                        @click="handleSecondaryModelRemove(index)"
                         title="移除此模型"
                       >
                         <svg
@@ -677,6 +761,58 @@
                 </button>
                 <div v-else class="model-limit-hint">
                   最多支持 3 个备选模型
+                </div>
+              </div>
+            </div>
+
+            <!-- 备选模型删除确认弹窗 -->
+            <div
+              v-if="secondaryModelDeleteConfirmVisible"
+              class="delete-confirm-overlay"
+              @click.self="cancelSecondaryModelRemove"
+            >
+              <div class="delete-confirm-modal secondary-model-delete-modal">
+                <div class="delete-confirm-header">
+                  <svg
+                    class="delete-confirm-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    />
+                    <path
+                      d="M12 8V12M12 16H12.01"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                  <h3>确认删除</h3>
+                </div>
+                <p class="delete-confirm-message">
+                  确定要删除
+                  <strong>{{ secondaryModelDeleteName || '该模型' }}</strong>
+                  吗？此操作不可撤销。
+                </p>
+                <div class="secondary-delete-actions">
+                  <button
+                    class="secondary-delete-cancel"
+                    type="button"
+                    @click="cancelSecondaryModelRemove"
+                  >
+                    取消
+                  </button>
+                  <button
+                    class="secondary-delete-confirm"
+                    type="button"
+                    @click="removeSecondaryModel"
+                  >
+                    删除
+                  </button>
                 </div>
               </div>
             </div>
@@ -898,25 +1034,21 @@
                 title="添加自定义数据源"
               >
                 <svg
-                  width="18"
-                  height="18"
+                  class="add-icon"
                   version="1.1"
                   xmlns="http://www.w3.org/2000/svg"
                   xmlns:xlink="http://www.w3.org/1999/xlink"
-                  viewBox="0 0 18.5894 18.2316"
+                  viewBox="0 0 20.7335 20.3788"
                 >
                   <g>
-                    <rect
-                      height="18.2316"
-                      opacity="0"
-                      width="18.5894"
-                      x="0"
-                      y="0"
+                    <rect height="20.3788" opacity="0" width="20.7335" x="0" y="0" />
+                    <path
+                      d="M10.1845 20.3691C15.8099 20.3691 20.3722 15.8001 20.3722 10.1845C20.3722 4.56226 15.8099 0 10.1845 0C4.56892 0 0 4.56226 0 10.1845C0 15.8001 4.56892 20.3691 10.1845 20.3691Z"
+                      fill="#34c759"
                     />
                     <path
-                      d="M18.2281 3.17148L18.2281 15.0646C18.2281 17.1502 17.1404 18.2281 15.0246 18.2281L3.20351 18.2281C1.0957 18.2281 0 17.1502 0 15.0646L0 3.17148C0 1.08769 1.0957 0 3.20351 0L15.0246 0C17.1404 0 18.2281 1.08769 18.2281 3.17148ZM8.18144 5.36991L8.18144 8.14434L5.40702 8.14434C4.84648 8.14434 4.44921 8.54511 4.44921 9.11093C4.44921 9.66874 4.84648 10.0535 5.40702 10.0535L8.18144 10.0535L8.18144 12.8359C8.18144 13.3885 8.57422 13.7937 9.13203 13.7937C9.69609 13.7937 10.0986 13.3965 10.0986 12.8359L10.0986 10.0535L12.8811 10.0535C13.4336 10.0535 13.8389 9.66874 13.8389 9.11093C13.8389 8.54511 13.4336 8.14434 12.8811 8.14434L10.0986 8.14434L10.0986 5.36991C10.0986 4.80937 9.69609 4.40234 9.13203 4.40234C8.57422 4.40234 8.18144 4.80937 8.18144 5.36991Z"
-                      fill="currentColor"
-                      fill-opacity="0.85"
+                      d="M11.2267 13.8529L11.2267 6.5028C11.2267 5.90183 10.7882 5.45976 10.1779 5.45976C9.57734 5.45976 9.14238 5.90183 9.14238 6.5028L9.14238 13.8529C9.14238 14.4472 9.57734 14.8862 10.1779 14.8862C10.7882 14.8862 11.2267 14.4539 11.2267 13.8529ZM6.51257 11.2134L13.8662 11.2134C14.4637 11.2134 14.9026 10.7882 14.9026 10.1845C14.9026 9.57424 14.4637 9.13572 13.8662 9.13572L6.51257 9.13572C5.90849 9.13572 5.47619 9.57424 5.47619 10.1845C5.47619 10.7882 5.90849 11.2134 6.51257 11.2134Z"
+                      fill="white"
                     />
                   </g>
                 </svg>
@@ -1182,14 +1314,66 @@
 
             <!-- 17. 邮件测试操作卡片（含动画） -->
             <div
-              class="list-card settings-card"
+              class="list-card settings-card email-push-actions-card"
               @click.stop
               v-if="config.emailNotifyEnabled"
             >
-              <div
-                class="settings-card-actions"
-                style="justify-content: center; gap: 12px"
-              >
+              <div class="settings-card-actions email-push-actions-bar">
+                <button
+                  class="diagnose-email-btn"
+                  @click="diagnoseEmailPush"
+                  :disabled="isDiagnosing"
+                  style="display: inline-flex; align-items: center; gap: 8px"
+                >
+                  <template v-if="isDiagnosing">
+                    <div class="connection-status testing" style="margin: 0">
+                      <svg
+                        class="icon-antenna"
+                        viewBox="0 0 23 19"
+                        fill="currentColor"
+                        style="width: 16px; height: 16px"
+                      >
+                        <path
+                          class="wave-outer"
+                          d="M0 7.05773C0 9.60255 0.862072 11.9774 2.46764 13.6824C2.95053 14.1919 3.58435 14.1609 3.94343 13.7281C4.29009 13.3206 4.18312 12.8058 3.7974 12.3712C2.55402 10.9907 1.85886 9.11076 1.85886 7.05773C1.85886 5.00781 2.54781 3.13101 3.7974 1.75046C4.18623 1.31591 4.2963 0.801028 3.94343 0.393568C3.58125-0.0360787 2.94432-0.0764489 2.46764 0.439291C0.905547 2.11636 0 4.52222 0 7.05773ZM17.8045 13.7281C18.1635 14.1609 18.7974 14.1919 19.2803 13.6824C20.8858 11.9774 21.7479 9.60255 21.7479 7.05773C21.7479 4.52222 20.8423 2.11636 19.2803 0.439291C18.8036-0.0764489 18.1666-0.0360787 17.8045 0.393568C17.4516 0.801028 17.5617 1.31591 17.9505 1.75046C19.2001 3.13101 19.889 5.00781 19.889 7.05773C19.889 9.11076 19.1939 10.9907 17.9505 12.3712C17.5648 12.8058 17.4578 13.3206 17.8045 13.7281Z"
+                        />
+                        <path
+                          class="wave-inner"
+                          d="M4.24797 7.05773C4.24797 8.51501 4.7083 9.87775 5.53928 10.861C5.97423 11.3754 6.66265 11.3595 7.01908 10.9201C7.35021 10.5157 7.22947 10.0203 6.89833 9.56937C6.39624 8.93056 6.10683 7.9833 6.10683 7.05773C6.10683 6.13216 6.41622 5.20798 6.89833 4.54608C7.2197 4.08534 7.35021 3.59976 7.01908 3.19851C6.66265 2.7591 5.97423 2.73691 5.53928 3.25445C4.7083 4.23771 4.24797 5.60044 4.24797 7.05773ZM14.7288 10.9201C15.0852 11.3595 15.7737 11.3754 16.2086 10.861C17.0396 9.87775 17.4999 8.51501 17.4999 7.05773C17.4999 5.60044 17.0396 4.23771 16.2086 3.25445C15.7737 2.73691 15.0852 2.7591 14.7288 3.19851C14.3977 3.59976 14.5282 4.08534 14.8496 4.54608C15.3317 5.20798 15.6411 6.13216 15.6411 7.05773C15.6411 7.9833 15.3516 8.93056 14.8496 9.56937C14.5184 10.0203 14.3977 10.5157 14.7288 10.9201Z"
+                        />
+                        <path
+                          class="tower"
+                          d="M8.89277 7.05773C8.89277 7.82296 9.318 8.48433 9.96073 8.81056L9.96073 17.4066C9.96073 18.0165 10.3349 18.439 10.8804 18.439C11.4449 18.439 11.7965 18.0325 11.7965 17.4066L11.7965 8.81056C12.4294 8.48433 12.8613 7.8163 12.8613 7.05773C12.8613 5.95695 11.9812 5.06346 10.8804 5.06346C9.77294 5.06346 8.89277 5.95695 8.89277 7.05773Z"
+                        />
+                      </svg>
+                      <span class="status-text">诊断中</span>
+                    </div>
+                  </template>
+                  <template v-else>
+                    <div class="connection-status idle" style="margin: 0">
+                      <svg
+                        class="icon-antenna"
+                        viewBox="0 0 23 19"
+                        fill="currentColor"
+                        style="width: 16px; height: 16px"
+                      >
+                        <path
+                          class="wave-outer"
+                          d="M0 7.05773C0 9.60255 0.862072 11.9774 2.46764 13.6824C2.95053 14.1919 3.58435 14.1609 3.94343 13.7281C4.29009 13.3206 4.18312 12.8058 3.7974 12.3712C2.55402 10.9907 1.85886 9.11076 1.85886 7.05773C1.85886 5.00781 2.54781 3.13101 3.7974 1.75046C4.18623 1.31591 4.2963 0.801028 3.94343 0.393568C3.58125-0.0360787 2.94432-0.0764489 2.46764 0.439291C0.905547 2.11636 0 4.52222 0 7.05773ZM17.8045 13.7281C18.1635 14.1609 18.7974 14.1919 19.2803 13.6824C20.8858 11.9774 21.7479 9.60255 21.7479 7.05773C21.7479 4.52222 20.8423 2.11636 19.2803 0.439291C18.8036-0.0764489 18.1666-0.0360787 17.8045 0.393568C17.4516 0.801028 17.5617 1.31591 17.9505 1.75046C19.2001 3.13101 19.889 5.00781 19.889 7.05773C19.889 9.11076 19.1939 10.9907 17.9505 12.3712C17.5648 12.8058 17.4578 13.3206 17.8045 13.7281Z"
+                        />
+                        <path
+                          class="wave-inner"
+                          d="M4.24797 7.05773C4.24797 8.51501 4.7083 9.87775 5.53928 10.861C5.97423 11.3754 6.66265 11.3595 7.01908 10.9201C7.35021 10.5157 7.22947 10.0203 6.89833 9.56937C6.39624 8.93056 6.10683 7.9833 6.10683 7.05773C6.10683 6.13216 6.41622 5.20798 6.89833 4.54608C7.2197 4.08534 7.35021 3.59976 7.01908 3.19851C6.66265 2.7591 5.97423 2.73691 5.53928 3.25445C4.7083 4.23771 4.24797 5.60044 4.24797 7.05773ZM14.7288 10.9201C15.0852 11.3595 15.7737 11.3754 16.2086 10.861C17.0396 9.87775 17.4999 8.51501 17.4999 7.05773C17.4999 5.60044 17.0396 4.23771 16.2086 3.25445C15.7737 2.73691 15.0852 2.7591 14.7288 3.19851C14.3977 3.59976 14.5282 4.08534 14.8496 4.54608C15.3317 5.20798 15.6411 6.13216 15.6411 7.05773C15.6411 7.9833 15.3516 8.93056 14.8496 9.56937C14.5184 10.0203 14.3977 10.5157 14.7288 10.9201Z"
+                        />
+                        <path
+                          class="tower"
+                          d="M8.89277 7.05773C8.89277 7.82296 9.318 8.48433 9.96073 8.81056L9.96073 17.4066C9.96073 18.0165 10.3349 18.439 10.8804 18.439C11.4449 18.439 11.7965 18.0325 11.7965 17.4066L11.7965 8.81056C12.4294 8.48433 12.8613 7.8163 12.8613 7.05773C12.8613 5.95695 11.9812 5.06346 10.8804 5.06346C9.77294 5.06346 8.89277 5.95695 8.89277 7.05773Z"
+                        />
+                      </svg>
+                      <span class="status-text">诊断当前配置</span>
+                    </div>
+                  </template>
+                </button>
                 <button
                   class="test-email-btn"
                   @click="sendTestEmail"
@@ -1292,13 +1476,6 @@
                       <span class="status-text">发送测试邮件</span>
                     </div>
                   </template>
-                </button>
-                <button
-                  class="diagnose-email-btn"
-                  @click="diagnoseEmailPush"
-                  :disabled="isDiagnosing"
-                >
-                  {{ isDiagnosing ? '诊断中...' : '诊断配置' }}
                 </button>
                 <button
                   class="push-test-btn"
@@ -1466,7 +1643,7 @@
                         style="flex: 1; padding: 10px 16px; border-radius: 8px; border: 1px solid var(--border-color); background: transparent; cursor: pointer; transition: all 0.2s;"
                         :style="{ background: ruleForm.source_type === 'html' ? 'var(--accent-color)' : 'transparent', color: ruleForm.source_type === 'html' ? 'white' : 'inherit', borderColor: ruleForm.source_type === 'html' ? 'var(--accent-color)' : 'var(--border-color)' }"
                       >
-                        🌐 网页提取
+                        网页提取
                       </button>
                       <button
                         type="button"
@@ -1475,7 +1652,7 @@
                         style="flex: 1; padding: 10px 16px; border-radius: 8px; border: 1px solid var(--border-color); background: transparent; cursor: pointer; transition: all 0.2s;"
                         :style="{ background: ruleForm.source_type === 'rss' ? 'var(--accent-color)' : 'transparent', color: ruleForm.source_type === 'rss' ? 'white' : 'inherit', borderColor: ruleForm.source_type === 'rss' ? 'var(--accent-color)' : 'var(--border-color)' }"
                       >
-                        📡 RSS 订阅
+                        RSS 订阅
                       </button>
                     </div>
                   </div>
@@ -1617,6 +1794,13 @@
                       ></textarea>
                       <span class="settings-hint" style="margin-top: 4px">
                         留空则使用默认提示词
+                      </span>
+                      <span
+                        v-if="ruleForm.source_type === 'rss'"
+                        class="settings-hint"
+                        style="margin-top: 4px; display: block"
+                      >
+                        RSS 规则填写专属提示词后，会自动启用 AI 摘要，并在重新生成时优先复用
                       </span>
                     </div>
                   </div>
@@ -1798,7 +1982,7 @@
                       style="margin-top: 12px"
                     >
                       <label class="settings-label" style="margin-bottom: 6px">
-                        ⚙️ 专属 AI 提示词 (Pro)
+                        专属 AI 提示词
                       </label>
                       <textarea
                         v-model="ruleForm.custom_summary_prompt"
@@ -1808,7 +1992,14 @@
                         style="font-size: 13px; resize: vertical"
                       ></textarea>
                       <span class="settings-hint" style="margin-top: 4px">
-                        留空则使用默认摘要模板
+                        留空则使用默认提示词
+                      </span>
+                      <span
+                        v-if="ruleForm.source_type === 'rss'"
+                        class="settings-hint"
+                        style="margin-top: 4px; display: block"
+                      >
+                        RSS 规则填写专属提示词后，会自动启用 AI 摘要，并在重新生成时优先复用
                       </span>
                     </div>
                   </div>
@@ -2087,10 +2278,12 @@
             class="article-stack"
             :class="{ 'is-switching': isListSwitching }"
           >
-            <template v-for="(item, index) in processedArticles">
+            <template
+              v-for="(item, index) in processedArticles"
+              :key="item.isHeader ? `header_${item.title}` : `card_${item.id || item.url || index}`"
+            >
               <div
                 v-if="item.isHeader"
-                :key="'header_' + item.title"
                 class="date-group-header"
               >
                 {{ item.title }}
@@ -2098,7 +2291,7 @@
 
               <div
                 v-else
-                :key="item.id || item.url"
+                v-memo="[item.id, item.url, item.title, item.is_read, item.is_favorite, item.is_announcement, item.department, item.source_name, item.formattedTime, item.parsedTags?.[0], item.parsedAttachments?.length]"
                 :data-url="item.url"
                 :data-id="item.id"
                 :class="['list-card', { 'announcement-card': item.is_announcement, 'read': item.is_read && item.is_announcement && item.id !== 'balance_warning' }]"
@@ -2385,7 +2578,7 @@
               <button
                 class="btn-check"
                 :class="{
-                  loading: isLoading,
+                  loading: updateButtonLoadingVisible,
                   'read-only-btn': isReadOnlyMode && !isLoading,
                   'is-cooldown': isUpdateDisabled && !isLoading && !isReadOnlyMode
                 }"
@@ -2394,13 +2587,14 @@
                 data-tooltip="更新公文"
               >
                 <span v-if="isReadOnlyMode" class="btn-text">只读</span>
-                <span v-else-if="isLoading" class="btn-text"></span>
+                <span v-else-if="updateButtonLoadingVisible" class="btn-text"></span>
                 <span v-else-if="isUpdateDisabled" class="btn-text"
                   >{{ updateCooldown }}s</span
                 >
 
                 <svg
                   v-else
+                  class="btn-check-default-icon"
                   viewBox="0 0 24.0651 19.9316"
                   xmlns="http://www.w3.org/2000/svg"
                   style="width: 20px; height: 20px; flex-shrink: 0"
@@ -2414,7 +2608,58 @@
                     />
                   </g>
                 </svg>
-                <div class="aurora-light"></div>
+                <svg
+                  v-if="updateButtonLoadingVisible"
+                  :class="[
+                    'btn-check-loading-icon',
+                    `is-${updateButtonLoadingPhase}`,
+                  ]"
+                  viewBox="0 0 23.9723 23.6231"
+                  xmlns="http://www.w3.org/2000/svg"
+                  style="width: 20px; height: 20px; flex-shrink: 0"
+                >
+                  <g>
+                    <rect
+                      height="23.6231"
+                      opacity="0"
+                      width="23.9723"
+                      x="0"
+                      y="0"
+                    />
+                    <path
+                      d="M7.51219 7.51219C8.05082 6.98103 8.05082 6.08866 7.51219 5.54772L5.42575 3.45843C4.88712 2.9175 4.00451 2.9175 3.45612 3.45843C2.9175 4.00451 2.9175 4.88712 3.45612 5.42805L5.54772 7.51219C6.08635 8.05313 6.98103 8.05313 7.51219 7.51219Z"
+                      fill="#ff5b7a"
+                    />
+                    <path
+                      d="M5.73891 11.8066C5.73891 11.0418 5.10955 10.4124 4.34467 10.4124L1.38678 10.4124C0.629368 10.4124 0 11.0418 0 11.8066C0 12.5715 0.629368 13.1934 1.38678 13.1934L4.34467 13.1934C5.10955 13.1934 5.73891 12.5715 5.73891 11.8066Z"
+                      fill="#ff9f43"
+                    />
+                    <path
+                      d="M7.51219 16.0913C6.98103 15.5602 6.08635 15.5602 5.54772 16.0913L3.45612 18.1852C2.9175 18.7239 2.9175 19.6088 3.45612 20.1549C4.00451 20.6935 4.88712 20.6935 5.42575 20.1549L7.51219 18.0558C8.05082 17.5246 8.05082 16.6323 7.51219 16.0913Z"
+                      fill="#ffd166"
+                    />
+                    <path
+                      d="M11.8043 17.8721C11.0395 17.8721 10.4101 18.5014 10.4101 19.2663L10.4101 22.2167C10.4101 22.9816 11.0395 23.611 11.8043 23.611C12.5715 23.611 13.1934 22.9816 13.1934 22.2167L13.1934 19.2663C13.1934 18.5014 12.5715 17.8721 11.8043 17.8721Z"
+                      fill="#4ade80"
+                    />
+                    <path
+                      d="M16.0913 16.0913C15.5602 16.6323 15.5602 17.5246 16.0913 18.0558L18.1852 20.1549C18.7239 20.6935 19.6065 20.6935 20.1549 20.1549C20.6935 19.6088 20.6935 18.7239 20.1549 18.1852L18.0558 16.0913C17.5246 15.5602 16.63 15.5602 16.0913 16.0913Z"
+                      fill="#2dd4bf"
+                    />
+                    <path
+                      d="M17.8721 11.8066C17.8721 12.5715 18.5014 13.1934 19.2663 13.1934L22.2144 13.1934C22.9816 13.1934 23.611 12.5715 23.611 11.8066C23.611 11.0418 22.9816 10.4124 22.2144 10.4124L19.2663 10.4124C18.5014 10.4124 17.8721 11.0418 17.8721 11.8066Z"
+                      fill="#38bdf8"
+                    />
+                    <path
+                      d="M16.0913 7.51219C16.63 8.05313 17.5246 8.05313 18.0558 7.51219L20.1549 5.42805C20.6935 4.88712 20.6935 4.00451 20.1549 3.45843C19.6065 2.9175 18.7239 2.9175 18.1852 3.45843L16.0913 5.54772C15.5602 6.08866 15.5602 6.98103 16.0913 7.51219Z"
+                      fill="#818cf8"
+                    />
+                    <path
+                      d="M11.8043 5.74122C12.5715 5.74122 13.1934 5.11185 13.1934 4.34467L13.1934 1.38909C13.1934 0.629368 12.5715 0 11.8043 0C11.0395 0 10.4101 0.629368 10.4101 1.38909L10.4101 4.34467C10.4101 5.11185 11.0395 5.74122 11.8043 5.74122Z"
+                      fill="#c084fc"
+                    />
+                  </g>
+                </svg>
               </button>
             </div>
           </div>
@@ -2432,7 +2677,6 @@
             <div class="provider-row">
               <span
                 class="provider-info"
-                style="display: inline-flex; align-items: center"
               >
                 <span
                   v-if="localAiIconSvg && !iconLoadError"
@@ -2440,9 +2684,12 @@
                   v-html="localAiIconSvg"
                 >
                 </span>
-                <span v-else-if="!iconLoadError" style="margin-right: 4px"
-                  >✨</span
+                <span
+                  v-else-if="!iconLoadError"
+                  class="inline-ai-icon inline-ai-icon-fallback"
                 >
+                  ✨
+                </span>
                 {{ aiIntelligenceTitle }}
               </span>
 
@@ -2546,9 +2793,9 @@
                 <span
                   class="badge-refresh"
                   :class="{ 'is-loading': regeneratingIds.has(activeArticle.id) }"
-                  @mousedown="playAnim($event, 600)"
+                  @mousedown="regeneratingIds.has(activeArticle.id) ? null : playAnim($event, 600)"
                   @click="regenerateSummary(activeArticle)"
-                  :data-tooltip="regeneratingIds.has(activeArticle.id) ? '正在生成中' : '重新生成'"
+                  :data-tooltip="regeneratingIds.has(activeArticle.id) ? `点击中断${getAiBrandLabel()}总结` : `重新生成${getAiBrandLabel()}总结`"
                 >
                   <svg
                     class="icon-svg"
@@ -3137,7 +3384,6 @@
               <!-- 左侧：AI 标识 -->
               <span
                 class="provider-info"
-                style="display: inline-flex; align-items: center"
               >
                 <span
                   v-if="localAiIconSvg && !iconLoadError"
@@ -3145,9 +3391,12 @@
                   v-html="localAiIconSvg"
                 >
                 </span>
-                <span v-else-if="!iconLoadError" style="margin-right: 4px"
-                  >✨</span
+                <span
+                  v-else-if="!iconLoadError"
+                  class="inline-ai-icon inline-ai-icon-fallback"
                 >
+                  ✨
+                </span>
                 {{ aiIntelligenceTitle }}
               </span>
 

@@ -4,8 +4,10 @@ import threading
 from openai import OpenAI
 import os
 import random
+from contextlib import contextmanager
 from typing import Optional
 from dotenv import load_dotenv
+from src.utils.text_cleaner import strip_emoji
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -35,12 +37,17 @@ class LLMService:
     BASE_DELAY = 1.0  # 初始延迟 1 秒
     MAX_DELAY = 32.0  # 最大延迟 32 秒
 
+    # 并发控制：批量总结 2 路，手动总结 1 路
+    MAX_BATCH_CONCURRENCY = 2
+    MAX_MANUAL_CONCURRENCY = 1
+
     def __init__(
         self,
         api_key: Optional[str] = None,
         base_url: str = "https://api.deepseek.com/v1",
     ):
-        self.api_key = api_key or os.environ.get("DEEPSEEK_API_KEY")
+        # 只认显式传入的配置，不再从环境变量回退，便于测试阶段排查配置来源
+        self.api_key = api_key or ""
         self.base_url = base_url
         self.model_name = "deepseek-chat"
 
@@ -48,6 +55,14 @@ class LLMService:
 
         # 🌟 取消事件（用于中断正在进行的 AI 调用）
         self._cancel_event = threading.Event()
+
+        # 🌟 受控并发：批量总结与手动总结分通道
+        self._batch_summary_slots = threading.BoundedSemaphore(
+            self.MAX_BATCH_CONCURRENCY
+        )
+        self._manual_summary_slots = threading.BoundedSemaphore(
+            self.MAX_MANUAL_CONCURRENCY
+        )
 
         self.system_prompt = """# Role: 高校公文首席分析师
 
@@ -169,194 +184,245 @@ class LLMService:
         jitter = delay * 0.1 * random.random()
         return min(delay + jitter, self.MAX_DELAY)
 
-    def summarize_article(self, title: str, raw_text: str, custom_prompt: str = None) -> str:
-        '''
+    def _error_result(self, message: str, prefix: str = "❌") -> str:
+        """统一构造可被上层识别的失败结果"""
+        return f"{prefix} {message}".strip()
+
+    @contextmanager
+    def _summary_slot(self, priority: str):
+        """
+        获取摘要并发槽位。
+
+        priority:
+            - "manual": 手动重总结，独占高优先级槽位
+            - 其他：批量更新总结，走批量槽位
+        """
+        slot_type = "manual" if priority == "manual" else "batch"
+        semaphore = (
+            self._manual_summary_slots
+            if slot_type == "manual"
+            else self._batch_summary_slots
+        )
+
+        logger.debug(f"等待 {slot_type} AI 总结槽位...")
+        semaphore.acquire()
+        try:
+            logger.debug(f"已获取 {slot_type} AI 总结槽位")
+            yield
+        finally:
+            semaphore.release()
+            logger.debug(f"已释放 {slot_type} AI 总结槽位")
+
+    def summarize_article(
+        self,
+        title: str,
+        raw_text: str,
+        custom_prompt: str = None,
+        priority: str = "batch",
+        cancel_event: Optional[threading.Event] = None,
+    ) -> str:
+        """
         调用大模型对公文正文进行结构化总结（带指数退避重试和可中断机制）
 
         Args:
             title: 文章标题
             raw_text: 原始文本
             custom_prompt: 🌟 专属 AI 提示词（用于定制摘要输出格式）
+            priority: 并发优先级，manual 为手动高优先级通道
+            cancel_event: 可选的独立取消事件；不传则使用全局取消事件
 
         Returns:
             摘要内容或错误标识字符串
-        '''
-        # 🌟 清除之前的取消状态（开始新任务）
-        self._cancel_event.clear()
+        """
+        active_cancel_event = cancel_event or self._cancel_event
 
-        if not self.client:
-            return "⚠️ 系统未配置 API Key 或大模型尚未初始化。请在设置中配置。"
+        # 🌟 对于默认全局取消事件，开始新任务前先清理旧状态；
+        # 外部显式传入的取消事件保持原样，避免把用户刚触发的取消擦掉。
+        if cancel_event is None:
+            active_cancel_event.clear()
 
-        if not raw_text or len(raw_text.strip()) < 10:
-            return "⚠️ 原文内容过短或抓取失败，无法进行有效的 AI 总结。"
+        with self._summary_slot(priority):
+            if not self.client:
+                return self._error_result(
+                    "系统未配置 API Key 或大模型尚未初始化。请在设置中配置。"
+                )
 
-        # 🌟 检查取消状态
-        if self._cancel_event.is_set():
-            return "⚠️ 用户取消"
+            if not raw_text or len(raw_text.strip()) < 10:
+                return self._error_result(
+                    "原文内容过短或抓取失败，无法进行有效的 AI 总结。"
+                )
 
-        # 🌟 检查余额状态：如果欠费，直接返回提示
-        try:
-            config_service = _get_config_service()
-            if not config_service.get_api_balance_ok():
-                # 🌟 通知前端显示欠费卡片（用户可能之前点击了"不再提醒"）
-                try:
-                    import webview
+            # 🌟 检查取消状态
+            if active_cancel_event.is_set():
+                return self._error_result("用户取消", prefix="⚠️")
 
-                    if webview.windows:
-                        webview.windows[0].evaluate_js(
-                            """
-                            if (window.updateApiBalanceStatus) {
-                                window.updateApiBalanceStatus(false);
-                            }
-                        """
-                        )
-                except Exception as notify_err:
-                    logger.debug(f"通知前端失败: {notify_err}")
-                return "⚠️【欠费提醒】您的 API 账户余额不足，AI 总结功能已暂停。请充值或更换密钥后点击「我已充值」恢复。"
-        except Exception as e:
-            logger.warning(f"检查余额状态失败: {e}")
-
-        logger.info(f"正在调用 AI 分析公文: {title}")
-
-        # 🌟 构建用户消息：支持自定义提示词
-        if custom_prompt and custom_prompt.strip():
-            user_content = f"以下是文章《{title}》的正文内容。\n\n📋 **专属指令**：{custom_prompt}\n\n---\n\n{raw_text}"
-            logger.info(f"使用自定义提示词: {custom_prompt[:50]}...")
-        else:
-            user_content = f"以下是公文《{title}》的正文内容，请按照系统设定的规范进行总结：\n\n{raw_text}"
-
-        last_error = None
-
-        for attempt in range(self.MAX_RETRIES):
-            # 🌟 在每次尝试前检查取消状态
-            if self._cancel_event.is_set():
-                logger.info(f"AI 调用被用户取消（尝试 {attempt + 1}）: {title}")
-                return "⚠️ 用户取消"
-
+            # 🌟 检查余额状态：如果欠费，直接返回提示
             try:
-                # 🌟 使用线程执行 API 调用，支持中断
-                result_container = {"content": None, "error": None}
-                call_completed = threading.Event()
-
-                def _api_call():
+                config_service = _get_config_service()
+                if not config_service.get_api_balance_ok():
+                    # 🌟 通知前端显示欠费卡片（用户可能之前点击了"不再提醒"）
                     try:
-                        response = self.client.chat.completions.create(
-                            model=self.model_name,
-                            messages=[
-                                {"role": "system", "content": self.system_prompt},
-                                {"role": "user", "content": user_content},
-                            ],
-                            temperature=0.3,
-                            max_tokens=3000,
-                            top_p=0.9,
-                            timeout=45.0,  # 🌟 缩短超时：60 -> 45 秒
-                        )
-                        result_container["content"] = response.choices[0].message.content
-                    except Exception as e:
-                        result_container["error"] = e
-                    finally:
-                        call_completed.set()
+                        import webview
 
-                # 启动 API 调用线程
-                api_thread = threading.Thread(target=_api_call, daemon=True)
-                api_thread.start()
-
-                # 🌟 等待 API 调用完成或被取消（每 0.5 秒检查一次取消状态）
-                while not call_completed.wait(timeout=0.5):
-                    if self._cancel_event.is_set():
-                        logger.info(f"用户取消，等待 API 线程结束: {title}")
-                        # 等待线程结束（最多再等 2 秒）
-                        call_completed.wait(timeout=2.0)
-                        return "⚠️ 用户取消"
-
-                # 检查结果
-                error = result_container["error"]
-                if error is not None:
-                    if isinstance(error, Exception):
-                        raise error
-                    else:
-                        raise RuntimeError(str(error))
-
-
-                content = result_container["content"]
-                if content:
-                    return content.strip()
-                else:
-                    return "⚠️ AI 返回了空内容或非文本数据。"
-
+                        if webview.windows:
+                            webview.windows[0].evaluate_js(
+                                """
+                                if (window.updateApiBalanceStatus) {
+                                    window.updateApiBalanceStatus(false);
+                                }
+                            """
+                            )
+                    except Exception as notify_err:
+                        logger.debug(f"通知前端失败: {notify_err}")
+                    return "⚠️【欠费提醒】您的 API 账户余额不足，AI 总结功能已暂停。请充值或更换密钥后点击「我已充值」恢复。"
             except Exception as e:
-                last_error = str(e)
-                error_lower = last_error.lower()
+                logger.warning(f"检查余额状态失败: {e}")
 
-                # 🌟 如果是取消导致的异常，直接返回
-                if self._cancel_event.is_set():
+            logger.info(f"正在调用 AI 分析公文: {title}")
+
+            # 🌟 构建用户消息：支持自定义提示词
+            if custom_prompt and custom_prompt.strip():
+                user_content = f"以下是文章《{title}》的正文内容。\n\n专属指令：{custom_prompt}\n\n---\n\n{raw_text}"
+                logger.info(f"使用自定义提示词: {custom_prompt[:50]}...")
+            else:
+                user_content = f"以下是公文《{title}》的正文内容，请按照系统设定的规范进行总结：\n\n{raw_text}"
+
+            last_error = None
+
+            for attempt in range(self.MAX_RETRIES):
+                # 🌟 在每次尝试前检查取消状态
+                if active_cancel_event.is_set():
+                    logger.info(f"AI 调用被用户取消（尝试 {attempt + 1}）: {title}")
                     return "⚠️ 用户取消"
 
-                # 🌟 检测余额不足错误并更新状态
-                balance_error_patterns = [
-                    "insufficient_quota",
-                    "insufficient_balance",
-                    "402",
-                    "余额不足",
-                    "balance",
-                    "quota exceeded",
-                    "额度",
-                ]
-                if any(pattern in error_lower for pattern in balance_error_patterns):
-                    logger.error(f"AI 调用失败（余额不足）({title}): {last_error}")
-                    try:
-                        config_service = _get_config_service()
-                        config_service.set_api_balance_ok(False)
-                        logger.info("已更新欠费状态到配置文件")
+                try:
+                    # 🌟 使用线程执行 API 调用，支持中断
+                    result_container = {"content": None, "error": None}
+                    call_completed = threading.Event()
 
-                        # 🌟 主动通知前端更新余额状态
+                    def _api_call():
                         try:
-                            import webview
+                            response = self.client.chat.completions.create(
+                                model=self.model_name,
+                                messages=[
+                                    {"role": "system", "content": self.system_prompt},
+                                    {"role": "user", "content": user_content},
+                                ],
+                                temperature=0.3,
+                                max_tokens=3000,
+                                top_p=0.9,
+                                timeout=45.0,  # 🌟 缩短超时：60 -> 45 秒
+                            )
+                            result_container["content"] = response.choices[
+                                0
+                            ].message.content
+                        except Exception as e:
+                            result_container["error"] = e
+                        finally:
+                            call_completed.set()
 
-                            if webview.windows:
-                                webview.windows[0].evaluate_js(
-                                    """
-                                    if (window.updateApiBalanceStatus) {
-                                        window.updateApiBalanceStatus(false);
-                                    }
-                                """
-                                )
-                        except Exception as notify_err:
-                            logger.debug(f"通知前端失败: {notify_err}")
-                    except Exception as config_err:
-                        logger.warning(f"更新欠费状态失败: {config_err}")
-                    return f"❌ API 余额不足：{last_error}"
+                    # 启动 API 调用线程
+                    api_thread = threading.Thread(target=_api_call, daemon=True)
+                    api_thread.start()
 
-                # 不可重试的错误：直接返回
-                if "401" in error_lower:
-                    logger.error(f"AI 调用失败（不可重试）({title}): {last_error}")
-                    return f"❌ API 认证失败：{last_error}"
+                    # 🌟 等待 API 调用完成或被取消（每 0.5 秒检查一次取消状态）
+                    while not call_completed.wait(timeout=0.5):
+                        if active_cancel_event.is_set():
+                            logger.info(f"用户取消，等待 API 线程结束: {title}")
+                            # 等待线程结束（最多再等 2 秒）
+                            call_completed.wait(timeout=2.0)
+                            return "⚠️ 用户取消"
 
-                # 可重试的错误：执行指数退避
-                if self._is_retryable_error(last_error):
-                    if attempt < self.MAX_RETRIES - 1:
-                        delay = self._calculate_delay(attempt)
-                        logger.warning(
-                            f"AI 调用失败（第 {attempt + 1} 次），{delay:.1f}秒后重试 ({title}): {last_error}"
-                        )
-                        # 🌟 在退避等待期间也检查取消状态
-                        for _ in range(int(delay * 10)):
-                            if self._cancel_event.is_set():
-                                return "⚠️ 用户取消"
-                            time.sleep(0.1)
-                        continue
+                    # 检查结果
+                    error = result_container["error"]
+                    if error is not None:
+                        if isinstance(error, Exception):
+                            raise error
+                        else:
+                            raise RuntimeError(str(error))
+
+                    content = result_container["content"]
+                    if content:
+                        cleaned_content = strip_emoji(content.strip())
+                        if cleaned_content:
+                            return cleaned_content
+                        return "⚠️ AI 返回了空内容或非文本数据。"
                     else:
-                        logger.error(
-                            f"AI 调用失败（已达最大重试次数 {self.MAX_RETRIES}）({title}): {last_error}"
-                        )
-                        return f"⚠️ AI 服务暂时不可用，已重试 {self.MAX_RETRIES} 次仍失败：{last_error}"
+                        return "⚠️ AI 返回了空内容或非文本数据。"
 
-                # 其他未知错误
-                logger.error(f"AI 总结失败 ({title}): {last_error}")
-                return f"⚠️ AI 处理遇到未知错误：{last_error}"
+                except Exception as e:
+                    last_error = str(e)
+                    error_lower = last_error.lower()
 
-        # 理论上不会到达这里，但作为安全保护
-        return f"⚠️ AI 处理失败：{last_error}"
+                    # 🌟 如果是取消导致的异常，直接返回
+                    if active_cancel_event.is_set():
+                        return "⚠️ 用户取消"
+
+                    # 🌟 检测余额不足错误并更新状态
+                    balance_error_patterns = [
+                        "insufficient_quota",
+                        "insufficient_balance",
+                        "402",
+                        "余额不足",
+                        "balance",
+                        "quota exceeded",
+                        "额度",
+                    ]
+                    if any(pattern in error_lower for pattern in balance_error_patterns):
+                        logger.error(f"AI 调用失败（余额不足）({title}): {last_error}")
+                        try:
+                            config_service = _get_config_service()
+                            config_service.set_api_balance_ok(False)
+                            logger.info("已更新欠费状态到配置文件")
+
+                            # 🌟 主动通知前端更新余额状态
+                            try:
+                                import webview
+
+                                if webview.windows:
+                                    webview.windows[0].evaluate_js(
+                                        """
+                                        if (window.updateApiBalanceStatus) {
+                                            window.updateApiBalanceStatus(false);
+                                        }
+                                    """
+                                    )
+                            except Exception as notify_err:
+                                logger.debug(f"通知前端失败: {notify_err}")
+                        except Exception as config_err:
+                            logger.warning(f"更新欠费状态失败: {config_err}")
+                        return f"❌ API 余额不足：{last_error}"
+
+                    # 不可重试的错误：直接返回
+                    if "401" in error_lower:
+                        logger.error(f"AI 调用失败（不可重试）({title}): {last_error}")
+                        return f"❌ API 认证失败：{last_error}"
+
+                    # 可重试的错误：执行指数退避
+                    if self._is_retryable_error(last_error):
+                        if attempt < self.MAX_RETRIES - 1:
+                            delay = self._calculate_delay(attempt)
+                            logger.warning(
+                                f"AI 调用失败（第 {attempt + 1} 次），{delay:.1f}秒后重试 ({title}): {last_error}"
+                            )
+                            # 🌟 在退避等待期间也检查取消状态
+                            for _ in range(int(delay * 10)):
+                                if active_cancel_event.is_set():
+                                    return "⚠️ 用户取消"
+                                time.sleep(0.1)
+                            continue
+                        else:
+                            logger.error(
+                                f"AI 调用失败（已达最大重试次数 {self.MAX_RETRIES}）({title}): {last_error}"
+                            )
+                            return f"⚠️ AI 服务暂时不可用，已重试 {self.MAX_RETRIES} 次仍失败：{last_error}"
+
+                    # 其他未知错误
+                    logger.error(f"AI 总结失败 ({title}): {last_error}")
+                    return f"⚠️ AI 处理遇到未知错误：{last_error}"
+
+            # 理论上不会到达这里，但作为安全保护
+            return f"⚠️ AI 处理失败：{last_error}"
 
     def update_config(
         self,
@@ -369,7 +435,8 @@ class LLMService:
         热更新配置：前端点击保存时触发，立刻重置客户端而无需重启应用。
         """
         # 1. 处理 API Key
-        self.api_key = api_key or os.environ.get("DEEPSEEK_API_KEY")
+        # 只认显式传入的配置，不再从环境变量回退
+        self.api_key = api_key or ""
 
         # 2. 处理 Model Name
         self.model_name = str(model_name or "deepseek-chat")

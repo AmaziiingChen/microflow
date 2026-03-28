@@ -8,6 +8,11 @@
         console.error("Promise错误:", event.reason);
       });
 
+      const EMOJI_STRIP_RE =
+        /[\u{1F1E6}-\u{1F1FF}\u{1F300}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\uFE0F\u200D]/gu;
+      const stripEmoji = (text = "") => String(text ?? "").replace(EMOJI_STRIP_RE, "");
+      const cleanSummaryText = (text = "") => stripEmoji(text || "无总结内容");
+
       const FILTER_CHIP_COLORS = [
         "rgb(183,42,92)",
         "rgb(255,56,60)",
@@ -551,7 +556,7 @@
               }
 
               // 获取编辑器内容
-              const newSummary = summaryMDE?.value() || "";
+              const newSummary = stripEmoji(summaryMDE?.value() || "");
 
               // 调用后端 API 更新
               try {
@@ -632,38 +637,103 @@
             const toastList = Vue.ref([]);
             let toastIdCounter = 0;
             const MAX_TOAST_COUNT = 2; // 最多显示 2 个通知
+            const toastTimers = new Map();
+
+            const clearToastTimer = (id) => {
+              const timer = toastTimers.get(id);
+              if (timer) {
+                clearTimeout(timer);
+                toastTimers.delete(id);
+              }
+            };
+
+            const scheduleToastRemoval = (id, duration) => {
+              clearToastTimer(id);
+              if (!duration || duration <= 0) return;
+
+              const timer = setTimeout(() => {
+                toastTimers.delete(id);
+                const index = toastList.value.findIndex((t) => t.id === id);
+                if (index !== -1) {
+                  toastList.value.splice(index, 1);
+                }
+              }, duration);
+              toastTimers.set(id, timer);
+            };
 
             const showNotification = (
               title,
               message,
               type = "success",
               duration = 3000,
+              options = {},
             ) => {
               const id = ++toastIdCounter;
-              const toast = { id, title, message, type };
+              const sticky = Boolean(options?.sticky);
+              const toast = {
+                id,
+                title: stripEmoji(title).trim(),
+                message: stripEmoji(message).trim(),
+                type,
+                sticky,
+              };
 
               // 添加到列表头部（新通知在上面）
               toastList.value.unshift(toast);
 
               // 如果超过最大数量，移除最旧的通知（Vue 会触发退场动画）
               if (toastList.value.length > MAX_TOAST_COUNT) {
-                toastList.value.pop();
+                let removeIndex = -1;
+                for (let i = toastList.value.length - 1; i >= 0; i--) {
+                  if (!toastList.value[i].sticky) {
+                    removeIndex = i;
+                    break;
+                  }
+                }
+                if (removeIndex === -1) {
+                  removeIndex = toastList.value.length - 1;
+                }
+                const removed = toastList.value.splice(removeIndex, 1)[0];
+                if (removed) {
+                  clearToastTimer(removed.id);
+                }
               }
 
               // 设置自动退场
-              setTimeout(() => {
-                const index = toastList.value.findIndex((t) => t.id === id);
-                if (index !== -1) {
-                  toastList.value.splice(index, 1);
-                }
-              }, duration);
+              scheduleToastRemoval(id, duration);
 
               return id;
+            };
+
+            const updateNotification = (id, patch = {}, duration) => {
+              if (id === undefined || id === null) return false;
+              const toast = toastList.value.find((t) => t.id === id);
+              if (!toast) return false;
+
+              if (patch.title !== undefined) {
+                toast.title = stripEmoji(patch.title).trim();
+              }
+              if (patch.message !== undefined) {
+                toast.message = stripEmoji(patch.message).trim();
+              }
+              if (patch.type !== undefined) {
+                toast.type = patch.type;
+              }
+              if (patch.sticky !== undefined) {
+                toast.sticky = Boolean(patch.sticky);
+              }
+
+              if (duration !== undefined) {
+                scheduleToastRemoval(id, duration);
+              }
+
+              return true;
             };
 
             // 主动关闭指定通知
             const hideNotification = (id) => {
               if (id === undefined || id === null) return;
+              clearToastTimer(id);
               const index = toastList.value.findIndex((t) => t.id === id);
               if (index !== -1) {
                 toastList.value.splice(index, 1);
@@ -747,9 +817,47 @@
             });
 
             const isLoading = ref(false);
+            const updateButtonLoadingPhase = ref("idle"); // idle | entering | steady | exiting
             const statusMsg = ref("");
             const isReadOnlyMode = ref(false); // 🌟 新增：只读模式标记
             const readOnlyReason = ref(""); // 🌟 新增：只读模式原因
+            const updateButtonLoadingVisible = computed(
+              () => updateButtonLoadingPhase.value !== "idle",
+            );
+            let updateButtonLoadingTimer = null;
+            const clearUpdateButtonLoadingTimer = () => {
+              if (updateButtonLoadingTimer !== null) {
+                clearTimeout(updateButtonLoadingTimer);
+                updateButtonLoadingTimer = null;
+              }
+            };
+
+            watch(
+              isLoading,
+              (nowLoading, oldLoading) => {
+                clearUpdateButtonLoadingTimer();
+
+                if (nowLoading) {
+                  updateButtonLoadingPhase.value = "entering";
+                  updateButtonLoadingTimer = setTimeout(() => {
+                    if (isLoading.value) {
+                      updateButtonLoadingPhase.value = "steady";
+                    }
+                  }, 680);
+                  return;
+                }
+
+                if (oldLoading) {
+                  updateButtonLoadingPhase.value = "exiting";
+                  updateButtonLoadingTimer = setTimeout(() => {
+                    if (!isLoading.value) {
+                      updateButtonLoadingPhase.value = "idle";
+                    }
+                  }, 520);
+                }
+              },
+              { immediate: true },
+            );
 
             // 🌟 新增：高级物理动画强制完整播放器
             const playAnim = (event, duration) => {
@@ -830,6 +938,116 @@
             const hasPendingAiTasks = ref(false);
             // 🌟 新增：任务是否已完成（由 updatePyProgress 设置）
             const taskCompleted = ref(false);
+            // 🌟 更新会话 toast：一个流程只保留一条可更新弹窗
+            let updateSessionToastId = null;
+            const updateSessionToastState = {
+              phase: "idle", // idle | spider | ai | done
+              submittedCount: 0,
+              spiderCurrent: 0,
+              spiderTotal: 0,
+              aiCompleted: 0,
+              aiTotal: 0,
+              currentTitle: "",
+              currentSource: "",
+            };
+
+            const resetUpdateSessionToast = () => {
+              if (updateSessionToastId !== null) {
+                hideNotification(updateSessionToastId);
+              }
+              updateSessionToastId = null;
+              updateSessionToastState.phase = "idle";
+              updateSessionToastState.submittedCount = 0;
+              updateSessionToastState.spiderCurrent = 0;
+              updateSessionToastState.spiderTotal = 0;
+              updateSessionToastState.aiCompleted = 0;
+              updateSessionToastState.aiTotal = 0;
+              updateSessionToastState.currentTitle = "";
+              updateSessionToastState.currentSource = "";
+            };
+
+            const ensureUpdateSessionToast = (
+              title = "检查中",
+              message = "正在获取最新内容",
+              type = "info",
+            ) => {
+              const exists =
+                updateSessionToastId !== null &&
+                toastList.value.some((t) => t.id === updateSessionToastId);
+
+              if (!exists) {
+                updateSessionToastId = showNotification(title, message, type, 0, {
+                  sticky: true,
+                });
+              } else {
+                updateNotification(
+                  updateSessionToastId,
+                  { title, message, type, sticky: true },
+                  0,
+                );
+              }
+              return updateSessionToastId;
+            };
+
+            const updateSessionToast = (
+              title = "检查中",
+              message = "正在获取最新内容",
+              type = "info",
+            ) => {
+              return ensureUpdateSessionToast(title, message, type);
+            };
+
+            const finishUpdateSessionToast = (
+              title = "检查完成",
+              message = "本次更新已完成",
+              type = "success",
+              duration = 1800,
+            ) => {
+              updateSessionToastState.phase = "done";
+              const id = ensureUpdateSessionToast(title, message, type);
+              if (id !== null) {
+                updateNotification(id, { title, message, type, sticky: false }, duration);
+                setTimeout(() => {
+                  if (updateSessionToastId === id) {
+                    resetUpdateSessionToast();
+                  }
+                }, duration + 80);
+              }
+              return id;
+            };
+
+            const failUpdateSessionToast = (
+              title = "检查失败",
+              message = "更新未能完成",
+              type = "error",
+              duration = 2200,
+            ) => {
+              updateSessionToastState.phase = "done";
+              const id = ensureUpdateSessionToast(title, message, type);
+              if (id !== null) {
+                updateNotification(id, { title, message, type, sticky: false }, duration);
+                setTimeout(() => {
+                  if (updateSessionToastId === id) {
+                    resetUpdateSessionToast();
+                  }
+                }, duration + 80);
+              }
+              return id;
+            };
+
+            const normalizeProgressTitle = (title = "") =>
+              String(title || "")
+                .replace(/^\[(纯图片|动态)\]\s*/, "")
+                .trim();
+
+            const shortenProgressTitle = (title = "", maxLength = 10) => {
+              const normalized = normalizeProgressTitle(title);
+              const chars = Array.from(normalized);
+              if (chars.length <= maxLength) {
+                return normalized;
+              }
+              return `${chars.slice(0, maxLength).join("")}…`;
+            };
 
             // 🌟 新增：计算属性控制进度条显示（确保 Vue 响应性）
             const showSpiderProgress = computed(
@@ -951,6 +1169,11 @@
 
             // 获取余额状态
             const checkApiBalance = async () => {
+              if (!config.value?.apiKey?.trim()) {
+                balanceWarningVisible.value = false;
+                return;
+              }
+
               try {
                 const res = await safeApiCall("get_api_balance_status");
                 if (res.status === "success") {
@@ -964,6 +1187,65 @@
                 }
               } catch (e) {
                 console.warn("获取余额状态失败:", e);
+              }
+            };
+
+            // 统一 AI 前置检查：配置、连通、余额
+            const validateAiPrerequisites = async (actionLabel = "操作") => {
+              try {
+                const apiKey = config.value?.apiKey?.trim();
+                if (!apiKey) {
+                  balanceWarningVisible.value = false;
+                  showNotification("API 未配置", "未配置 API Key，请先在设置中配置", "warning", 4000);
+                  return null;
+                }
+
+                if (hasFreshAiPrereqCache()) {
+                  const balanceRes = await safeApiCall("get_api_balance_status");
+                  if (balanceRes.status === "success" && balanceRes.balance_ok) {
+                    balanceWarningVisible.value = false;
+                    return { status: "success", ready: true, cached: true };
+                  }
+                  if (balanceRes.status === "success" && !balanceRes.balance_ok) {
+                    balanceWarningVisible.value = true;
+                    showNotification("API 余额不足", "API 余额不足，请先充值后重试", "error", 4000);
+                    startCooldown(COOLDOWN_SECONDS);
+                    return null;
+                  }
+                }
+
+                const res = await safeApiCall("validate_ai_prerequisites");
+                if (res && res.status === "success") {
+                  balanceWarningVisible.value = false;
+                  markAiPrereqCache(true);
+                  return res;
+                }
+
+                const stage = res?.stage || "validation_failed";
+                const message = res?.message || "API 前置检查失败";
+
+                if (stage === "balance_error") {
+                  balanceWarningVisible.value = true;
+                  showNotification("API 余额不足", message, "error", 4000);
+                  startCooldown(COOLDOWN_SECONDS);
+                } else if (stage === "config_missing") {
+                  balanceWarningVisible.value = false;
+                  showNotification("API 未配置", message, "warning", 4000);
+                } else if (stage === "connection_failed") {
+                  balanceWarningVisible.value = false;
+                  showNotification("API 连接失败", message, "error", 4000);
+                } else {
+                  balanceWarningVisible.value = false;
+                  showNotification(`${actionLabel}终止`, message, "error", 4000);
+                }
+                if (stage === "connection_failed") {
+                  markAiPrereqCache(false);
+                }
+                return null;
+              } catch (e) {
+                console.warn("AI 前置检查失败:", e);
+                showNotification(`${actionLabel}终止`, "API 前置检查失败", "error", 4000);
+                return null;
               }
             };
 
@@ -1108,11 +1390,18 @@
             const isDiagnosing = ref(false);
 
             // 获取 AI 品牌名称（用于状态提示）
-            const aiBrandName = computed(() => {
-              const model = config.value.modelName || "AI";
+            const resolveAiBrandLabel = (modelName) => {
+              const rawModel =
+                typeof modelName === "string" ? modelName.trim() : "";
+              if (
+                !rawModel ||
+                ["undefined", "null", "nan"].includes(rawModel.toLowerCase())
+              ) {
+                return "AI";
+              }
+
               // 提取第一个连字符前的部分，并转为小写
-              let brand = model.split("-")[0].toLowerCase();
-              // 常见品牌映射表（可根据需要扩展）
+              const brand = rawModel.split("-")[0].toLowerCase();
               const brandMap = {
                 deepseek: "DeepSeek",
                 glm: "GLM",
@@ -1122,12 +1411,162 @@
                 claude: "Claude",
                 gemini: "Gemini",
               };
-              // 如果映射表中存在，则使用映射名；否则将首字母大写后返回
-              return (
+
+              const label =
                 brandMap[brand] ||
-                brand.charAt(0).toUpperCase() + brand.slice(1)
-              );
+                brand.charAt(0).toUpperCase() + brand.slice(1);
+              return label && label !== "Undefined" ? label : "AI";
+            };
+            const aiBrandName = computed(() =>
+              resolveAiBrandLabel(config.value.modelName),
+            );
+            const getAiBrandLabel = () => aiBrandName.value || "AI";
+
+            const AI_PREREQ_CACHE_TTL_MS = 5 * 60 * 1000;
+            const aiPrereqCache = ref({
+              signature: "",
+              ok: false,
+              checkedAt: 0,
             });
+            const getAiConfigSignature = () =>
+              [
+                config.value?.apiKey?.trim() || "",
+                config.value?.modelName?.trim() || "",
+                config.value?.baseUrl?.trim() || "",
+              ].join("|");
+            const markAiPrereqCache = (ok) => {
+              aiPrereqCache.value = {
+                signature: getAiConfigSignature(),
+                ok,
+                checkedAt: Date.now(),
+              };
+            };
+            const hasFreshAiPrereqCache = () => {
+              const cache = aiPrereqCache.value;
+              return (
+                cache.ok &&
+                cache.signature === getAiConfigSignature() &&
+                Date.now() - cache.checkedAt < AI_PREREQ_CACHE_TTL_MS
+              );
+            };
+            const warmAiPrereqCache = async () => {
+              if (!config.value?.apiKey?.trim()) {
+                return;
+              }
+              try {
+                const res = await safeApiCall("validate_ai_prerequisites");
+                if (res && res.status === "success") {
+                  markAiPrereqCache(true);
+                }
+              } catch (e) {
+                void e;
+              }
+            };
+
+            // 🌐 校园网访问状态
+            const networkAccessState = ref({
+              status: "idle", // idle | testing | success | error
+              label: "尚未检测",
+              detail: "打开设置后会自动刷新校园网状态。",
+              checkedAt: 0,
+            });
+            const isCheckingNetworkAccess = ref(false);
+
+            const formatNetworkCheckedAt = (timestamp) => {
+              if (!timestamp) return "最近一次检测：未记录";
+              const date = new Date(timestamp);
+              if (Number.isNaN(date.getTime())) return "最近一次检测：未记录";
+              const pad = (n) => String(n).padStart(2, "0");
+              return `最近一次检测：${pad(date.getHours())}:${pad(
+                date.getMinutes(),
+              )}:${pad(date.getSeconds())}`;
+            };
+
+            const applyNetworkAccessSnapshot = (snapshot, refreshing = false) => {
+              const status = snapshot?.network_status || "";
+              const baseState = {
+                status: "idle",
+                label: "尚未检测",
+                detail: "当前还没有可用的网络检测结果。",
+                checkedAt: snapshot?.checked_at || 0,
+              };
+
+              if (status === "PUBLIC_AND_INTRANET") {
+                networkAccessState.value = {
+                  ...baseState,
+                  status: "success",
+                  label: "公网 + 校园网（校内）",
+                  detail: "公文通与学院源可正常访问。",
+                };
+                return;
+              }
+
+              if (status === "PUBLIC_ONLY") {
+                networkAccessState.value = {
+                  ...baseState,
+                  status: "idle",
+                  label: "仅公网（校外）",
+                  detail: "公文通与学院源将被自动跳过。",
+                };
+                return;
+              }
+
+              if (status === "NO_NETWORK") {
+                networkAccessState.value = {
+                  ...baseState,
+                  status: "error",
+                  label: "无网络连接",
+                  detail: "当前无法访问在线源，请先检查网络。",
+                };
+                return;
+              }
+
+              networkAccessState.value = {
+                ...baseState,
+                status: refreshing ? "testing" : "idle",
+                label: refreshing ? "检查中" : "尚未检测",
+                detail: refreshing
+                  ? "正在检测校园网访问状态..."
+                  : "打开设置后会自动刷新校园网状态。",
+              };
+            };
+
+            const refreshNetworkAccessStatus = async (forceRefresh = true) => {
+              if (isCheckingNetworkAccess.value) return;
+
+              const shouldShowLoading =
+                forceRefresh || !networkAccessState.value?.checkedAt;
+              isCheckingNetworkAccess.value = true;
+              if (shouldShowLoading) {
+                applyNetworkAccessSnapshot({}, true);
+              }
+
+              try {
+                const res = await safeApiCall(
+                  "get_network_access_status",
+                  forceRefresh,
+                );
+                if (res && res.status === "success") {
+                  applyNetworkAccessSnapshot(res, false);
+                } else {
+                  networkAccessState.value = {
+                    status: "error",
+                    label: "检测失败",
+                    detail: res?.message || "校园网状态获取失败。",
+                    checkedAt: Date.now(),
+                  };
+                }
+              } catch (e) {
+                networkAccessState.value = {
+                  status: "error",
+                  label: "检测失败",
+                  detail: String(e),
+                  checkedAt: Date.now(),
+                };
+              } finally {
+                isCheckingNetworkAccess.value = false;
+              }
+            };
 
             // 🌟 新增：处理导入自定义字体
             const importCustomFont = async () => {
@@ -1136,9 +1575,9 @@
                 config.value.customFontPath = res.font_path;
                 config.value.customFontName = res.font_name;
                 config.value.fontFamily = "custom"; // 自动切换为自定义模式
-                showSystemToast(`✅ 成功导入字体: ${res.font_name}`, "success");
+                showSystemToast(`成功导入字体: ${res.font_name}`, "success");
               } else if (res.status === "error") {
-                showSystemToast(`❌ 导入失败: ${res.message}`, "error");
+                showSystemToast(`导入失败: ${res.message}`, "error");
               }
             };
 
@@ -1193,6 +1632,7 @@
             const connectionStatus = ref("idle"); // idle | testing | success | error
             // 修复：使用响应式对象追踪 Set 变化
             const regeneratingIds = Vue.reactive(new Set()); // 正在重新生成总结的文章ID集合
+            const summaryGenerationTokens = new Map(); // 文章总结请求令牌（用于忽略过期结果）
 
             // ... 在现有的 ref 变量（如 statusMsg 等）下方新增：
             const searchQuery = ref("");
@@ -1495,7 +1935,11 @@
 
             // 📧 邮件推送相关方法
             const addSubscriber = async () => {
-              const email = newSubscriberEmail.value.trim();
+              const normalizeSubscriberEmail = (value) =>
+                typeof value === "string" ? value.trim() : "";
+              const getSubscriberEmailKey = (value) =>
+                normalizeSubscriberEmail(value).toLowerCase();
+              const email = normalizeSubscriberEmail(newSubscriberEmail.value);
               if (!email) return;
 
               // 工业界标准邮箱格式验证（HTML5 级别严格校验）
@@ -1513,7 +1957,12 @@
               }
 
               // 检查是否已存在
-              if (config.value.subscriberList.includes(email)) {
+              const emailKey = getSubscriberEmailKey(email);
+              if (
+                config.value.subscriberList.some(
+                  (item) => getSubscriberEmailKey(item) === emailKey,
+                )
+              ) {
                 showNotification("添加失败", "该邮箱已在订阅列表中", "error");
                 return;
               }
@@ -1524,6 +1973,15 @@
               // 🌟 自动保存配置
               await saveConfigSafely();
               showNotification("添加成功", `已添加 ${email}`, "success");
+
+              if (config.value.subscriberList.length > 20) {
+                showNotification(
+                  "免费方案提醒",
+                  "当前订阅邮箱较多，免费模式下建议控制在 20 个以内以保持推送更快更稳",
+                  "warning",
+                  2600,
+                );
+              }
             };
 
             const removeSubscriber = async (index) => {
@@ -1824,6 +2282,11 @@
                 return;
               }
 
+              const aiReady = await validateAiPrerequisites("AI 规则生成");
+              if (!aiReady) {
+                return;
+              }
+
               isGeneratingRule.value = true;
               try {
                 const res = await safeApiCall(
@@ -2104,6 +2567,9 @@
 
             // 备选模型展开状态
             const secondaryModelsExpanded = ref(false);
+            const secondaryModelDeleteConfirmVisible = ref(false);
+            const secondaryModelDeleteIndex = ref(-1);
+            const secondaryModelDeleteName = ref("");
 
             // 切换备选模型展开状态
             const toggleSecondaryModelsExpanded = () => {
@@ -2126,9 +2592,39 @@
               });
             };
 
+            // 打开备选模型删除确认
+            const handleSecondaryModelRemove = (index) => {
+              const model = config.value.secondaryModels[index];
+              if (!model) return;
+              secondaryModelDeleteIndex.value = index;
+              secondaryModelDeleteName.value =
+                model.modelName || `模型 ${index + 1}`;
+              secondaryModelDeleteConfirmVisible.value = true;
+            };
+
             // 移除备选模型
-            const removeSecondaryModel = (index) => {
-              config.value.secondaryModels.splice(index, 1);
+            const removeSecondaryModel = () => {
+              const index = secondaryModelDeleteIndex.value;
+              if (index < 0 || index >= config.value.secondaryModels.length) {
+                secondaryModelDeleteConfirmVisible.value = false;
+                return;
+              }
+              const removed = config.value.secondaryModels.splice(index, 1)[0];
+              secondaryModelDeleteConfirmVisible.value = false;
+              secondaryModelDeleteIndex.value = -1;
+              secondaryModelDeleteName.value = "";
+              showNotification(
+                "已删除",
+                `${removed?.modelName || `模型 ${index + 1}`} 已移除`,
+                "success",
+                1500,
+              );
+            };
+
+            const cancelSecondaryModelRemove = () => {
+              secondaryModelDeleteConfirmVisible.value = false;
+              secondaryModelDeleteIndex.value = -1;
+              secondaryModelDeleteName.value = "";
             };
 
             // 测试单个备选模型连接
@@ -2339,6 +2835,9 @@
               // 触发缩放生长动画
               isSettingsOpen.value = true;
 
+              // 🌟 同步校园网状态，但不阻塞设置面板打开
+              void refreshNetworkAccessStatus(false);
+
               // 🕷️ 加载自定义爬虫规则
               await fetchCustomRules();
             };
@@ -2389,6 +2888,16 @@
               const res = await saveConfigSafely();
               if (res.status === "success") {
                 showNotification("保存成功", "配置已保存并应用", "success");
+                if (config.value?.apiKey?.trim()) {
+                  void warmAiPrereqCache();
+                } else {
+                  connectionStatus.value = "idle";
+                  aiPrereqCache.value = {
+                    signature: getAiConfigSignature(),
+                    ok: false,
+                    checkedAt: Date.now(),
+                  };
+                }
               } else {
                 showNotification("保存失败", res.message, "error");
               }
@@ -2413,9 +2922,15 @@
 
               if (res.status === "success") {
                 connectionStatus.value = "success";
+                markAiPrereqCache(true);
                 showNotification("连接成功", "服务器响应正常", "success", 1500);
               } else {
                 connectionStatus.value = "error";
+                aiPrereqCache.value = {
+                  signature: getAiConfigSignature(),
+                  ok: false,
+                  checkedAt: Date.now(),
+                };
                 showNotification(
                   "连接失败",
                   res.message || "未知错误",
@@ -2460,7 +2975,7 @@
 
                 // ======= 1. 你原有的：解析 AI 返回的【标签】和正文 =======
                 let parsedTags = [];
-                let parsedBody = item.summary || "无总结内容";
+                let parsedBody = cleanSummaryText(item.summary);
 
                 // 🌟 优先检测标签格式（后端已将标签写入 summary）
                 if (parsedBody.includes("【")) {
@@ -2746,6 +3261,11 @@
             const isLoadingMore = ref(false);
             const noMoreData = ref(false);
             const isListSwitching = ref(false);
+            const prefersReducedMotion =
+              window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ??
+              false;
+            const ARTICLE_SWITCH_MS = prefersReducedMotion ? 24 : 80;
+            const CHIP_SCROLL_MS = prefersReducedMotion ? 240 : 680;
 
             const sleep = (ms) =>
               new Promise((resolve) => {
@@ -2754,8 +3274,10 @@
 
             const runArticleSwitchTransition = async (updater) => {
               isListSwitching.value = true;
+              await nextTick();
+              await new Promise((resolve) => requestAnimationFrame(resolve));
               const updatePromise = updater();
-              await Promise.all([sleep(80), updatePromise]);
+              await Promise.all([sleep(ARTICLE_SWITCH_MS), updatePromise]);
               await nextTick();
               requestAnimationFrame(() => {
                 isListSwitching.value = false;
@@ -2804,9 +3326,6 @@
               }
               isLoadingMore.value = false;
             };
-
-            const CHIP_MOTION_MS = 680;
-            const CHIP_SCROLL_MS = 680;
 
             let filterScrollFrame = null;
 
@@ -2973,7 +3492,9 @@
               await Promise.all([scrollPromise, switchPromise]);
 
               if (shouldRefreshUnreadCount) {
-                void fetchUnreadCount(source.name);
+                setTimeout(() => {
+                  void fetchUnreadCount(source.name);
+                }, 0);
               }
             };
 
@@ -3137,7 +3658,7 @@
                     }
                   }
                 } catch (e) {
-                  console.error("[Frontend] ❌ 加载文章失败:", e);
+                  console.error("[Frontend] 加载文章失败:", e);
                   if (
                     retryCount < 20 &&
                     currentView.value === "list" &&
@@ -3186,6 +3707,7 @@
                       readOnlyReason.value = checkResult.reason || "服务已暂停";
                     }
                   }),
+                  warmAiPrereqCache(),
                   Promise.race([
                     fetchSystemConfig(),
                     new Promise((_, reject) =>
@@ -3309,8 +3831,11 @@
             // - 当 total=0 且 completed=0 且 currentTitle 为空时，是任务完成信号，关闭加载状态
             window.updatePyProgress = (completed, total, currentTitle) => {
               if (isCancelledFlag.value) return;
+              if (updateSessionToastState.phase === "done") return;
 
-              // 🌟 简化版：只更新状态，不显示进度条
+              const safeTitle = normalizeProgressTitle(currentTitle);
+              const displayTitle = shortenProgressTitle(safeTitle);
+
               // 任务完成信号
               if (
                 (total === 0 && completed === 0 && !currentTitle) ||
@@ -3319,6 +3844,18 @@
                 isLoading.value = false;
                 hasPendingAiTasks.value = false;
                 updatePhase.value = "idle";
+                statusMsg.value = "";
+                aiProgress.value = { total: 0, completed: 0, detail: "" };
+                if (updateSessionToastState.submittedCount > 0) {
+                  finishUpdateSessionToast(
+                    "检查完成",
+                    `本次检查到 ${updateSessionToastState.submittedCount} 篇内容`,
+                    "success",
+                    1800,
+                  );
+                } else {
+                  resetUpdateSessionToast();
+                }
                 taskCompleted.value = true;
                 return;
               }
@@ -3331,6 +3868,24 @@
               // 有进度但未完成
               hasPendingAiTasks.value = true;
               updatePhase.value = "ai";
+              isLoading.value = true;
+              statusMsg.value = "";
+              aiProgress.value = {
+                total,
+                completed,
+                detail: safeTitle,
+              };
+              updateSessionToastState.phase = "ai";
+              updateSessionToastState.aiCompleted = completed;
+              updateSessionToastState.aiTotal = total;
+              updateSessionToastState.currentTitle = displayTitle;
+
+              const summaryMessage = displayTitle
+                ? `正在总结：${displayTitle}${total > 0 ? `（${completed}/${total}）` : ""}`
+                : total > 0
+                  ? `正在总结中（${completed}/${total}）`
+                  : "正在总结中";
+              updateSessionToast("检查中", summaryMessage, "info");
             };
 
             // 🌟 简化版爬虫进度
@@ -3348,16 +3903,35 @@
                 total,
                 completed: current,
                 detail:
-                  sourceName === "正在启动"
-                    ? `正在启动 (共 ${total} 个)`
-                    : `正在检索： ${sourceName}`,
+                  sourceName && sourceName.startsWith("正在启动")
+                    ? `正在初始化检查任务（共 ${total} 个来源）`
+                    : `正在检查：${sourceName}`,
               };
+              updateSessionToastState.phase = "spider";
+              updateSessionToastState.spiderCurrent = current;
+              updateSessionToastState.spiderTotal = total;
+              updateSessionToastState.currentSource = sourceName || "";
+
+              const spiderMessage =
+                current <= 0
+                  ? sourceName && sourceName.startsWith("正在启动")
+                    ? `正在初始化检查任务（共 ${total} 个来源）`
+                    : `正在检查：${sourceName}`
+                  : `已检查 ${current}/${total} 个来源${
+                      sourceName && !sourceName.startsWith("正在启动")
+                        ? ` · 正在检查：${sourceName}`
+                        : ""
+                    }`;
+              updateSessionToast("检查中", spiderMessage, "info");
             };
 
             // 🌟 开始执行爬虫时调用
             window.onStartFetching = () => {
               isLoading.value = true;
               updatePhase.value = "spider";
+              updateSessionToastState.phase = "spider";
+              updateSessionToastState.currentSource = "";
+              updateSessionToast("检查中", "正在获取最新内容", "info");
               // 立即进入冷却倒计时
               if (typeof startCooldown === "function") {
                 startCooldown(COOLDOWN_SECONDS);
@@ -3366,12 +3940,9 @@
 
             // 🌟 后台自动执行时额外显示提示消息
             window.showAutoFetchNotice = () => {
-              showNotification(
-                "后台巡检",
-                `已自动执行后台巡检`,
-                "success",
-                5000,
-              );
+              if (updateSessionToastId !== null) {
+                updateSessionToast("检查中", "正在后台检查最新内容", "info");
+              }
             };
 
             // 🌟 兼容旧版：后台完成通知（现在主要用于确认执行成功）
@@ -3391,12 +3962,45 @@
               if (hasNewArticles) {
                 // 有新文章，切换到 AI 阶段
                 updatePhase.value = "ai";
+                updateSessionToastState.phase = "ai";
+                hasPendingAiTasks.value = true;
+                if (updateSessionToastState.submittedCount > 0) {
+                  const currentTitle = updateSessionToastState.currentTitle;
+                  updateSessionToast(
+                    "检查完毕",
+                    currentTitle
+                      ? `已检查到 ${updateSessionToastState.submittedCount} 篇内容，正在总结：${currentTitle}`
+                      : `已检查到 ${updateSessionToastState.submittedCount} 篇内容，正在总结中`,
+                    "info",
+                  );
+                } else {
+                  updateSessionToast("检查完毕", "已发现新内容，正在总结中", "info");
+                }
               } else {
+                // 如果 AI 仍在进行中，保留会话 toast，仅把阶段文案切到“检查完毕”
+                if (
+                  hasPendingAiTasks.value ||
+                  updateSessionToastState.phase === "ai" ||
+                  updateSessionToastState.submittedCount > 0 ||
+                  updateSessionToastState.aiTotal > 0
+                ) {
+                  const currentTitle = updateSessionToastState.currentTitle;
+                  updateSessionToastState.phase = "ai";
+                  updateSessionToast(
+                    "检查完毕",
+                    currentTitle
+                      ? `检查完毕，正在总结：${currentTitle}`
+                      : "检查完毕，正在总结中",
+                    "info",
+                  );
+                  return;
+                }
+
                 // 无新文章，直接关闭
                 isLoading.value = false;
                 updatePhase.value = "idle";
                 hasPendingAiTasks.value = false;
-                showNotification("检查完成", "当前已是最新", "success", 1500);
+                finishUpdateSessionToast("检查完成", "当前已是最新", "success", 1500);
               }
             };
 
@@ -3408,7 +4012,7 @@
                 if (res.status === "success") {
                   showNotification(
                     "已终止",
-                    `${aiBrandName.value} 总结已终止`,
+                    `${getAiBrandLabel()} 总结已终止`,
                     "warning",
                     3000,
                   );
@@ -3418,6 +4022,8 @@
                   aiProgress.value = { total: 0, completed: 0, detail: "" };
                   spiderProgress.value = { total: 0, completed: 0, detail: "" };
                   hasPendingAiTasks.value = false;
+                  statusMsg.value = "";
+                  resetUpdateSessionToast();
                 } else {
                   showNotification(
                     "终止失败",
@@ -3460,32 +4066,37 @@
                 return;
               }
 
-              // 优先检查 API 连通性（如果配置了 AI）
-              try {
-                const balanceRes = await safeApiCall("get_api_balance_status");
-                if (balanceRes.status === "success" && !balanceRes.balance_ok) {
-                  // 检测到欠费，显示欠费卡片、停止更新并进入倒计时
-                  balanceWarningVisible.value = true;
-                  showNotification(
-                    "API 余额不足",
-                    "请充值后重试",
-                    "error",
-                    4000,
-                  );
-                  // 进入倒计时状态
-                  startCooldown(COOLDOWN_SECONDS);
-                  return;
-                }
-              } catch (e) {
-                console.warn("检查 API 余额状态失败:", e);
-                // 继续执行更新，不阻塞
+              // 先把当前设置落盘，确保订阅来源 / API 配置都是最新状态
+              // 这样即使用户停留在设置界面，也能让本次更新直接按新配置执行
+              const saveRes = await saveConfigSafely();
+              if (!saveRes || saveRes.status !== "success") {
+                showNotification(
+                  "保存失败",
+                  saveRes?.message || "更新前自动保存配置失败，请重试",
+                  "error",
+                  3000,
+                );
+                return;
+              }
+
+              const aiReady = await validateAiPrerequisites("更新");
+              if (!aiReady) {
+                return;
               }
 
               isCancelledFlag.value = false; // 🌟 2. 每次重新开始更新时，重置拦截标记
               taskCompleted.value = false; // 🌟 重置任务完成标志
 
-              // 显示检查提示
-              showNotification("执行更新", "正在获取最新内容", "info", 2000);
+              // 创建本次更新会话 toast
+              updateSessionToastState.phase = "spider";
+              updateSessionToastState.submittedCount = 0;
+              updateSessionToastState.spiderCurrent = 0;
+              updateSessionToastState.spiderTotal = 0;
+              updateSessionToastState.aiCompleted = 0;
+              updateSessionToastState.aiTotal = 0;
+              updateSessionToastState.currentTitle = "";
+              updateSessionToastState.currentSource = "";
+              updateSessionToast("检查中", "正在获取最新内容", "info");
 
               // 🌟 清除之前的取消标志，为新任务做准备
               try {
@@ -3505,7 +4116,7 @@
               let cooldownRemaining = COOLDOWN_SECONDS;
 
               try {
-                const res = await safeApiCall("check_updates", true);
+                const res = await safeApiCall("check_updates", true, true);
 
                 if (isCancelledFlag.value) {
                   isLoading.value = false;
@@ -3527,35 +4138,46 @@
                   fetchUnreadCount();
 
                   const count = res.submitted_count || 0;
+                  updateSessionToastState.submittedCount = count;
                   if (count > 0) {
-                    showNotification(
-                      "检查更新",
-                      `找到 ${count} 篇新内容`,
-                      "success",
-                      2000,
-                    );
-                    // 如果任务已完成，直接关闭
+                    const currentTitle = updateSessionToastState.currentTitle;
+                    const progressMessage = currentTitle
+                      ? `已发现 ${count} 篇内容，正在总结：${currentTitle}`
+                      : "已发现新内容，正在总结中";
+                    updateSessionToast("检查完毕", progressMessage, "info");
                     if (taskCompleted.value) {
-                      isLoading.value = false;
+                      finishUpdateSessionToast(
+                        "检查完成",
+                        `本次检查到 ${count} 篇内容`,
+                        "success",
+                        1800,
+                      );
                     }
                   } else {
-                    showNotification(
-                      "检查更新",
-                      "当前已是最新",
-                      "success",
-                      1500,
-                    );
                     isLoading.value = false;
                   }
+
                   cooldownRemaining =
                     res.cooldown_remaining !== undefined
                       ? res.cooldown_remaining
                       : COOLDOWN_SECONDS;
                 } else if (res.status === "cooldown") {
+                  failUpdateSessionToast(
+                    "检查失败",
+                    res.message || "更新太快了",
+                    "warning",
+                    2200,
+                  );
                   showNotification("冷却中", res.message, "warning", 3000);
                   cooldownRemaining = res.remaining || COOLDOWN_SECONDS;
                   isLoading.value = false;
                 } else if (res.status === "read_only") {
+                  failUpdateSessionToast(
+                    "检查失败",
+                    "当前为只读模式",
+                    "warning",
+                    2200,
+                  );
                   showNotification(
                     "服务暂停",
                     "当前为只读模式",
@@ -3567,6 +4189,12 @@
                 } else if (res.status === "api_balance_error") {
                   // API 余额不足，显示欠费卡片
                   balanceWarningVisible.value = true;
+                  failUpdateSessionToast(
+                    "检查失败",
+                    "API 余额不足",
+                    "error",
+                    2200,
+                  );
                   showNotification(
                     "API 余额不足",
                     "请充值后重试",
@@ -3576,6 +4204,12 @@
                   cooldownRemaining = 0;
                   isLoading.value = false;
                 } else {
+                  failUpdateSessionToast(
+                    "检查失败",
+                    res.message || "更新失败",
+                    "error",
+                    2200,
+                  );
                   showNotification(
                     "更新失败",
                     res.message || "更新失败",
@@ -3586,6 +4220,12 @@
                   isLoading.value = false;
                 }
               } catch (e) {
+                failUpdateSessionToast(
+                  "检查失败",
+                  "连接异常或超时",
+                  "error",
+                  2200,
+                );
                 showNotification("连接异常", "连接异常或超时", "error", 3000);
                 cooldownRemaining = 60;
                 // 🌟 异常时关闭加载
@@ -3704,7 +4344,7 @@
 
               // ======== 🌟 新增：数据预处理加工区 ========
               let parsedTags = [];
-              let parsedBody = item.summary || "无总结内容";
+              let parsedBody = cleanSummaryText(item.summary);
               let parsedAttachments = [];
 
               // 1. 提取标签和正文
@@ -3794,7 +4434,7 @@
 
               // 数据预处理
               let parsedTags = [];
-              let parsedBody = item.summary || "无总结内容";
+              let parsedBody = cleanSummaryText(item.summary);
               let parsedAttachments = [];
 
               // 🌟 新增：检测纯图片内容（包含 HTML 标签）
@@ -4175,7 +4815,7 @@
               forceMarkRead(); // 🚀 记录实质性交互
 
               // 1. 获取原始 AI 摘要
-              let cleanSummary = item.summary || "无总结内容";
+              let cleanSummary = cleanSummaryText(item.summary);
 
               // 2. 文本清洗管道 (正则过滤)
               cleanSummary = cleanSummary
@@ -4186,7 +4826,7 @@
                 .replace(/`(.*?)`/g, "$1"); // 消除代码块的 ` 符号
 
               // 3. 优雅拼装最终分享文本
-              const textToCopy = `${item.title}\n发布日期：${item.date}\n\n${cleanSummary}\n\n🔗 详情链接：${item.url}`;
+              const textToCopy = `${stripEmoji(item.title || "")}\n发布日期：${item.date}\n\n${cleanSummary}\n\n详情链接：${item.url}`;
 
               // 👇 替换原有的 copyText 函数的最后一步
               // 4. 写入剪贴板
@@ -4403,7 +5043,7 @@
                   // 停顿 150ms 让浏览器重新排版应用 Base64 字体
                   await new Promise((resolve) => setTimeout(resolve, 150));
                 } catch (err) {
-                  console.warn("❌ 字体打包为 Base64 失败:", err);
+                  console.warn("字体打包为 Base64 失败:", err);
                 }
               }
 
@@ -4496,7 +5136,7 @@
                   // 用户取消，显示取消提示
                   showNotification("已取消", "快照保存已取消", "warning", 2000);
                 } else {
-                  console.error("❌ [Snapshot] 后端保存失败:", res);
+                  console.error("[Snapshot] 后端保存失败:", res);
                   showNotification(
                     "保存失败",
                     res.message || "未知错误",
@@ -4567,48 +5207,87 @@
             };
 
             // 👇 新增：重新生成 AI 总结
+            const cancelRegenerateSummary = async (article) => {
+              const articleId = article?.id;
+              if (!articleId) return;
+
+              // 立刻让按钮退出加载态，并让后续返回结果失效
+              const currentToken = summaryGenerationTokens.get(articleId) || 0;
+              summaryGenerationTokens.set(articleId, currentToken + 1);
+              regeneratingIds.delete(articleId);
+              showNotification(
+                "已中断",
+                `已中断${getAiBrandLabel()}总结`,
+                "warning",
+                2200,
+              );
+
+              try {
+                void safeApiCall(
+                  "cancel_current_ai_summary",
+                  articleId,
+                  currentToken,
+                ).catch((e) => {
+                  console.warn("取消 AI 总结失败:", e);
+                });
+              } catch (e) {
+                console.warn("取消 AI 总结失败:", e);
+              }
+            };
+
             const regenerateSummary = async (article) => {
               const articleId = article.id;
               if (!articleId) return;
 
-              // 防止重复点击（检查当前文章是否已在重新生成中）
-              if (regeneratingIds.has(articleId)) return;
-
-              // 先检测 API 是否欠费
-              try {
-                const balanceRes = await safeApiCall("get_api_balance_status");
-                if (balanceRes.status === "success" && !balanceRes.balance_ok) {
-                  // 余额不足，显示欠费卡片和消息提醒
-                  balanceWarningVisible.value = true;
-                  showNotification(
-                    "API 余额不足",
-                    "请充值后重试",
-                    "error",
-                    4000,
-                  );
-                  return;
-                }
-              } catch (e) {
-                console.warn("检查 API 余额状态失败:", e);
-                // 继续执行，不阻塞
+              // 正在生成时再次点击 = 取消当前 AI 总结
+              if (regeneratingIds.has(articleId)) {
+                await cancelRegenerateSummary(article);
+                return;
               }
 
-              // 设置刷新状态
+              // 先立即进入加载态，避免用户误以为没有响应
+              const requestToken = (summaryGenerationTokens.get(articleId) || 0) + 1;
+              summaryGenerationTokens.set(articleId, requestToken);
               regeneratingIds.add(articleId);
+
+              const aiReady = await validateAiPrerequisites("重新生成总结");
+              if (!aiReady) {
+                if (summaryGenerationTokens.get(articleId) === requestToken) {
+                  regeneratingIds.delete(articleId);
+                }
+                return;
+              }
+
+              // 如果在前置检查期间用户已经取消或切换了请求，直接丢弃
+              if (summaryGenerationTokens.get(articleId) !== requestToken) {
+                return;
+              }
+
               showNotification(
                 "正在处理",
-                `重新生成 ${aiBrandName.value} 总结`,
+                `重新生成 ${getAiBrandLabel()} 总结`,
                 "info",
                 2000,
               );
 
               try {
-                const res = await safeApiCall("regenerate_summary", articleId);
+                const res = await safeApiCall(
+                  "regenerate_summary",
+                  articleId,
+                  requestToken,
+                  true,
+                );
+
+                // 如果在等待期间用户已经取消或又发起了新请求，直接丢弃旧结果
+                if (summaryGenerationTokens.get(articleId) !== requestToken) {
+                  return;
+                }
 
                 if (res.status === "success") {
                   // 重新解析标签和正文（复用现有解析逻辑）
                   let parsedTags = [];
-                  let parsedBody = res.summary || "无总结内容";
+                  const cleanSummary = cleanSummaryText(res.summary);
+                  let parsedBody = cleanSummary;
 
                   if (parsedBody.includes("【")) {
                     const lines = parsedBody.split("\n");
@@ -4627,7 +5306,7 @@
                   // 构建更新后的文章对象
                   const updatedArticle = {
                     ...article,
-                    summary: res.summary,
+                    summary: cleanSummary,
                     parsedTags,
                     parsedBody,
                   };
@@ -4648,9 +5327,16 @@
 
                   showNotification(
                     "生成完成",
-                    `${aiBrandName.value} 总结已重新生成`,
+                    `${getAiBrandLabel()}总结已重新生成`,
                     "success",
                     1500,
+                  );
+                } else if (res.status === "cancelled") {
+                  showNotification(
+                    "已中断",
+                    `已中断${getAiBrandLabel()}总结`,
+                    "warning",
+                    2200,
                   );
                 } else {
                   showNotification(
@@ -4664,13 +5350,15 @@
                 console.error("重新生成总结失败:", e);
                 showNotification(
                   "请求失败",
-                  `${aiBrandName.value} 服务暂不可用`,
+                  `${getAiBrandLabel()}服务暂不可用`,
                   "error",
                   3000,
                 );
               } finally {
                 // 清除刷新状态
-                regeneratingIds.delete(articleId);
+                if (summaryGenerationTokens.get(articleId) === requestToken) {
+                  regeneratingIds.delete(articleId);
+                }
               }
             };
 
@@ -4939,10 +5627,17 @@
               cancelDeleteArticle, // 🌟 取消删除
               lastArticle,
               isNavigatingBack,
+              secondaryModelDeleteConfirmVisible,
+              secondaryModelDeleteName,
+              handleSecondaryModelRemove,
+              removeSecondaryModel,
+              cancelSecondaryModelRemove,
               processedArticles,
               isLoading,
               statusMsg,
               isCapturing,
+              updateButtonLoadingPhase,
+              updateButtonLoadingVisible,
               unreadCount,
               fetchUnreadCount,
 
@@ -4965,6 +5660,7 @@
               aiIntelligenceTitle,
               iconLoadError,
               handleIconError,
+              getAiBrandLabel,
 
               // 核心功能
               handleButtonClick,
@@ -5012,6 +5708,10 @@
               backToPrevious,
               config,
               showApiKey,
+              networkAccessState,
+              isCheckingNetworkAccess,
+              refreshNetworkAccessStatus,
+              formatNetworkCheckedAt,
               isTesting,
               connectionStatus,
               regeneratingIds,

@@ -9,6 +9,7 @@ import time
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 import mistune
+from src.utils.text_cleaner import strip_emoji
 
 logger = logging.getLogger(__name__)
 
@@ -285,7 +286,7 @@ def _generate_html_template(article_data: Dict[str, Any]) -> str:
     department = article_data.get("department", "")
     date = article_data.get("date", "")
     exact_time = article_data.get("exact_time", "")
-    summary = article_data.get("summary", "")
+    summary = strip_emoji(article_data.get("summary", ""))
     url = article_data.get("url", "")
     model_name = article_data.get("model_name", "AI")
     attachments_raw = article_data.get("attachments", [])
@@ -606,7 +607,7 @@ def render_article_snapshot(
             # 截图
             page.screenshot(path=temp_path, full_page=True, type="png")
 
-            logger.info(f"📸 ✅ 快照生成成功: {temp_path}")
+            logger.info(f"快照生成成功: {temp_path}")
             return temp_path
 
         except Exception as e:
@@ -616,7 +617,7 @@ def render_article_snapshot(
                 # 等待后重试
                 time.sleep(1)
             else:
-                logger.error(f"📸 ❌ 快照生成最终失败: {e}", exc_info=True)
+                logger.error(f"快照生成最终失败: {e}", exc_info=True)
                 return None
 
         finally:
