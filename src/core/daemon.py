@@ -137,7 +137,7 @@ class DaemonManager:
         self,
         task_callback: Callable[[], Dict[str, Any]],
         interval_getter: Callable[[], int] = lambda: 900,
-        initial_wait: int = 10,
+        initial_wait: int = 20,
         on_new_articles: Optional[Callable[[int, Dict[str, Any]], None]] = None,
         debug_mode: bool = False,
     ) -> None:
@@ -147,7 +147,7 @@ class DaemonManager:
         Args:
             task_callback: 要执行的任务（返回 {"status": ..., "new_count": ...}）
             interval_getter: 获取轮询间隔的函数（返回秒数），支持热重载
-            initial_wait: 初始等待时间（秒）
+            initial_wait: 初始等待时间（秒），默认 20 秒以确保前端完成初始化
             on_new_articles: 发现新文章时的回调，参数为 (count, result)
             debug_mode: 调试模式，缩短初始等待时间
         """
@@ -170,8 +170,8 @@ class DaemonManager:
             print(f"🚀 [Debug] 守护线程准备就绪 (当前轮询间隔: {current_interval}秒)")
             logger.info(f"🛡️ 守护线程已启动 (当前轮询间隔: {current_interval}秒)")
 
-            # 初始等待（调试模式下缩短）
-            actual_initial_wait = 2 if debug_mode else initial_wait
+            # 初始等待（调试模式下缩短，25秒确保前端完成初始化）
+            actual_initial_wait = 2 if debug_mode else max(initial_wait, 25)
             if self._stop_event.wait(actual_initial_wait):
                 return
 

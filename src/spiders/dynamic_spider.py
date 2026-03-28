@@ -53,13 +53,13 @@ def _normalize_selector(selector: str) -> str:
     # 处理纯 JS 文本属性
     if selector_lower in js_text_props:
         selector = '::text'
-        logger.debug(f"选择器规范化: '{original}' -> '{selector}'")
+        logger.debug("选择器规范化: '%s' -> '%s'", original, selector)
         return selector
 
     # 处理纯 JS 链接/图片属性
     if selector_lower in js_attr_props:
         selector = js_attr_props[selector_lower]
-        logger.debug(f"选择器规范化: '{original}' -> '{selector}'")
+        logger.debug("选择器规范化: '%s' -> '%s'", original, selector)
         return selector
 
     # 2. 处理带标签但用了 JS 属性的情况 (如 'a.href', 'span.textContent')
@@ -233,7 +233,7 @@ class DynamicSpider(BaseSpider):
         # 🌟 单次抓取最大条目数（可配置，覆盖默认值）
         self.max_items = rule_dict.get('max_items')
 
-        logger.info(f"🕷️ DynamicSpider 初始化: {self.task_name} (rule_id={self.rule_id})")
+        logger.info("🕷️ DynamicSpider 初始化: %s (rule_id=%s)", self.task_name, self.rule_id)
 
     def fetch_list(
         self,
@@ -254,7 +254,7 @@ class DynamicSpider(BaseSpider):
             文章数据列表
         """
         if not self.target_url:
-            logger.error(f"[{self.SOURCE_NAME}] 未配置目标 URL")
+            logger.error("[%s] 未配置目标 URL", self.SOURCE_NAME)
             return []
 
         articles: List[ArticleData] = []
@@ -263,7 +263,7 @@ class DynamicSpider(BaseSpider):
             # 1. 获取网页内容
             response = self._safe_get(self.target_url)
             if not response:
-                logger.warning(f"[{self.SOURCE_NAME}] 无法获取页面: {self.target_url}")
+                logger.warning("[%s] 无法获取页面: %s", self.SOURCE_NAME, self.target_url)
                 return []
 
             # 2. 解析 HTML
@@ -272,16 +272,16 @@ class DynamicSpider(BaseSpider):
             # 3. 查找列表容器
             container = soup.select_one(self.list_container)
             if not container:
-                logger.warning(f"[{self.SOURCE_NAME}] 未找到列表容器: {self.list_container}")
+                logger.warning("[%s] 未找到列表容器: %s", self.SOURCE_NAME, self.list_container)
                 return []
 
             # 4. 查找所有列表项
             items = container.select(self.item_selector)
             if not items:
-                logger.warning(f"[{self.SOURCE_NAME}] 未找到列表项: {self.item_selector}")
+                logger.warning("[%s] 未找到列表项: %s", self.SOURCE_NAME, self.item_selector)
                 return []
 
-            logger.info(f"[{self.SOURCE_NAME}] 找到 {len(items)} 个列表项")
+            logger.info("[%s] 找到 %d 个列表项", self.SOURCE_NAME, len(items))
 
             # 5. 应用 limit 限制
             if limit and limit > 0:
@@ -294,14 +294,14 @@ class DynamicSpider(BaseSpider):
                     if article:
                         articles.append(article)
                 except Exception as e:
-                    logger.warning(f"[{self.SOURCE_NAME}] 提取第 {idx+1} 项失败: {e}")
+                    logger.warning("[%s] 提取第 %d 项失败: %s", self.SOURCE_NAME, idx+1, e)
                     continue
 
-            logger.info(f"[{self.SOURCE_NAME}] 成功提取 {len(articles)} 篇文章")
+            logger.info("[%s] 成功提取 %d 篇文章", self.SOURCE_NAME, len(articles))
             return articles
 
         except Exception as e:
-            logger.error(f"[{self.SOURCE_NAME}] 抓取失败: {e}", exc_info=True)
+            logger.error("[%s] 抓取失败: %s", self.SOURCE_NAME, e, exc_info=True)
             return []
 
     def _extract_article_from_item(self, item: Any, index: int) -> Optional[ArticleData]:
@@ -334,7 +334,7 @@ class DynamicSpider(BaseSpider):
                 fields[field_name] = value
 
             except Exception as e:
-                logger.debug(f"[{self.SOURCE_NAME}] 提取字段 {field_name} 失败: {e}")
+                logger.debug("[%s] 提取字段 %s 失败: %s", self.SOURCE_NAME, field_name, e)
                 fields[field_name] = ""
 
         # 智能识别标题
@@ -533,10 +533,10 @@ class DynamicSpider(BaseSpider):
                 return detail
             else:
                 # 父类方法未匹配到容器，使用通用选择器降级
-                logger.debug(f"[{self.SOURCE_NAME}] 父类方法未匹配，使用通用选择器降级: {url}")
+                logger.debug("[%s] 父类方法未匹配，使用通用选择器降级: %s", self.SOURCE_NAME, url)
                 return self._fallback_fetch_detail(url)
         except Exception as e:
-            logger.warning(f"[{self.SOURCE_NAME}] 调用父类 fetch_detail 失败: {url} -> {e}")
+            logger.warning("[%s] 调用父类 fetch_detail 失败: %s -> %s", self.SOURCE_NAME, url, e)
             return self._fallback_fetch_detail(url)
 
     def _fallback_fetch_detail(self, url: str) -> Optional[ArticleData]:
@@ -602,7 +602,7 @@ class DynamicSpider(BaseSpider):
             }
 
         except Exception as e:
-            logger.warning(f"[{self.SOURCE_NAME}] 降级详情提取失败: {url} -> {e}")
+            logger.warning("[%s] 降级详情提取失败: %s -> %s", self.SOURCE_NAME, url, e)
             return None
 
     def _safe_get(self, url: str, **kwargs) -> Optional[requests.Response]:
@@ -643,10 +643,10 @@ class DynamicSpider(BaseSpider):
             return res
 
         except requests.exceptions.Timeout:
-            logger.warning(f"[{self.SOURCE_NAME}] 请求超时: {url}")
+            logger.warning("[%s] 请求超时: %s", self.SOURCE_NAME, url)
             return None
         except requests.exceptions.RequestException as e:
-            logger.warning(f"[{self.SOURCE_NAME}] 请求失败: {url} -> {e}")
+            logger.warning("[%s] 请求失败: %s -> %s", self.SOURCE_NAME, url, e)
             return None
 
 
@@ -665,16 +665,16 @@ def create_dynamic_spider_from_rule(rule_dict: Dict[str, Any]) -> Optional[Dynam
         required_fields = ['url', 'list_container', 'item_selector', 'field_selectors']
         missing = [f for f in required_fields if not rule_dict.get(f)]
         if missing:
-            logger.error(f"规则缺少必要字段: {missing}")
+            logger.error("规则缺少必要字段: %s", missing)
             return None
 
         # 检查是否启用
         if rule_dict.get('enabled') is False:
-            logger.debug(f"规则已禁用: {rule_dict.get('rule_id')}")
+            logger.debug("规则已禁用: %s", rule_dict.get('rule_id'))
             return None
 
         return DynamicSpider(rule_dict)
 
     except Exception as e:
-        logger.error(f"创建动态爬虫失败: {e}")
+        logger.error("创建动态爬虫失败: %s", e)
         return None

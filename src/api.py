@@ -984,6 +984,37 @@ class Api:
         """暴露给前端：获取配置"""
         config_data = self.config_service.to_dict()
 
+        # 🌟 修复：确保所有字段存在（提供默认值），避免设置界面空白
+        default_config = {
+            "baseUrl": "https://api.deepseek.com/v1",
+            "apiKey": "",
+            "modelName": "deepseek-chat",
+            "prompt": self.llm.system_prompt if hasattr(self, 'llm') and self.llm else "请帮我总结以下文章内容",
+            "autoStart": False,
+            "muteMode": False,
+            "trackMode": "continuous",
+            "fontFamily": "sans-serif",
+            "customFontPath": "",
+            "customFontName": "",
+            "subscribedSources": [],
+            "pollingInterval": 60,
+            "isPinned": False,
+            "readNoticeTime": "",
+            "emailNotifyEnabled": False,
+            "smtpHost": "",
+            "smtpPort": 465,
+            "smtpUser": "",
+            "smtpPassword": "",
+            "subscriberList": [],
+            "secondaryModels": [],
+            "max_items": 20,
+            "body_field": "content",
+            "skip_detail": False,
+        }
+        for key, default in default_config.items():
+            if key not in config_data:
+                config_data[key] = default
+
         # 🌟 修复：启动时恢复置顶状态，改为对属性赋值
         if self.window and config_data.get("isPinned", False):
             self.window.on_top = True
@@ -993,8 +1024,13 @@ class Api:
     def save_config(self, new_config: dict) -> dict:
         """暴露给前端：保存配置"""
         try:
+            # 🌟 检查配置锁定状态
+            if self.config_service.current and self.config_service.current.is_locked:
+                logger.warning("⚠️ 配置已锁定，拒绝保存操作")
+                return {"status": "error", "message": "配置已锁定，无法保存"}
+
             if not self.config_service.save(new_config):
-                return {"status": "error", "message": "保存配置文件失败"}
+                return {"status": "error", "message": "保存配置文件失败，请检查文件权限"}
 
             # 应用开机自启设置
             self._set_autostart(new_config.get("autoStart", False))
@@ -1006,7 +1042,7 @@ class Api:
             return {"status": "success"}
         except Exception as e:
             logger.error(f"保存配置失败: {e}")
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": f"保存失败: {str(e)}"}
 
     def test_ai_connection(
         self,

@@ -79,15 +79,16 @@ class CustomSpiderRulesManager:
             return self._rules_cache
 
         if not self._rules_path.exists():
-            # 初始化空规则文件
+            # 🌟 修复：不自动创建空文件，直接返回内存中的空规则结构
+            # 文件将在第一次实际保存规则时创建
             empty_rules = {
                 "version": "1.0",
                 "rules": [],
                 "created_at": datetime.now().isoformat(),
                 "updated_at": datetime.now().isoformat()
             }
-            self._save_to_file(empty_rules)
             self._rules_cache = empty_rules
+            logger.debug(f"规则文件不存在，使用内存中的空规则结构")
             return empty_rules
 
         try:

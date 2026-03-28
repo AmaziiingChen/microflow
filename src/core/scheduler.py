@@ -3,6 +3,7 @@
 import json
 import logging
 import threading
+import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple, Callable, Type, TYPE_CHECKING
@@ -614,7 +615,7 @@ class SpiderScheduler:
                         if is_cold_start:
                             cold_yield_count += 1
 
-            except Exception as e:
+            except (requests.RequestException, ConnectionError, TimeoutError, ValueError) as e:
                 section_label = f"板块 '{section_name}'" if section_name else "默认板块"
                 error_msg = f"[{source_name}] {section_label} 抓取异常: {e}"
                 logger.warning(error_msg)

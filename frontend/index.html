@@ -22,8 +22,6 @@
         --border-color: #e5e7eb;
         /* Apple Store 级物理回弹曲线 */
         --curve-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
-        /* 搜索聚焦时的让渡色 */
-        --btn-yield: #7caff4;
         /* 丝滑位移曲线：专管布局推拉，绝对不过冲，防止元素越界 */
         --curve-apple-move: cubic-bezier(0.32, 0.72, 0, 1);
         /* 专属果冻曲线：专管被挤压时的 Q 弹形变 */
@@ -1096,17 +1094,6 @@
       .icon-svg {
         width: 16px;
         height: 16px;
-        vertical-align: middle;
-      }
-      .icon-svg-setting {
-        width: 22px;
-        height: 22px;
-        vertical-align: middle;
-        margin-right: 6px;
-      }
-      .icon-svg-gear {
-        width: 14px;
-        height: 14px;
         vertical-align: middle;
       }
 
@@ -2230,22 +2217,6 @@
 
       /* 移除旧的取消按钮样式 */
 
-      /* 🌟 收藏按钮 (金色) */
-      .btn-favorite {
-        background: #b8860b;
-        color: white;
-      }
-      .btn-favorite:hover {
-        background: #996d09;
-      }
-      .btn-favorite-active {
-        background: #ffd700;
-        color: #333;
-      }
-      .btn-favorite-active:hover {
-        background: #e6c200;
-      }
-
       .status-center {
         text-align: center;
         color: var(--text-sub);
@@ -2609,8 +2580,6 @@
         --search-curve-expand: cubic-bezier(0.3, 1.65, 0.4, 1);
         /* 🌟 收缩曲线：稍平滑，体现阻尼感 */
         --search-curve-collapse: cubic-bezier(0.25, 1, 0.5, 1);
-
-        --search-bg-hover: rgba(0, 0, 0, 0.03);
       }
 
       /* ================= 绝杀 7：魔术底线 ================= */
@@ -3697,12 +3666,6 @@
         margin-left: 12px;
       }
 
-      /* 旋转动画 */
-      @keyframes spin {
-        100% {
-          transform: rotate(360deg);
-        }
-      }
       .spinner {
         animation: spin 1s linear infinite;
         width: 14px;
@@ -4045,14 +4008,6 @@
         }
         100% {
           transform: rotate(360deg) translateZ(0);
-        }
-      }
-      @keyframes spin {
-        from {
-          transform: rotate(0deg);
-        }
-        to {
-          transform: rotate(360deg);
         }
       }
 
@@ -5636,15 +5591,6 @@
         animation: spin 1s linear infinite;
       }
 
-      @keyframes spin {
-        from {
-          transform: rotate(0deg);
-        }
-        to {
-          transform: rotate(360deg);
-        }
-      }
-
       /* 模块标题样式调整 */
       .settings-section-divider {
         margin: 8px 0 -12px; /* 负 margin-bottom 抵消容器的 gap */
@@ -5998,93 +5944,6 @@
         class="list-view"
         @click="handleListClick"
       >
-        <!-- 🎯 进度条已禁用 -->
-        <!--
-        <div
-          v-if="showSpiderProgress"
-          style="margin-bottom: 8px; padding: 0 4px"
-        >
-          <div
-            style="
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              font-size: 11px;
-              color: #6b7280;
-              margin-bottom: 4px;
-              font-weight: 600;
-            "
-          >
-            <div class="progress-left-text">
-              {{ spiderProgress.detail || (spiderProgress.completed === 0 ?
-              '正在启动...' : '') }}
-            </div>
-            <div class="progress-right-stats">
-              <span v-if="spiderProgress.completed > 0">
-                {{ spiderProgress.completed }}
-              </span>
-              <span
-                v-else-if="spiderProgress.total > 0 && spiderProgress.completed === 0"
-                >准备中...</span
-              >
-            </div>
-          </div>
-          <div class="progress-track">
-            <div class="progress-fill progress-indeterminate"></div>
-          </div>
-        </div>
-
-        <div
-          v-if="showAiProgress"
-          style="margin-bottom: 8px; padding: 0 4px"
-        >
-          <div
-            style="
-              font-size: 11px;
-              color: #6b7280;
-              margin-bottom: 1px;
-              font-weight: 600;
-            "
-          >
-            <div
-              class="progress-left-text"
-              style="
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-              "
-            >
-              {{ aiProgress.detail || '等待处理...' }}
-            </div>
-          </div>
-          <div class="progress-track">
-            <div
-              class="progress-fill"
-              :style="{ width: (aiProgress.total > 0 ? Math.min(aiProgress.completed / aiProgress.total * 100, 100) : 0) + '%' }"
-            ></div>
-          </div>
-          <div
-            style="
-              display: flex;
-              justify-content: flex-end;
-              font-size: 10px;
-              color: #9ca3af;
-              margin-top: 0px;
-              line-height: 1;
-            "
-            v-if="aiProgress.total > 0"
-          >
-            <template v-if="aiProgress.completed >= aiProgress.total">
-              100% ( {{ aiProgress.total }} / {{ aiProgress.total }} )
-            </template>
-            <template v-else>
-              {{ Math.round(aiProgress.completed / aiProgress.total * 100) }}% (
-              {{ aiProgress.completed }} / {{ aiProgress.total }} )
-            </template>
-          </div>
-        </div>
-        -->
-
         <div v-if="statusMsg" class="status-center">{{ statusMsg }}</div>
 
         <!-- 🌟 收藏模式标题 -->
@@ -8567,7 +8426,7 @@
                       />
                       <path
                         d="M4.16109 20.5469C4.56149 20.8594 5.0693 20.752 5.67477 20.3125L10.8408 16.5137L16.0166 20.3125C16.622 20.752 17.1201 20.8594 17.5302 20.5469C17.9306 20.2441 18.0185 19.7461 17.7744 19.0332L15.7334 12.959L20.9482 9.20898C21.5537 8.7793 21.7978 8.33008 21.6416 7.8418C21.4853 7.37305 21.0263 7.14844 20.2744 7.14844L13.8779 7.14844L11.9345 1.08398C11.7002 0.361328 11.3486 0 10.8408 0C10.3427 0 9.99117 0.361328 9.7568 1.08398L7.81344 7.14844L1.41695 7.14844C0.665001 7.14844 0.206017 7.37305 0.0497668 7.8418C-0.116249 8.33008 0.137657 8.7793 0.743126 9.20898L5.95797 12.959L3.91695 19.0332C3.67281 19.7461 3.7607 20.2441 4.16109 20.5469Z"
-                        :fill="currentColor"
+                        fill="currentColor"
                       />
                     </g>
                   </svg>
@@ -9420,6 +9279,64 @@
         };
       };
 
+      // ============================================================
+      // 🛡️ 全局安全 API 调用包装器
+      // ============================================================
+      // 解决 pywebview.http_server 模式下 API 方法可能未就绪的问题
+
+      // 🌟 全局标记：pywebview 是否已确认就绪
+      let _pywebviewReady = false;
+
+      // 🌟 轮询等待特定 API 方法就绪
+      const waitForApiMethod = (methodName, timeout = 10000) => {
+        return new Promise((resolve, reject) => {
+          const startTime = Date.now();
+          const pollInterval = 100; // 每 100ms 检查一次
+
+          const check = () => {
+            // 检查 pywebview、api 对象和方法是否都存在
+            if (window.pywebview &&
+                window.pywebview.api &&
+                typeof window.pywebview.api[methodName] === 'function') {
+              _pywebviewReady = true;
+              resolve();
+              return;
+            }
+
+            // 检查是否超时
+            if (Date.now() - startTime > timeout) {
+              console.warn(`⚠️ 等待 API 方法 ${methodName} 就绪超时 (${timeout}ms)`);
+              reject(new Error(`API 方法 ${methodName} 初始化超时`));
+              return;
+            }
+
+            // 继续轮询
+            setTimeout(check, pollInterval);
+          };
+
+          check();
+        });
+      };
+
+      // 🌟 安全的 API 调用包装器（带自动等待）
+      const safeApiCall = async (methodName, ...args) => {
+        try {
+          // 等待特定 API 方法就绪
+          await waitForApiMethod(methodName, 10000);
+        } catch (e) {
+          console.warn(`API 方法 ${methodName} 未就绪，跳过调用`);
+          return { status: 'error', message: `API 方法 ${methodName} 未就绪` };
+        }
+
+        // 执行 API 调用
+        try {
+          return await window.pywebview.api[methodName](...args);
+        } catch (e) {
+          console.error(`API 调用 ${methodName} 异常:`, e);
+          return { status: 'error', message: String(e) };
+        }
+      };
+
       try {
         const { createApp, ref, computed, onMounted, watch, nextTick } = Vue;
 
@@ -9922,9 +9839,6 @@
             };
 
             // 🎯 进度条相关变量
-            const totalTasks = ref(0);
-            const completedTasks = ref(0);
-            const progressDetailText = ref("");
             // 更新阶段：'idle', 'spider', 'ai'
             const updatePhase = ref("idle");
             // 🌟 独立的进度变量
@@ -9934,20 +9848,6 @@
             const hasPendingAiTasks = ref(false);
             // 🌟 新增：任务是否已完成（由 updatePyProgress 设置）
             const taskCompleted = ref(false);
-
-            // 🎯 进度百分比计算属性
-            const progressPercent = computed(() =>
-              totalTasks.value === 0
-                ? 0
-                : Math.round((completedTasks.value / totalTasks.value) * 100),
-            );
-
-            // 🎯 进度标题（根据阶段显示）
-            const progressTitle = computed(() => {
-              if (updatePhase.value === "spider") return "检索进度";
-              if (updatePhase.value === "ai") return "AI 总结进度";
-              return "";
-            });
 
             // 🌟 新增：计算属性控制进度条显示（确保 Vue 响应性）
             const showSpiderProgress = computed(
@@ -10580,19 +10480,6 @@
                 (rule) => rule.enabled,
               );
 
-              console.log("[DEBUG] sources computed - subscribed:", subscribed);
-              console.log(
-                "[DEBUG] sources computed - customRules.value:",
-                customRules.value.map((r) => ({
-                  task_name: r.task_name,
-                  enabled: r.enabled,
-                })),
-              );
-              console.log(
-                "[DEBUG] sources computed - enabledCustomRules:",
-                enabledCustomRules.map((r) => r.task_name),
-              );
-
               // 🌟 构建可见的内置来源列表
               const visibleAcademies =
                 subscribed.length === 0
@@ -10610,11 +10497,6 @@
                   svg: customSourceIcon,
                   isCustom: true,
                 }),
-              );
-
-              console.log(
-                "[DEBUG] sources computed - visibleCustomSources:",
-                visibleCustomSources.map((s) => s.name),
               );
 
               // 🌟 合并：[全部] + 内置来源 + 自定义数据源
@@ -10821,20 +10703,9 @@
 
             // 获取所有自定义规则
             const fetchCustomRules = async () => {
-              try {
-                const res = await pywebview.api.get_custom_spider_rules();
-                if (res.status === "success") {
-                  customRules.value = res.rules || [];
-                  console.log(
-                    "[DEBUG] fetchCustomRules 完成 - customRules:",
-                    customRules.value.map((r) => ({
-                      task_name: r.task_name,
-                      enabled: r.enabled,
-                    })),
-                  );
-                }
-              } catch (e) {
-                console.error("获取自定义规则失败:", e);
+              const res = await safeApiCall('get_custom_spider_rules');
+              if (res && res.status === "success") {
+                customRules.value = res.rules || [];
               }
             };
 
@@ -11349,14 +11220,14 @@
                   // 🌟 根据当前视图恢复对应列表
                   if (isInFavoritesView) {
                     // 收藏视图：恢复收藏列表
-                    const res = await pywebview.api.get_history_paged(
+                    const res = await safeApiCall('get_history_paged',
                       1,
                       20,
                       null,
                       null,
                       true, // favoritesOnly
                     );
-                    if (res.status === "success") {
+                    if (res && res.status === "success") {
                       articles.value = res.data;
                     }
                     return;
@@ -11368,13 +11239,13 @@
                     sourceParam = activeSource.value;
                   }
 
-                  const res = await pywebview.api.get_history_paged(
+                  const res = await safeApiCall('get_history_paged',
                     1,
                     20,
                     sourceParam,
                     null, // 不再传递 sourceNamesParam
                   );
-                  if (res.status === "success") {
+                  if (res && res.status === "success") {
                     articles.value = res.data;
                   }
                   return;
@@ -11470,17 +11341,25 @@
 
             // 打开设置时，记录触发按钮位置
             const openSettings = async (event) => {
-              const btn = event.currentTarget;
-              const rect = btn.getBoundingClientRect();
+              // 🌟 防御性处理：若 event 不存在（如从托盘调用），使用屏幕中心作为动画起点
+              let originX = window.innerWidth / 2;
+              let originY = window.innerHeight / 2;
+
+              if (event && event.currentTarget) {
+                const btn = event.currentTarget;
+                const rect = btn.getBoundingClientRect();
+                originX = rect.left + rect.width / 2;
+                originY = rect.top + rect.height / 2;
+              }
 
               // 添加 CSS 变量作为动画起点
               document.documentElement.style.setProperty(
                 "--origin-x",
-                rect.left + rect.width / 2 + "px",
+                originX + "px",
               );
               document.documentElement.style.setProperty(
                 "--origin-y",
-                rect.top + rect.height / 2 + "px",
+                originY + "px",
               );
 
               // 触发缩放生长动画
@@ -11498,11 +11377,11 @@
             // 🌟 新增：带自动保存的闭环退出逻辑
             const closeSettingsWithAutoSave = async () => {
               try {
-                // 1. 先呼叫后端保存
-                const res = await pywebview.api.save_config(
+                // 1. 先呼叫后端保存（使用 safeApiCall）
+                const res = await safeApiCall('save_config',
                   JSON.parse(JSON.stringify(config.value)),
                 );
-                if (res.status === "success") {
+                if (res && res.status === "success") {
                   showNotification(
                     "保存成功",
                     "配置已保存并应用",
@@ -11510,18 +11389,20 @@
                     1500,
                   );
                 } else {
-                  showNotification("保存失败", res.message, "error");
+                  showNotification("保存失败", res?.message || "未知错误", "error");
                 }
               } catch (e) {
-                showNotification("保存失败", "保存发生错误", "error");
+                showNotification("保存失败", String(e), "error");
               }
 
-              // 2. 🌟 核心：无论保存是否彻底成功，都坍塌物理空间
+              // 2. 🌟 核心：无论保存是否彻底成功，都关闭设置界面
               isSettingsOpen.value = false;
             };
 
             // 返回上一页
             const backToPrevious = () => {
+              // 🌟 离开详情页时断开所有附件 ResizeObserver，避免内存泄漏
+              disconnectAllAttachmentObservers();
               currentView.value = previousView.value;
             };
 
@@ -11701,13 +11582,20 @@
                 mapped.length > 0 // 🌟 核心：只有当有真实文章时才显示公告，避免数据加载时空数组导致公告浮动
               ) {
                 // 🌟 检查公告是否已读（通过配置文件中的 readNoticeTime 与公告发布时间比较）
-                // 如果本地已读时间 >= 公告发布时间，说明该公告已读
+                // 使用 Date 对象比较，避免字符串格式不一致导致的错误
+                const compareTimeStrings = (time1, time2) => {
+                  if (!time1 || !time2) return false;
+                  const d1 = new Date(time1.replace(/年|月/g, "-").replace(/日/g, "").replace(/\//g, "-"));
+                  const d2 = new Date(time2.replace(/年|月/g, "-").replace(/日/g, "").replace(/\//g, "-"));
+                  if (isNaN(d1.getTime()) || isNaN(d2.getTime())) {
+                    // 降级为字符串比较
+                    return time1 >= time2;
+                  }
+                  return d1 >= d2;
+                };
                 const localReadTime = config.value.readNoticeTime || "";
                 const noticePublishTime = systemNotice.value.publish_time || "";
-                const isNoticeRead =
-                  localReadTime &&
-                  noticePublishTime &&
-                  localReadTime >= noticePublishTime;
+                const isNoticeRead = compareTimeStrings(localReadTime, noticePublishTime);
 
                 const noticeItem = {
                   id: systemNotice.value.id,
@@ -11852,13 +11740,19 @@
                 lastArticle.value = item;
                 currentView.value = "detail";
 
-                // 🌟 检查是否已读（通过发布时间比较）
+                // 🌟 检查是否已读（通过发布时间比较，使用 Date 对象避免格式问题）
+                const compareTimeStrings = (time1, time2) => {
+                  if (!time1 || !time2) return false;
+                  const d1 = new Date(time1.replace(/年|月/g, "-").replace(/日/g, "").replace(/\//g, "-"));
+                  const d2 = new Date(time2.replace(/年|月/g, "-").replace(/日/g, "").replace(/\//g, "-"));
+                  if (isNaN(d1.getTime()) || isNaN(d2.getTime())) {
+                    return time1 >= time2;
+                  }
+                  return d1 >= d2;
+                };
                 const localReadTime = config.value.readNoticeTime || "";
                 const noticePublishTime = item.publish_time || "";
-                const isNoticeRead =
-                  localReadTime &&
-                  noticePublishTime &&
-                  localReadTime >= noticePublishTime;
+                const isNoticeRead = compareTimeStrings(localReadTime, noticePublishTime);
 
                 if (!isNoticeRead) {
                   // 🌟 将已读公告的发布时间写入配置文件
@@ -11901,6 +11795,7 @@
             // 分离出独立的加载下一页函数
             const loadMoreArticles = async () => {
               isLoadingMore.value = true;
+              const previousPage = page.value;
               page.value += 1;
 
               // 🌟 修复：当 activeSource 为"全部"或"收藏"时，不传递来源参数，让后端统一处理
@@ -11917,20 +11812,25 @@
                 sourceParam = activeSource.value;
               }
 
-              const res = await pywebview.api.get_history_paged(
+              // 🌟 使用 safeApiCall 防御性调用
+              const res = await safeApiCall('get_history_paged',
                 page.value,
                 20,
                 sourceParam,
                 null, // 🌟 不再传递 source_names，让后端统一处理
                 favoritesOnly,
               );
-              if (res.status === "success") {
+              if (res && res.status === "success") {
                 if (res.data.length === 0) {
                   noMoreData.value = true;
                 } else {
                   // 🌟 关键：将新获取的数据解构并追加到原本的数组尾部
                   articles.value.push(...res.data);
                 }
+              } else {
+                // 🌟 修复：请求失败时回滚页码
+                page.value = previousPage;
+                showNotification("加载失败", res?.message || "未知错误", "error", 2000);
               }
               isLoadingMore.value = false;
             };
@@ -12075,65 +11975,26 @@
               // 🌟 修复 3：如果搜索框里有内容，切换来源时应该在【当前搜索词】下进行过滤，而不是重置列表
               const scrollPromise = scrollActiveChipToCenter(source.key);
               const switchPromise = runArticleSwitchTransition(async () => {
-                console.log(
-                  "[DEBUG] filterBySource - source.name:",
-                  source.name,
-                  "sourceParam:",
-                  sourceParam,
-                  "sourceNamesParam:",
-                  sourceNamesParam,
-                );
-
                 if (isSearching.value || searchQuery.value.trim()) {
                   const keyword = searchQuery.value.trim();
-                  console.log(
-                    "[DEBUG] filterBySource - 搜索模式, keyword:",
-                    keyword,
-                  );
-                  const res = await pywebview.api.search_articles(
+                  const res = await safeApiCall('search_articles',
                     keyword,
                     sourceParam,
                     favoritesOnly,
                   );
-                  if (res.status === "success") {
-                    console.log(
-                      "[DEBUG] filterBySource - 搜索结果:",
-                      res.data.length,
-                      "条",
-                    );
-                    console.log(
-                      "[DEBUG] filterBySource - 搜索结果来源分布:",
-                      res.data.map((a) => a.source_name),
-                    );
+                  if (res && res.status === "success") {
                     articles.value = res.data;
                   }
                 } else {
                   // 正常无搜索时的切换逻辑
-                  console.log(
-                    "[DEBUG] filterBySource - 正常模式, 调用 get_history_paged(",
-                    1,
-                    20,
-                    sourceParam,
-                    sourceNamesParam,
-                    favoritesOnly,
-                    ")",
-                  );
-                  const res = await pywebview.api.get_history_paged(
+                  const res = await safeApiCall('get_history_paged',
                     1,
                     20,
                     sourceParam,
                     sourceNamesParam,
                     favoritesOnly,
                   );
-                  if (res.status === "success") {
-                    console.log(
-                      "[DEBUG] filterBySource - 返回文章数:",
-                      res.data.length,
-                    );
-                    console.log(
-                      "[DEBUG] filterBySource - 返回文章来源分布:",
-                      res.data.map((a) => a.source_name),
-                    );
+                  if (res && res.status === "success") {
                     articles.value = res.data;
                     if (res.data.length < 20) noMoreData.value = true;
                   }
@@ -12143,21 +12004,9 @@
             };
 
             onMounted(async () => {
-              // 🎯 从后端获取冷却时间配置
-              try {
-                const cooldownRes = await pywebview.api.get_cooldown_config();
-                if (
-                  cooldownRes.status === "success" &&
-                  cooldownRes.cooldown_seconds
-                ) {
-                  COOLDOWN_SECONDS = cooldownRes.cooldown_seconds;
-                  console.log(`✅ 冷却时间配置: ${COOLDOWN_SECONDS} 秒`);
-                }
-              } catch (e) {
-                console.warn("获取冷却时间配置失败，使用默认值 60 秒:", e);
-              }
+              console.log("[Frontend] Vue onMounted 执行");
 
-              // 🎯 冷却时间恢复：检查 localStorage 中是否有未完成的冷却
+              // 🎯 冷却时间恢复：检查 localStorage 中是否有未完成的冷却（不依赖 API）
               const lastTime = localStorage.getItem("lastManualUpdateTime");
               if (lastTime) {
                 const elapsedSeconds = Math.floor(
@@ -12166,9 +12015,6 @@
                 if (elapsedSeconds < COOLDOWN_SECONDS) {
                   // 还在冷却期内，继续未完成的倒计时
                   startCooldown(COOLDOWN_SECONDS - elapsedSeconds);
-                  console.log(
-                    `🔄 恢复冷却倒计时: 剩余 ${COOLDOWN_SECONDS - elapsedSeconds} 秒`,
-                  );
                 } else {
                   // 已经过期，清理掉
                   localStorage.removeItem("lastManualUpdateTime");
@@ -12274,127 +12120,119 @@
                 }
               });
 
-              window.addEventListener("pywebviewready", async () => {
-                // 🚫 第一优先级：启动安全检查
+              // ============================================================
+              // 🚀 核心：立即加载数据，不等待任何其他任务
+              // ============================================================
+              console.log("[Frontend] ========== 开始初始化数据 ==========");
+
+              // 🎯 API 就绪检查函数
+              const checkApiReady = () => {
+                return window.pywebview && window.pywebview.api && typeof window.pywebview.api.get_history_paged === 'function';
+              };
+
+              // 🚀 核心数据加载函数（最高优先级）
+              const loadCoreData = async () => {
+                console.log("[Frontend] 正在加载文章列表...");
                 try {
-                  const checkResult =
-                    await pywebview.api.perform_startup_check();
+                  const res = await window.pywebview.api.get_history_paged(1, 20, null, null, false);
+                  console.log("[Frontend] 文章列表 API 返回:", res);
+                  if (res && res.status === "success") {
+                    articles.value = res.data;
+                    if (res.data.length < 20) noMoreData.value = true;
+                    console.log("[Frontend] ✅ 文章列表加载完成，共", res.data.length, "条");
+                  } else {
+                    console.warn("[Frontend] ⚠️ 文章列表返回异常:", res);
+                  }
+                } catch (e) {
+                  console.error("[Frontend] ❌ 加载文章失败:", e);
+                }
+              };
 
-                  if (
-                    checkResult.status === "locked" ||
-                    checkResult.status === "network_error"
-                  ) {
-                    // 触发阻断
-                    const overlay = document.getElementById(
-                      "kill-switch-overlay",
-                    );
-                    const reasonText =
-                      document.getElementById("kill-switch-reason");
+              // 🚀 非关键任务（使用 Promise.allSettled，失败不影响核心功能）
+              const runBackgroundTasks = () => {
+                console.log("[Frontend] 启动后台任务...");
 
-                    overlay.style.display = "flex";
-                    reasonText.innerText = checkResult.reason;
-
-                    // 防御性清除：一旦被锁定，强行删掉页面的其他主内容
-                    const mainContent = document.getElementById("app");
-                    if (mainContent) {
-                      mainContent.innerHTML = "";
+                // 使用 Promise.allSettled 确保所有任务都尝试执行，失败不影响其他
+                Promise.allSettled([
+                  // 配置加载
+                  window.pywebview.api.load_config?.().then(res => {
+                    if (res && res.status === "success") {
+                      config.value = { ...config.value, ...res.data };
+                      console.log("[Frontend] ✅ 配置加载完成");
                     }
-                    return; // 强制终止后续正常初始化流程
-                  }
+                  }).catch(e => console.warn("[Frontend] load_config 失败:", e)),
 
-                  // 🌟 检查只读模式
-                  if (checkResult.mode === "read_only") {
-                    isReadOnlyMode.value = true;
-                    readOnlyReason.value = checkResult.reason || "服务已暂停";
-                    console.log(
-                      "⚠️ 启动时检测到只读模式:",
-                      readOnlyReason.value,
-                    );
-                  }
-                } catch (e) {
-                  console.warn("启动安全检查失败，采取默认放行策略:", e);
-                }
+                  // 自定义规则
+                  window.pywebview.api.get_custom_spider_rules?.().then(res => {
+                    if (res && res.status === "success") {
+                      customRules.value = res.rules || [];
+                    }
+                  }).catch(e => console.warn("[Frontend] get_custom_spider_rules 失败:", e)),
 
-                // --- 以下是正常的初始化流程 ---
+                  // 冷却配置
+                  window.pywebview.api.get_cooldown_config?.().then(res => {
+                    if (res && res.status === "success" && res.cooldown_seconds) {
+                      COOLDOWN_SECONDS = res.cooldown_seconds;
+                    }
+                  }).catch(e => console.warn("[Frontend] get_cooldown_config 失败:", e)),
 
-                // 🌟 新增：异步拉取云端配置（不阻塞主流程）
-                fetchSystemConfig().catch((err) =>
-                  console.warn("云端配置拉取异常:", err),
-                );
+                  // 安全检查
+                  window.pywebview.api.perform_startup_check?.().then(checkResult => {
+                    if (checkResult && (
+                      checkResult.status === "locked" ||
+                      checkResult.status === "network_error"
+                    )) {
+                      const overlay = document.getElementById("kill-switch-overlay");
+                      const reasonText = document.getElementById("kill-switch-reason");
+                      if (overlay) overlay.style.display = "flex";
+                      if (reasonText) reasonText.innerText = checkResult.reason;
+                      const mainContent = document.getElementById("app");
+                      if (mainContent) mainContent.innerHTML = "";
+                    }
+                    if (checkResult && checkResult.mode === "read_only") {
+                      isReadOnlyMode.value = true;
+                      readOnlyReason.value = checkResult.reason || "服务已暂停";
+                    }
+                  }).catch(e => console.warn("[Frontend] 启动安全检查失败:", e)),
 
-                // 🌟 新增：检查 API 余额状态
-                checkApiBalance();
+                  // 云端配置（5秒超时）
+                  Promise.race([
+                    fetchSystemConfig(),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error("fetchSystemConfig 超时")), 5000))
+                  ]).catch(e => console.warn("[Frontend] 云端配置拉取异常:", e)),
 
-                // 👇 修复：启动时立刻读取并应用全局配置（如字体、深色模式等）
-                try {
-                  const configRes = await pywebview.api.load_config();
-                  if (configRes.status === "success") {
-                    config.value = { ...config.value, ...configRes.data };
-                  }
-                } catch (e) {
-                  console.warn("加载配置失败:", e);
-                }
+                  // API 余额检查
+                  checkApiBalance().catch(e => console.warn("[Frontend] checkApiBalance 失败:", e)),
+                ]).then(results => {
+                  console.log("[Frontend] 后台任务完成:", results.map(r => r.status).join(", "));
+                });
+              };
 
-                // 🌟 新增：延迟从后端同步真实的冷却时间（物理级防穿透 + 竞态保护）
-                // 延迟 500ms 给守护线程时间完成首次抓取并设置冷却
+              // 🌟 同步冷却时间
+              const syncCooldown = () => {
                 setTimeout(async () => {
                   try {
-                    // 先检查是否有待处理的冷却通知
                     if (window._pendingCooldown) {
-                      console.log("🔄 处理待处理的冷却通知");
                       window._pendingCooldown = false;
                       startCooldown(COOLDOWN_SECONDS);
                       return;
                     }
-                    // 否则从后端同步
-                    const cooldownRes =
-                      await pywebview.api.get_update_cooldown();
-                    if (
-                      cooldownRes &&
-                      cooldownRes.status === "cooling" &&
-                      cooldownRes.remaining > 0
-                    ) {
-                      console.log(
-                        `🔄 从后端恢复真实的冷却倒计时: 剩余 ${cooldownRes.remaining} 秒`,
-                      );
-                      startCooldown(cooldownRes.remaining);
+                    const cooldownSync = await window.pywebview.api.get_update_cooldown?.();
+                    if (cooldownSync && cooldownSync.status === "cooling" && cooldownSync.remaining > 0) {
+                      startCooldown(cooldownSync.remaining);
                     }
                   } catch (e) {
-                    console.warn("同步冷却时间失败:", e);
+                    console.warn("[Frontend] 同步冷却时间失败:", e);
                   }
                 }, 500);
+              };
 
-                // 🌟 启动时先加载自定义爬虫规则（确保后续查询包含自定义数据源）
-                await fetchCustomRules();
-
-                // 1. 软件打开时，先只拉取第 1 页的数据
-                try {
-                  // 🌟 简化：不再手动合并，让后端统一处理
-                  const res = await pywebview.api.get_history_paged(
-                    page.value,
-                    20,
-                    null, // source_name
-                    null, // source_names - 让后端统一处理
-                    false, // favorites_only
-                  );
-
-                  if (res.status === "success") {
-                    articles.value = res.data;
-                    if (res.data.length < 20) noMoreData.value = true;
-                  }
-
-                  // 🌟 启动时获取未读数量
-                  fetchUnreadCount();
-                } catch (e) {
-                  console.error("API 调用失败:", e);
-                }
-
-                // 2. 数据渲染上墙后，派出"探子"开始监听锚点
+              // 🌟 设置 IntersectionObserver
+              const setupInfiniteScroll = () => {
                 setTimeout(() => {
                   const anchor = document.getElementById("load-more-anchor");
                   if (anchor) {
                     const observer = new IntersectionObserver((entries) => {
-                      // isIntersecting 为 true，代表用户真的滑到了底部
                       if (
                         entries[0].isIntersecting &&
                         !isLoadingMore.value &&
@@ -12406,8 +12244,44 @@
                     });
                     observer.observe(anchor);
                   }
-                }, 500); // 延迟 500ms 等待 DOM 完全撑开
-              });
+                }, 500);
+              };
+
+              // ============================================================
+              // 🎯 主流程：立即执行核心加载，后台并行执行其他任务
+              // ============================================================
+              if (checkApiReady()) {
+                // API 已就绪，立即加载数据
+                loadCoreData();
+                runBackgroundTasks();
+                syncCooldown();
+                setupInfiniteScroll();
+                fetchUnreadCount();
+              } else {
+                // API 未就绪，快速轮询等待
+                console.log("[Frontend] 等待 API 就绪...");
+                let pollCount = 0;
+                const maxPolls = 30; // 最多等待 3 秒
+                const poll = setInterval(() => {
+                  pollCount++;
+                  if (checkApiReady()) {
+                    clearInterval(poll);
+                    console.log("[Frontend] ✅ API 已就绪");
+                    loadCoreData();
+                    runBackgroundTasks();
+                    syncCooldown();
+                    setupInfiniteScroll();
+                    fetchUnreadCount();
+                  } else if (pollCount >= maxPolls) {
+                    clearInterval(poll);
+                    console.error("[Frontend] API 初始化超时，尝试加载本地数据");
+                    // 即使超时也尝试加载
+                    if (checkApiReady()) {
+                      loadCoreData();
+                    }
+                  }
+                }, 100);
+              }
 
               // 👇 新增：全局拦截 Markdown 正文里的链接点击事件
               // 这样无论是点击邮箱(mailto:) 还是点击网址，都会调用 Python 的系统浏览器打开
@@ -13890,14 +13764,31 @@
             };
 
             // 设置容器 DOM 引用
+            // 🌟 修复：存储 ResizeObserver 实例以便后续断开
+            const attachmentResizeObservers = new Map();
+
             const setAttNameRef = (el, url) => {
               if (el) {
+                // 🌟 先断开之前的 observer（如果存在）
+                if (attachmentResizeObservers.has(url)) {
+                  attachmentResizeObservers.get(url).disconnect();
+                }
+
                 // 监听容器宽度变化
                 const resizeObserver = new ResizeObserver(() => {
                   checkTruncation(url);
                 });
                 resizeObserver.observe(el);
+                attachmentResizeObservers.set(url, resizeObserver);
               }
+            };
+
+            // 🌟 新增：断开所有 ResizeObserver（在详情页切换时调用）
+            const disconnectAllAttachmentObservers = () => {
+              attachmentResizeObservers.forEach((observer) => {
+                observer.disconnect();
+              });
+              attachmentResizeObservers.clear();
             };
 
             // 检测前半部分是否被截断
@@ -13977,24 +13868,18 @@
 
             // 从后端 API 获取未读数量（支持按部门筛选）
             const fetchUnreadCount = async (sourceName = null) => {
-              try {
-                // 🌟 传递当前选中的部门（null 或 "全部" 表示所有部门）
-                const res = await pywebview.api.get_unread_count(
-                  sourceName || activeSource.value,
-                );
+              // 🌟 传递当前选中的部门（null 或 "全部" 表示所有部门）
+              const res = await safeApiCall('get_unread_count',
+                sourceName || activeSource.value,
+              );
+              if (res && res.status === "success") {
                 console.log(
                   "📊 未读数量响应:",
                   res,
                   "筛选:",
                   sourceName || activeSource.value,
                 );
-                if (res.status === "success") {
-                  unreadCount.value = res.count;
-                } else {
-                  console.error("获取未读数量失败:", res.message || res);
-                }
-              } catch (e) {
-                console.error("获取未读数量异常:", e);
+                unreadCount.value = res.count;
               }
             };
 

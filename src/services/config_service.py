@@ -213,6 +213,30 @@ class ConfigService:
             是否保存成功
         """
         try:
+            # 🔐 安全步骤 0：检查锁定状态
+            if self._config and self._config.is_locked:
+                logger.warning("⚠️ 配置已锁定，拒绝保存操作")
+                return False
+
+            # 🌟 类型转换：确保数值字段是正确的类型
+            if 'max_items' in config_dict and config_dict['max_items'] is not None:
+                try:
+                    config_dict['max_items'] = int(config_dict['max_items'])
+                except (ValueError, TypeError):
+                    config_dict['max_items'] = 20
+
+            if 'pollingInterval' in config_dict and config_dict['pollingInterval'] is not None:
+                try:
+                    config_dict['pollingInterval'] = int(config_dict['pollingInterval'])
+                except (ValueError, TypeError):
+                    config_dict['pollingInterval'] = 60
+
+            if 'smtpPort' in config_dict and config_dict['smtpPort'] is not None:
+                try:
+                    config_dict['smtpPort'] = int(config_dict['smtpPort'])
+                except (ValueError, TypeError):
+                    config_dict['smtpPort'] = 465
+
             # 确保目录存在
             config_dir = os.path.dirname(self.config_path)
             if config_dir:

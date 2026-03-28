@@ -68,7 +68,7 @@ class NotificationManager:
                     self._send_windows_sticky(title, message)
 
             except Exception as e:
-                logger.error(f"发送系统通知失败: {e}")
+                logger.error("发送系统通知失败: %s", e)
 
     def _dismiss_previous(self):
         """关闭上一条通知"""
@@ -83,11 +83,15 @@ class NotificationManager:
                     end try
                 end tell
                 '''
-                subprocess.run(
-                    ["osascript", "-e", dismiss_script],
-                    capture_output=True,
-                    timeout=2
-                )
+                try:
+                    subprocess.run(
+                        ["osascript", "-e", dismiss_script],
+                        capture_output=True,
+                        timeout=2,
+                        check=True
+                    )
+                except subprocess.CalledProcessError as e:
+                    logger.debug("AppleScript 执行失败: %s", e)
             except Exception:
                 pass  # 忽略关闭失败，继续发送新通知
 
@@ -121,10 +125,10 @@ class NotificationManager:
                 stderr=subprocess.DEVNULL
             )
 
-            logger.debug(f"macOS 通知已发送: {title}")
+            logger.debug("macOS 通知已发送: %s", title)
 
         except Exception as e:
-            logger.error(f"macOS 通知发送失败: {e}")
+            logger.error("macOS 通知发送失败: %s", e)
             # 降级方案：尝试使用 terminal-notifier（如果已安装）
             self._try_terminal_notifier(title, message, subtitle)
 
@@ -137,11 +141,14 @@ class NotificationManager:
             # -timeout 0 表示常驻（需要用户点击）
             cmd.extend(["-timeout", "0"])
 
-            subprocess.run(cmd, capture_output=True, timeout=5)
+            try:
+                subprocess.run(cmd, capture_output=True, timeout=5, check=True)
+            except subprocess.CalledProcessError as e:
+                logger.debug("terminal-notifier 执行失败: %s", e)
         except FileNotFoundError:
             logger.debug("terminal-notifier 未安装，使用默认通知")
         except Exception as e:
-            logger.debug(f"terminal-notifier 失败: {e}")
+            logger.debug("terminal-notifier 失败: %s", e)
 
     def _send_windows_sticky(self, title: str, message: str):
         """
@@ -157,11 +164,11 @@ class NotificationManager:
                 app_name="公文通助手",
                 timeout=300  # 5分钟超时（足够长，模拟常驻）
             )#type: ignore
-            logger.debug(f"Windows 通知已发送: {title}")
+            logger.debug("Windows 通知已发送: %s", title)
         except ImportError:
             logger.warning("plyer 未安装，无法发送 Windows 通知")
         except Exception as e:
-            logger.error(f"Windows 通知发送失败: {e}")
+            logger.error("Windows 通知发送失败: %s", e)
 
 
 # 全局单例实例

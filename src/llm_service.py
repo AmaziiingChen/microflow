@@ -270,8 +270,13 @@ class LLMService:
                         return "⚠️ 用户取消"
 
                 # 检查结果
-                if result_container["error"] is not None:
-                    raise result_container["error"]
+                error = result_container["error"]
+                if error is not None:
+                    if isinstance(error, Exception):
+                        raise error
+                    else:
+                        raise RuntimeError(str(error))
+
 
                 content = result_container["content"]
                 if content:
