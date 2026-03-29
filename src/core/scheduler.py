@@ -197,6 +197,31 @@ class SpiderScheduler:
         except Exception as e:
             logger.error(f"加载动态爬虫规则失败: {e}")
 
+    def _update_rss_rule_health(self, spider: BaseSpider) -> None:
+        """将 RSS 抓取结果回写到规则健康状态。"""
+        if getattr(spider, "_source_type", "html") != "rss":
+            return
+
+        rule_id = str(
+            getattr(spider, "rule_id", "") or getattr(spider, "_rule_id", "")
+        ).strip()
+        if not rule_id:
+            return
+
+        status = str(getattr(spider, "last_fetch_status", "") or "").strip() or "error"
+        error_message = str(getattr(spider, "last_fetch_error", "") or "").strip()
+        fetched_count = getattr(spider, "last_fetched_count", None)
+
+        try:
+            get_rules_manager().update_rule_health(
+                rule_id,
+                status=status,
+                error_message=error_message,
+                fetched_count=fetched_count if isinstance(fetched_count, int) else None,
+            )
+        except Exception as e:
+            logger.debug(f"回写 RSS 健康状态失败: {e}")
+
     def reload_dynamic_spiders(self) -> None:
         """
         重新加载动态爬虫（每次轮询前调用，实现热重载）
@@ -553,6 +578,8 @@ class SpiderScheduler:
                 else:
                     articles = spider.fetch_list(page_num=1, limit=fetch_limit)
 
+                self._update_rss_rule_health(spider)
+
                 for article in articles:
                     if self._cancel_event.is_set():
                         break
@@ -617,6 +644,19 @@ class SpiderScheduler:
                             cold_yield_count += 1
 
             except (requests.RequestException, ConnectionError, TimeoutError, ValueError) as e:
+                if getattr(spider, '_source_type', 'html') == 'rss':
+                    try:
+                        get_rules_manager().update_rule_health(
+                            str(
+                                getattr(spider, "rule_id", "")
+                                or getattr(spider, "_rule_id", "")
+                            ).strip(),
+                            status="error",
+                            error_message=str(e),
+                            fetched_count=0,
+                        )
+                    except Exception:
+                        pass
                 section_label = f"板块 '{section_name}'" if section_name else "默认板块"
                 error_msg = f"[{source_name}] {section_label} 抓取异常: {e}"
                 logger.warning(error_msg)

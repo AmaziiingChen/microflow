@@ -11,6 +11,9 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
+from src.utils.rule_ai_config import normalize_rule_ai_config
+from src.utils.rss_strategy import attach_rss_strategy_metadata
+
 logger = logging.getLogger(__name__)
 
 
@@ -94,6 +97,12 @@ class CustomSpiderRulesManager:
         try:
             with open(self._rules_path, 'r', encoding='utf-8') as f:
                 self._rules_cache = json.load(f)
+            if isinstance(self._rules_cache.get("rules"), list):
+                self._rules_cache["rules"] = [
+                    attach_rss_strategy_metadata(normalize_rule_ai_config(rule))
+                    for rule in self._rules_cache.get("rules", [])
+                    if isinstance(rule, dict)
+                ]
             # 🌟 更新文件修改时间记录
             self._last_mtime = self._rules_path.stat().st_mtime
             logger.info(f"[DEBUG] 规则文件加载成功，规则数: {len(self._rules_cache.get('rules', []))}")
@@ -132,6 +141,9 @@ class CustomSpiderRulesManager:
         """
         with self._lock:
             try:
+                rule_dict = attach_rss_strategy_metadata(
+                    normalize_rule_ai_config(rule_dict)
+                )
                 rules_data = self._load_rules()
 
                 # 添加时间戳
@@ -157,6 +169,9 @@ class CustomSpiderRulesManager:
                         break
 
                 if existing_index is not None:
+                    existing_rule = rules_data['rules'][existing_index]
+                    if "health" in existing_rule and "health" not in rule_dict:
+                        rule_dict["health"] = existing_rule.get("health")
                     # 更新现有规则
                     rules_data['rules'][existing_index] = rule_dict
                     logger.info(f"更新规则: {rule_id}")
@@ -304,6 +319,71 @@ class CustomSpiderRulesManager:
 
             except Exception as e:
                 logger.error(f"更新规则状态失败: {e}")
+                return False
+
+    def update_rule_health(
+        self,
+        rule_id: str,
+        *,
+        status: str,
+        error_message: str = "",
+        fetched_count: Optional[int] = None,
+    ) -> bool:
+        """更新 RSS 规则健康状态。"""
+        normalized_status = str(status or "").strip().lower()
+        if normalized_status not in {"healthy", "empty", "error"}:
+            normalized_status = "error"
+
+        with self._lock:
+            try:
+                rules_data = self._load_rules()
+                now = datetime.now().isoformat()
+
+                for rule in rules_data.get("rules", []):
+                    if rule.get("rule_id") != rule_id:
+                        continue
+
+                    health = (
+                        dict(rule.get("health"))
+                        if isinstance(rule.get("health"), dict)
+                        else {}
+                    )
+                    previous_failures = int(health.get("consecutive_failures") or 0)
+
+                    health["status"] = normalized_status
+                    health["last_checked_at"] = now
+                    if fetched_count is not None:
+                        try:
+                            health["last_fetched_count"] = max(int(fetched_count), 0)
+                        except (TypeError, ValueError):
+                            pass
+
+                    if normalized_status in {"healthy", "empty"}:
+                        health["last_success_at"] = now
+                        health["consecutive_failures"] = 0
+                        health["last_error_message"] = ""
+                    else:
+                        health["last_failure_at"] = now
+                        health["consecutive_failures"] = previous_failures + 1
+                        clean_error = str(error_message or "").strip()
+                        if clean_error:
+                            health["last_error_message"] = clean_error[:240]
+
+                    rule["health"] = health
+                    rule["updated_at"] = now
+                    break
+                else:
+                    logger.warning(f"未找到规则，无法更新健康状态: {rule_id}")
+                    return False
+
+                rules_data["updated_at"] = now
+                success = self._save_to_file(rules_data)
+                if success:
+                    self._rules_cache = None
+                return success
+
+            except Exception as e:
+                logger.error(f"更新规则健康状态失败: {e}")
                 return False
 
     def clear_cache(self):

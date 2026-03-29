@@ -195,9 +195,19 @@
               <span class="divider-text">网络与访问</span>
             </div>
 
-            <div class="list-card settings-card network-access-card" @click.stop>
+            <div
+              class="list-card settings-card network-access-card"
+              @click.stop
+            >
               <div class="settings-row" style="align-items: flex-start">
-                <div style="display: flex; flex-direction: column; gap: 6px; min-width: 0">
+                <div
+                  style="
+                    display: flex;
+                    flex-direction: column;
+                    gap: 6px;
+                    min-width: 0;
+                  "
+                >
                   <div
                     :class="['connection-status', networkAccessState.status]"
                     style="margin: 0"
@@ -221,9 +231,14 @@
                         d="M8.89277 7.05773C8.89277 7.82296 9.318 8.48433 9.96073 8.81056L9.96073 17.4066C9.96073 18.0165 10.3349 18.439 10.8804 18.439C11.4449 18.439 11.7965 18.0325 11.7965 17.4066L11.7965 8.81056C12.4294 8.48433 12.8613 7.8163 12.8613 7.05773C12.8613 5.95695 11.9812 5.06346 10.8804 5.06346C9.77294 5.06346 8.89277 5.95695 8.89277 7.05773Z"
                       />
                     </svg>
-                    <span class="status-text">{{ networkAccessState.label }}</span>
+                    <span class="status-text"
+                      >{{ networkAccessState.label }}</span
+                    >
                   </div>
-                  <div class="settings-hint" style="margin-top: 0; text-align: left">
+                  <div
+                    class="settings-hint"
+                    style="margin-top: 0; text-align: left"
+                  >
                     {{ networkAccessState.detail }}
                   </div>
                   <div
@@ -238,7 +253,12 @@
                   class="test-connection-btn"
                   @click="refreshNetworkAccessStatus(true)"
                   :disabled="isCheckingNetworkAccess"
-                  style="display: inline-flex; align-items: center; gap: 8px; white-space: nowrap"
+                  style="
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 8px;
+                    white-space: nowrap;
+                  "
                 >
                   <template v-if="isCheckingNetworkAccess">
                     <div class="connection-status testing" style="margin: 0">
@@ -535,7 +555,9 @@
                 }"
               >
                 <div class="settings-hint" style="margin-bottom: 12px">
-                  配置多个 AI 模型，用于自定义数据源规则生成时的多模型投票，提高准确率。建议配置 1-3 个备选模型。
+                  配置多个 AI
+                  模型，用于自定义数据源规则生成时的多模型投票，提高准确率。建议配置
+                  1-3 个备选模型。
                 </div>
 
                 <!-- 备选模型列表 -->
@@ -577,7 +599,10 @@
 
                     <div class="model-field">
                       <label>API Key</label>
-                      <div class="settings-input-area" style="position: relative">
+                      <div
+                        class="settings-input-area"
+                        style="position: relative"
+                      >
                         <input
                           :type="model.showApiKey ? 'text' : 'password'"
                           v-model="model.apiKey"
@@ -635,10 +660,17 @@
                         class="test-connection-btn"
                         @click="testSecondaryModelConnection(index)"
                         :disabled="model.isTesting"
-                        style="display: inline-flex; align-items: center; gap: 6px"
+                        style="
+                          display: inline-flex;
+                          align-items: center;
+                          gap: 6px;
+                        "
                       >
                         <template v-if="model.isTesting">
-                          <div class="connection-status testing" style="margin: 0">
+                          <div
+                            class="connection-status testing"
+                            style="margin: 0"
+                          >
                             <svg
                               class="icon-antenna"
                               viewBox="0 0 23 19"
@@ -661,8 +693,13 @@
                             <span class="status-text">测试中</span>
                           </div>
                         </template>
-                        <template v-else-if="model.connectionStatus === 'success'">
-                          <div class="connection-status success" style="margin: 0">
+                        <template
+                          v-else-if="model.connectionStatus === 'success'"
+                        >
+                          <div
+                            class="connection-status success"
+                            style="margin: 0"
+                          >
                             <svg
                               class="icon-antenna"
                               viewBox="0 0 23 19"
@@ -685,8 +722,13 @@
                             <span class="status-text">已连接</span>
                           </div>
                         </template>
-                        <template v-else-if="model.connectionStatus === 'error'">
-                          <div class="connection-status error" style="margin: 0">
+                        <template
+                          v-else-if="model.connectionStatus === 'error'"
+                        >
+                          <div
+                            class="connection-status error"
+                            style="margin: 0"
+                          >
                             <svg
                               class="icon-antenna"
                               viewBox="0 0 23 19"
@@ -759,9 +801,7 @@
                     >({{ config.secondaryModels.length }}/3)</span
                   >
                 </button>
-                <div v-else class="model-limit-hint">
-                  最多支持 3 个备选模型
-                </div>
+                <div v-else class="model-limit-hint">最多支持 3 个备选模型</div>
               </div>
             </div>
 
@@ -827,7 +867,7 @@
               <div class="settings-card-title">阅读字体</div>
               <div class="list-row-group">
                 <div class="list-row-item">
-                  <span style="font-weight:400; font-size: 15px; color: #111"
+                  <span style="font-weight: 400; font-size: 15px; color: #111"
                     >现代黑体</span
                   >
                   <input
@@ -901,8 +941,14 @@
                           fill="currentColor"
                         >
                           <g>
-                            <path d="M30.2539 18.0078L30.2539 20.8887C30.2539 22.9004 29.2383 23.916 27.1875 23.916L10.2832 23.916C8.25195 23.916 7.22656 22.9102 7.22656 20.8887L7.22656 18.0078C7.22656 17.5 7.50977 17.2168 8.00781 17.2168C8.50586 17.2168 8.79883 17.5 8.79883 18.0078L8.79883 20.8105C8.79883 21.8262 9.33594 22.3438 10.3125 22.3438L27.168 22.3438C28.125 22.3438 28.6816 21.8262 28.6816 20.8105L28.6816 18.0078C28.6816 17.5 28.9551 17.2168 29.4629 17.2168C29.9707 17.2168 30.2539 17.5 30.2539 18.0078ZM9.27734 14.668C9.27734 15.3711 8.71094 15.9473 8.00781 15.9473C7.31445 15.9473 6.73828 15.3711 6.73828 14.668C6.73828 13.9746 7.31445 13.4082 8.00781 13.4082C8.71094 13.4082 9.27734 13.9746 9.27734 14.668ZM30.7324 14.668C30.7324 15.3711 30.1562 15.9473 29.4629 15.9473C28.7598 15.9473 28.1934 15.3711 28.1934 14.668C28.1934 13.9648 28.7598 13.4082 29.4629 13.4082C30.1562 13.4082 30.7324 13.9746 30.7324 14.668ZM22.9199 6.55273C22.9199 6.90499 23.0212 7.23424 23.2013 7.50977L10.3125 7.50977C9.33594 7.50977 8.79883 8.02734 8.79883 9.04297L8.79883 11.3574C8.79883 11.8652 8.50586 12.1582 8.00781 12.1582C7.50977 12.1582 7.22656 11.8652 7.22656 11.3574L7.22656 8.96484C7.22656 6.94336 8.25195 5.9375 10.2832 5.9375L23.0299 5.9375C22.9582 6.12877 22.9199 6.33611 22.9199 6.55273Z" fill-opacity="0.85"/>
-                            <path d="M15.5371 19.5117C15.8887 19.5117 16.1328 19.3457 16.2793 18.8867L16.9922 16.8066L20.4883 16.8066L21.2012 18.8867C21.3477 19.3359 21.6016 19.5117 21.9531 19.5117C22.3828 19.5117 22.6758 19.2285 22.6758 18.8379C22.6758 18.6816 22.6465 18.5449 22.5684 18.3301L19.834 10.957C19.6387 10.4492 19.2676 10.1855 18.7305 10.1855C18.2031 10.1855 17.8418 10.4492 17.6562 10.957L14.9121 18.3301C14.8438 18.5449 14.8047 18.6816 14.8047 18.8281C14.8047 19.2383 15.0977 19.5117 15.5371 19.5117ZM17.3926 15.6348L18.6914 11.8555L18.7988 11.8555L20.0977 15.6348ZM29.4727 11.7773C29.707 11.7773 29.8633 11.6211 29.8926 11.3965C30.4004 8.08594 30.8398 7.45117 34.2969 6.98242C34.5312 6.95312 34.6973 6.78711 34.6973 6.5625C34.6973 6.33789 34.5312 6.17188 34.2969 6.14258C30.8301 5.67383 30.5273 5.03906 29.8926 1.71875C29.8535 1.49414 29.6875 1.33789 29.4727 1.33789C29.248 1.33789 29.082 1.50391 29.0527 1.72852C28.5547 4.99023 28.1055 5.67383 24.6484 6.14258C24.4141 6.17188 24.248 6.33789 24.248 6.5625C24.248 6.78711 24.4141 6.95312 24.6484 6.98242C28.1152 7.45117 28.3984 8.08594 29.0527 11.4062C29.0918 11.6211 29.248 11.7773 29.4727 11.7773ZM33.8867 13.75C34.0723 13.75 34.1797 13.623 34.2188 13.4375C34.5508 11.7969 34.4238 11.7578 36.1914 11.4746C36.3867 11.4453 36.5039 11.3184 36.5039 11.1426C36.5039 10.9766 36.3867 10.8398 36.2109 10.8105C34.4238 10.5078 34.5508 10.4492 34.2188 8.83789C34.1797 8.65234 34.0625 8.53516 33.8867 8.53516C33.7109 8.53516 33.584 8.66211 33.5547 8.83789C33.2324 10.4492 33.3594 10.5078 31.5625 10.8105C31.377 10.8398 31.2695 10.9766 31.2695 11.1426C31.2695 11.2988 31.377 11.4453 31.5625 11.4746C33.3594 11.7578 33.2324 11.7969 33.5547 13.4668C33.584 13.6328 33.7207 13.75 33.8867 13.75Z" fill-opacity="0.85"/>
+                            <path
+                              d="M30.2539 18.0078L30.2539 20.8887C30.2539 22.9004 29.2383 23.916 27.1875 23.916L10.2832 23.916C8.25195 23.916 7.22656 22.9102 7.22656 20.8887L7.22656 18.0078C7.22656 17.5 7.50977 17.2168 8.00781 17.2168C8.50586 17.2168 8.79883 17.5 8.79883 18.0078L8.79883 20.8105C8.79883 21.8262 9.33594 22.3438 10.3125 22.3438L27.168 22.3438C28.125 22.3438 28.6816 21.8262 28.6816 20.8105L28.6816 18.0078C28.6816 17.5 28.9551 17.2168 29.4629 17.2168C29.9707 17.2168 30.2539 17.5 30.2539 18.0078ZM9.27734 14.668C9.27734 15.3711 8.71094 15.9473 8.00781 15.9473C7.31445 15.9473 6.73828 15.3711 6.73828 14.668C6.73828 13.9746 7.31445 13.4082 8.00781 13.4082C8.71094 13.4082 9.27734 13.9746 9.27734 14.668ZM30.7324 14.668C30.7324 15.3711 30.1562 15.9473 29.4629 15.9473C28.7598 15.9473 28.1934 15.3711 28.1934 14.668C28.1934 13.9648 28.7598 13.4082 29.4629 13.4082C30.1562 13.4082 30.7324 13.9746 30.7324 14.668ZM22.9199 6.55273C22.9199 6.90499 23.0212 7.23424 23.2013 7.50977L10.3125 7.50977C9.33594 7.50977 8.79883 8.02734 8.79883 9.04297L8.79883 11.3574C8.79883 11.8652 8.50586 12.1582 8.00781 12.1582C7.50977 12.1582 7.22656 11.8652 7.22656 11.3574L7.22656 8.96484C7.22656 6.94336 8.25195 5.9375 10.2832 5.9375L23.0299 5.9375C22.9582 6.12877 22.9199 6.33611 22.9199 6.55273Z"
+                              fill-opacity="0.85"
+                            />
+                            <path
+                              d="M15.5371 19.5117C15.8887 19.5117 16.1328 19.3457 16.2793 18.8867L16.9922 16.8066L20.4883 16.8066L21.2012 18.8867C21.3477 19.3359 21.6016 19.5117 21.9531 19.5117C22.3828 19.5117 22.6758 19.2285 22.6758 18.8379C22.6758 18.6816 22.6465 18.5449 22.5684 18.3301L19.834 10.957C19.6387 10.4492 19.2676 10.1855 18.7305 10.1855C18.2031 10.1855 17.8418 10.4492 17.6562 10.957L14.9121 18.3301C14.8438 18.5449 14.8047 18.6816 14.8047 18.8281C14.8047 19.2383 15.0977 19.5117 15.5371 19.5117ZM17.3926 15.6348L18.6914 11.8555L18.7988 11.8555L20.0977 15.6348ZM29.4727 11.7773C29.707 11.7773 29.8633 11.6211 29.8926 11.3965C30.4004 8.08594 30.8398 7.45117 34.2969 6.98242C34.5312 6.95312 34.6973 6.78711 34.6973 6.5625C34.6973 6.33789 34.5312 6.17188 34.2969 6.14258C30.8301 5.67383 30.5273 5.03906 29.8926 1.71875C29.8535 1.49414 29.6875 1.33789 29.4727 1.33789C29.248 1.33789 29.082 1.50391 29.0527 1.72852C28.5547 4.99023 28.1055 5.67383 24.6484 6.14258C24.4141 6.17188 24.248 6.33789 24.248 6.5625C24.248 6.78711 24.4141 6.95312 24.6484 6.98242C28.1152 7.45117 28.3984 8.08594 29.0527 11.4062C29.0918 11.6211 29.248 11.7773 29.4727 11.7773ZM33.8867 13.75C34.0723 13.75 34.1797 13.623 34.2188 13.4375C34.5508 11.7969 34.4238 11.7578 36.1914 11.4746C36.3867 11.4453 36.5039 11.3184 36.5039 11.1426C36.5039 10.9766 36.3867 10.8398 36.2109 10.8105C34.4238 10.5078 34.5508 10.4492 34.2188 8.83789C34.1797 8.65234 34.0625 8.53516 33.8867 8.53516C33.7109 8.53516 33.584 8.66211 33.5547 8.83789C33.2324 10.4492 33.3594 10.5078 31.5625 10.8105C31.377 10.8398 31.2695 10.9766 31.2695 11.1426C31.2695 11.2988 31.377 11.4453 31.5625 11.4746C33.3594 11.7578 33.2324 11.7969 33.5547 13.4668C33.584 13.6328 33.7207 13.75 33.8867 13.75Z"
+                              fill-opacity="0.85"
+                            />
                           </g>
                         </svg>
                       </template>
@@ -1000,13 +1046,18 @@
               <div class="subs-grid-container">
                 <!-- 两列布局：所有学院统一排列 -->
                 <div class="subs-grid-columns">
-                  <template v-for="(source, index) in allAvailableSources" :key="source">
+                  <template
+                    v-for="(source, index) in allAvailableSources"
+                    :key="source"
+                  >
                     <label
                       class="subs-chip"
                       :class="(config.subscribedSources || []).includes(source) ? 'subs-chip-active' : ''"
                       :style="getSubsChipStyle(source, (config.subscribedSources || []).includes(source))"
                     >
-                      <div style="display: flex; align-items: center; gap: 10px">
+                      <div
+                        style="display: flex; align-items: center; gap: 10px"
+                      >
                         <div
                           class="subs-icon"
                           :style="getSubsIconStyle(source, (config.subscribedSources || []).includes(source))"
@@ -1041,7 +1092,13 @@
                   viewBox="0 0 20.7335 20.3788"
                 >
                   <g>
-                    <rect height="20.3788" opacity="0" width="20.7335" x="0" y="0" />
+                    <rect
+                      height="20.3788"
+                      opacity="0"
+                      width="20.7335"
+                      x="0"
+                      y="0"
+                    />
                     <path
                       d="M10.1845 20.3691C15.8099 20.3691 20.3722 15.8001 20.3722 10.1845C20.3722 4.56226 15.8099 0 10.1845 0C4.56892 0 0 4.56226 0 10.1845C0 15.8001 4.56892 20.3691 10.1845 20.3691Z"
                       fill="#34c759"
@@ -1061,81 +1118,173 @@
                 class="settings-row"
                 style="flex-direction: column; align-items: stretch; gap: 16px"
               >
+                <div
+                  v-if="rssHealthSummary.total_rules > 0"
+                  class="rss-health-summary-panel"
+                >
+                  <div class="rss-health-summary-head">
+                    <div class="rss-health-summary-title">RSS 健康概览</div>
+                    <div class="rss-health-summary-desc">
+                      当前共 {{ rssHealthSummary.total_rules }} 个 RSS
+                      规则，异常 {{ rssHealthSummary.attention_count }} 个
+                    </div>
+                  </div>
+                  <div class="rss-health-summary-chips">
+                    <span class="rss-health-chip is-total"
+                      >总计 {{ rssHealthSummary.total_rules }}</span
+                    >
+                    <span class="rss-health-chip is-healthy"
+                      >正常 {{ rssHealthSummary.healthy_count }}</span
+                    >
+                    <span class="rss-health-chip is-empty"
+                      >空结果 {{ rssHealthSummary.empty_count }}</span
+                    >
+                    <span class="rss-health-chip is-error"
+                      >异常 {{ rssHealthSummary.error_count }}</span
+                    >
+                  </div>
+                  <div
+                    v-if="rssHealthSummary.attention_rules && rssHealthSummary.attention_rules.length > 0"
+                    class="rss-health-attention-list"
+                  >
+                    <div
+                      v-for="item in rssHealthSummary.attention_rules"
+                      :key="item.rule_id || item.task_name"
+                      class="rss-health-attention-item"
+                    >
+                      <span class="rss-health-attention-name"
+                        >{{ item.task_name }}</span
+                      >
+                      <span class="rss-health-attention-text"
+                        >{{ getRssHealthAttentionText(item) }}</span
+                      >
+                    </div>
+                  </div>
+                </div>
                 <!-- 规则列表 -->
                 <div v-if="customRules.length > 0" class="custom-rules-list">
                   <div
                     v-for="rule in customRules"
                     :key="rule.rule_id"
-                    class="custom-rule-item"
+                    :class="['custom-rule-stack', { 'is-editing': isRuleInlineEditing(rule.rule_id) }]"
                   >
-                    <div class="rule-info">
-                      <div class="rule-name">{{ rule.task_name }}</div>
-                      <div class="rule-meta">
-                        <span v-if="rule.task_purpose" class="rule-purpose">{{ rule.task_purpose }}</span>
-                        <span class="rule-url">{{ rule.url }}</span>
+                    <div class="custom-rule-item">
+                      <div class="rule-info">
+                        <div class="rule-name">{{ rule.task_name }}</div>
+                        <div class="rule-meta">
+                          <span v-if="rule.task_purpose" class="rule-purpose"
+                            >{{ rule.task_purpose }}</span
+                          >
+                          <span
+                            v-if="rule.source_type === 'rss' && getRuleStrategyLabel(rule)"
+                            class="rule-strategy-badge"
+                          >
+                            {{ getRuleStrategyLabel(rule) }}
+                          </span>
+                          <span
+                            v-if="rule.source_type === 'rss'"
+                            :class="['rule-health-badge', 'is-' + (rule.health?.status || 'unknown')]"
+                            :title="getRuleHealthTitle(rule)"
+                          >
+                            {{ getRuleHealthLabel(rule) }}
+                          </span>
+                          <span class="rule-url">{{ rule.url }}</span>
+                        </div>
+                      </div>
+                      <div class="rule-actions">
+                        <button
+                          :class="['btn-icon', 'rule-edit-trigger', 'badge-edit', { 'is-editing': isRuleInlineEditing(rule.rule_id) }]"
+                          @click="editRule(rule)"
+                          :data-tooltip="isRuleInlineEditing(rule.rule_id) ? '收起编辑' : '编辑规则'"
+                          :title="isRuleInlineEditing(rule.rule_id) ? '收起编辑' : '编辑规则'"
+                          type="button"
+                        >
+                          <svg
+                            class="icon-svg"
+                            version="1.1"
+                            xmlns="http://www.w3.org/2000/svg"
+                            xmlns:xlink="http://www.w3.org/1999/xlink"
+                            viewBox="0 0 24.2213 23.8364"
+                          >
+                            <g>
+                              <rect
+                                height="23.8364"
+                                opacity="0"
+                                width="24.2213"
+                                x="0"
+                                y="0"
+                              />
+                              <path
+                                d="M17.0972 3.41676L14.9485 5.5654L7.42176 5.5654C6.02826 5.5654 5.24117 6.3556 5.24117 7.7491L5.24117 16.7593C5.24117 18.1595 6.02826 18.943 7.42176 18.943L16.4382 18.943C17.8383 18.943 18.6157 18.1595 18.6157 16.7593L18.6157 9.30545L20.7732 7.14445C20.787 7.31256 20.7935 7.48655 20.7935 7.6657L20.7935 16.8494C20.7935 19.5912 19.267 21.1177 16.5251 21.1177L7.33481 21.1177C4.59962 21.1177 3.06645 19.5912 3.06645 16.8494L3.06645 7.6657C3.06645 4.92385 4.59962 3.39069 7.33481 3.39069L16.5251 3.39069C16.7228 3.39069 16.9141 3.39865 17.0972 3.41676Z"
+                                fill="currentColor"
+                                fill-opacity="0.85"
+                              />
+                              <path
+                                d="M10.1689 14.448L12.2191 13.5993L20.98 4.84507L19.3719 3.25344L10.6208 12.0045L9.73883 14.0082C9.62965 14.2705 9.91502 14.5479 10.1689 14.448ZM21.743 4.08871L22.4089 3.40642C22.8186 2.98343 22.8341 2.39668 22.4306 2.00609L22.1501 1.72203C21.7946 1.37272 21.1919 1.43352 20.7951 1.82365L20.135 2.4802Z"
+                                fill="currentColor"
+                                fill-opacity="0.85"
+                              />
+                            </g>
+                          </svg>
+                        </button>
+                        <button
+                          class="btn-icon btn-danger"
+                          @click="deleteRule(rule)"
+                          title="删除规则"
+                          type="button"
+                        >
+                          <svg
+                            width="24"
+                            height="24"
+                            viewBox="0 0 21.365 21.006"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <path
+                              d="M21.0037 10.5079C21.0037 16.3043 16.302 21.006 10.4981 21.006C4.70394 21.006 0 16.3043 0 10.5079C0 4.7137 4.70394 0.00976562 10.4981 0.00976562C16.302 0.00976562 21.0037 4.7137 21.0037 10.5079ZM9.71146 4.48182C8.60127 4.48182 7.96487 5.05623 7.96487 5.99822L7.96487 6.49542L5.9981 6.49542C5.61451 6.49542 5.33713 6.75041 5.32221 7.14377C5.30729 7.5199 5.61451 7.78751 5.9981 7.78751L6.55729 7.78751L6.89393 14.8438C6.92838 15.7213 7.42576 16.1693 8.31079 16.1693L12.6877 16.1693C13.5854 16.1693 14.0724 15.7213 14.1167 14.8438L14.4585 7.78751L15.0033 7.78751C15.4041 7.78751 15.6769 7.5199 15.6792 7.14377C15.6815 6.75041 15.4041 6.49542 15.0033 6.49542L13.0388 6.49542L13.0388 5.99822C13.0388 5.05623 12.4076 4.48182 11.2801 4.48182ZM9.09744 8.86361L9.26291 14.2352C9.27037 14.4678 9.09635 14.6367 8.8442 14.6367C8.61674 14.6367 8.45072 14.4753 8.44326 14.2426L8.28295 8.87853C8.27549 8.61146 8.42482 8.4449 8.69135 8.4449C8.91881 8.4449 9.08998 8.604 9.09744 8.86361ZM10.9191 8.84123L10.9191 14.2426C10.9191 14.4753 10.7577 14.6367 10.5107 14.6367C10.2488 14.6367 10.0949 14.4753 10.0949 14.2426L10.0949 8.84123C10.0949 8.59654 10.2465 8.4449 10.5107 8.4449C10.7577 8.4449 10.9191 8.59654 10.9191 8.84123ZM12.7213 8.87853L12.561 14.2426C12.5535 14.4753 12.3875 14.6367 12.16 14.6367C11.9079 14.6367 11.7339 14.4678 11.7413 14.2352L11.9068 8.86361C11.9166 8.604 12.0854 8.4449 12.3226 8.4449C12.5794 8.4449 12.7287 8.61146 12.7213 8.87853ZM11.7328 5.98967L11.7328 6.49542L9.27377 6.49542L9.27377 5.98967C9.27377 5.7633 9.46677 5.60244 9.72529 5.60244L11.2812 5.60244C11.5472 5.60244 11.7328 5.7633 11.7328 5.98967Z"
+                              fill="currentColor"
+                              fill-opacity="0.85"
+                            />
+                          </svg>
+                        </button>
+                        <input
+                          type="checkbox"
+                          class="ios-toggle"
+                          :checked="rule.enabled"
+                          @change="toggleRuleStatus(rule.rule_id, rule.enabled)"
+                        />
                       </div>
                     </div>
-                    <div class="rule-actions">
-                      <button
-                        class="btn-icon btn-edit"
-                        @click="editRule(rule)"
-                        title="编辑规则"
+                    <transition name="inline-rule-editor">
+                      <div
+                        v-if="isRuleInlineEditing(rule.rule_id)"
+                        class="custom-rule-inline-shell"
+                        @click.stop
                       >
-                        <svg
-                          width="24"
-                          height="24"
-                          version="1.1"
-                          xmlns="http://www.w3.org/2000/svg"
-                          xmlns:xlink="http://www.w3.org/1999/xlink"
-                          viewBox="0 0 24.2213 23.8364"
-                        >
-                          <g>
-                            <rect
-                              height="23.8364"
-                              opacity="0"
-                              width="24.2213"
-                              x="0"
-                              y="0"
-                            />
-                            <path
-                              d="M17.0972 3.41676L14.9485 5.5654L7.42176 5.5654C6.02826 5.5654 5.24117 6.3556 5.24117 7.7491L5.24117 16.7593C5.24117 18.1595 6.02826 18.943 7.42176 18.943L16.4382 18.943C17.8383 18.943 18.6157 18.1595 18.6157 16.7593L18.6157 9.30545L20.7732 7.14445C20.787 7.31256 20.7935 7.48655 20.7935 7.6657L20.7935 16.8494C20.7935 19.5912 19.267 21.1177 16.5251 21.1177L7.33481 21.1177C4.59962 21.1177 3.06645 19.5912 3.06645 16.8494L3.06645 7.6657C3.06645 4.92385 4.59962 3.39069 7.33481 3.39069L16.5251 3.39069C16.7228 3.39069 16.9141 3.39865 17.0972 3.41676Z"
-                              fill="currentColor"
-                              fill-opacity="0.85"
-                            />
-                            <path
-                              d="M10.1689 14.448L12.2191 13.5993L20.98 4.84507L19.3719 3.25344L10.6208 12.0045L9.73883 14.0082C9.62965 14.2705 9.91502 14.5479 10.1689 14.448ZM21.743 4.08871L22.4089 3.40642C22.8186 2.98343 22.8341 2.39668 22.4306 2.00609L22.1501 1.72203C21.7946 1.37272 21.1919 1.43352 20.7951 1.82365L20.135 2.4802Z"
-                              fill="currentColor"
-                              fill-opacity="0.85"
-                            />
-                          </g>
-                        </svg>
-                      </button>
-                      <button
-                        class="btn-icon btn-danger"
-                        @click="deleteRule(rule.rule_id)"
-                        title="删除规则"
-                      >
-                        <svg
-                          width="24"
-                          height="24"
-                          viewBox="0 0 21.365 21.006"
-                          fill="none"
-                          xmlns="http://www.w3.org/2000/svg"
-                        >
-                          <path
-                            d="M21.0037 10.5079C21.0037 16.3043 16.302 21.006 10.4981 21.006C4.70394 21.006 0 16.3043 0 10.5079C0 4.7137 4.70394 0.00976562 10.4981 0.00976562C16.302 0.00976562 21.0037 4.7137 21.0037 10.5079ZM9.71146 4.48182C8.60127 4.48182 7.96487 5.05623 7.96487 5.99822L7.96487 6.49542L5.9981 6.49542C5.61451 6.49542 5.33713 6.75041 5.32221 7.14377C5.30729 7.5199 5.61451 7.78751 5.9981 7.78751L6.55729 7.78751L6.89393 14.8438C6.92838 15.7213 7.42576 16.1693 8.31079 16.1693L12.6877 16.1693C13.5854 16.1693 14.0724 15.7213 14.1167 14.8438L14.4585 7.78751L15.0033 7.78751C15.4041 7.78751 15.6769 7.5199 15.6792 7.14377C15.6815 6.75041 15.4041 6.49542 15.0033 6.49542L13.0388 6.49542L13.0388 5.99822C13.0388 5.05623 12.4076 4.48182 11.2801 4.48182ZM9.09744 8.86361L9.26291 14.2352C9.27037 14.4678 9.09635 14.6367 8.8442 14.6367C8.61674 14.6367 8.45072 14.4753 8.44326 14.2426L8.28295 8.87853C8.27549 8.61146 8.42482 8.4449 8.69135 8.4449C8.91881 8.4449 9.08998 8.604 9.09744 8.86361ZM10.9191 8.84123L10.9191 14.2426C10.9191 14.4753 10.7577 14.6367 10.5107 14.6367C10.2488 14.6367 10.0949 14.4753 10.0949 14.2426L10.0949 8.84123C10.0949 8.59654 10.2465 8.4449 10.5107 8.4449C10.7577 8.4449 10.9191 8.59654 10.9191 8.84123ZM12.7213 8.87853L12.561 14.2426C12.5535 14.4753 12.3875 14.6367 12.16 14.6367C11.9079 14.6367 11.7339 14.4678 11.7413 14.2352L11.9068 8.86361C11.9166 8.604 12.0854 8.4449 12.3226 8.4449C12.5794 8.4449 12.7287 8.61146 12.7213 8.87853ZM11.7328 5.98967L11.7328 6.49542L9.27377 6.49542L9.27377 5.98967C9.27377 5.7633 9.46677 5.60244 9.72529 5.60244L11.2812 5.60244C11.5472 5.60244 11.7328 5.7633 11.7328 5.98967Z"
-                            fill="currentColor"
-                            fill-opacity="0.85"
-                          />
-                        </svg>
-                      </button>
-                      <input
-                        type="checkbox"
-                        class="ios-toggle"
-                        :checked="rule.enabled"
-                        @change="toggleRuleStatus(rule.rule_id, rule.enabled)"
-                      />
-                    </div>
+                        <custom-rule-editor-panel
+                          :rule-form="ruleForm"
+                          :preview-data="previewData"
+                          :rss-preview-info="rssPreviewInfo"
+                          :generated-rule-cache="generatedRuleCache"
+                          :rss-template-options="rssTemplateOptions"
+                          :current-rss-template-meta="currentRssTemplateMeta"
+                          :show-selector-panel="showSelectorPanel"
+                          :is-retesting-rule="isRetestingRule"
+                          :is-generating-rule="isGeneratingRule"
+                          :get-rule-summary-prompt-placeholder="getRuleSummaryPromptPlaceholder"
+                          :get-tag-color="getTagColor"
+                          :render-markdown="renderMarkdown"
+                          :get-html-rule-pending-retest-message="getHtmlRulePendingRetestMessage"
+                          @close="closeCustomRuleModal"
+                          @add-rule-field="addRuleField"
+                          @remove-rule-field="removeRuleField"
+                          @toggle-selector-panel="showSelectorPanel = !showSelectorPanel"
+                          @manual-retest="handleManualRetest"
+                          @regenerate="handleRegenerateRule"
+                          @save="confirmAndSaveRule"
+                        />
+                      </div>
+                    </transition>
                   </div>
                 </div>
                 <!-- 空状态 -->
@@ -1584,11 +1733,652 @@
             </div>
           </div>
 
+          <script type="text/x-template" id="custom-rule-editor-panel-template">
+            <div class="custom-rule-inline-editor">
+              <div class="rule-form">
+                <div class="list-card settings-card rule-form-card" @click.stop>
+                  <div class="settings-row">
+                    <span class="settings-label">任务名称</span>
+                    <div class="settings-input-area rule-card-input-area">
+                      <input
+                        type="text"
+                        v-model="ruleForm.task_name"
+                        class="form-input"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="list-card settings-card rule-form-card" @click.stop>
+                  <div class="settings-row">
+                    <span class="settings-label">任务目的</span>
+                    <div class="settings-input-area rule-card-input-area">
+                      <input
+                        type="text"
+                        v-model="ruleForm.task_purpose"
+                        class="form-input"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="list-card settings-card rule-form-card" @click.stop>
+                  <div class="settings-row">
+                    <span class="settings-label">数据源类型</span>
+                    <div class="settings-input-area rule-card-input-area">
+                      <div class="source-type-tabs" role="tablist" aria-label="数据源类型">
+                        <button
+                          type="button"
+                          :class="['tab-btn', { active: ruleForm.source_type === 'html' }]"
+                          @click="ruleForm.source_type = 'html'"
+                          :aria-pressed="ruleForm.source_type === 'html' ? 'true' : 'false'"
+                        >
+                          网页提取
+                        </button>
+                        <button
+                          type="button"
+                          :class="['tab-btn', { active: ruleForm.source_type === 'rss' }]"
+                          @click="ruleForm.source_type = 'rss'"
+                          :aria-pressed="ruleForm.source_type === 'rss' ? 'true' : 'false'"
+                        >
+                          RSS 订阅
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="list-card settings-card rule-form-card" @click.stop>
+                  <div class="settings-row">
+                    <span class="settings-label">{{ ruleForm.source_type === 'rss' ? 'RSS 订阅地址' : '目标网页 URL' }}</span>
+                    <div class="settings-input-area rule-card-input-area">
+                      <input
+                        type="text"
+                        v-model="ruleForm.url"
+                        class="form-input"
+                        :placeholder="ruleForm.source_type === 'rss' ? 'https://example.com/feed.xml' : 'https://example.com/news'"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="list-card settings-card rule-form-card" @click.stop>
+                  <div class="settings-row settings-row-top">
+                    <span class="settings-label">最大抓取条数</span>
+                    <div class="settings-input-area rule-card-input-area">
+                      <div class="rule-card-field-stack">
+                        <input
+                          type="number"
+                          v-model.number="ruleForm.max_items"
+                          class="form-input"
+                          placeholder="留空则使用默认值（HTML:10, RSS:50）"
+                          min="1"
+                          max="500"
+                        />
+                        <div class="rule-card-hint is-inline is-single-line">限制每次抓取的最大文章数量</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  v-if="ruleForm.source_type === 'html'"
+                  class="list-card settings-card rule-form-card rule-form-card-wide"
+                  @click.stop
+                >
+                  <div class="settings-row settings-row-top">
+                    <span class="settings-label">提取字段</span>
+                    <div class="settings-input-area rule-card-input-area is-wide">
+                      <div class="dynamic-fields">
+                        <div
+                          v-for="(field, index) in ruleForm.target_fields"
+                          :key="index"
+                          class="field-row"
+                        >
+                          <input
+                            type="text"
+                            v-model="ruleForm.target_fields[index]"
+                            class="form-input"
+                            placeholder="例如：title, date, url"
+                          />
+                          <button
+                            v-if="ruleForm.target_fields.length > 1"
+                            class="btn btn-ghost btn-sm"
+                            @click="$emit('remove-rule-field', index)"
+                            type="button"
+                          >
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2"
+                            >
+                              <path d="M12 5v14M5 12h14" />
+                            </svg>
+                          </button>
+                        </div>
+                        <button
+                          class="btn btn-ghost"
+                          @click="$emit('add-rule-field')"
+                          style="width: 100%"
+                          type="button"
+                        >
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                          >
+                            <path d="M12 5v14M5 12h14" />
+                          </svg>
+                          添加字段
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  v-if="ruleForm.source_type === 'html' && ruleForm.target_fields.filter(f => f.trim()).length > 0"
+                  class="list-card settings-card rule-form-card"
+                  @click.stop
+                >
+                  <div class="settings-row settings-row-top">
+                    <span class="settings-label">正文来源字段</span>
+                    <div class="settings-input-area rule-card-input-area">
+                      <div class="rule-card-field-stack">
+                        <select v-model="ruleForm.body_field" class="form-input">
+                          <option value="">自动（拼接所有字段）</option>
+                          <option v-for="field in ruleForm.target_fields.filter(f => f.trim())" :key="field" :value="field">{{ field }}</option>
+                        </select>
+                        <div class="rule-card-hint is-inline">
+                          选择后，文章正文将使用该字段内容，而非拼接所有字段
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  v-if="ruleForm.source_type === 'html'"
+                  class="list-card settings-card rule-form-card"
+                  @click.stop
+                >
+                  <div class="settings-row settings-row-top">
+                    <span class="settings-label">跳过详情页抓取</span>
+                    <div class="settings-input-area rule-card-input-area">
+                      <div class="rule-card-toggle-stack">
+                        <input type="checkbox" class="ios-toggle" v-model="ruleForm.skip_detail" />
+                        <div class="rule-card-hint is-inline">
+                          当列表页已包含所需全部字段时，开启可提升抓取速度
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  v-if="ruleForm.source_type === 'rss'"
+                  class="list-card settings-card rule-form-card"
+                  @click.stop
+                >
+                  <div class="settings-row settings-row-top">
+                    <span class="settings-label">RSS 模板</span>
+                    <div class="settings-input-area rule-card-input-area">
+                      <div class="rule-card-field-stack">
+                        <select v-model="ruleForm.source_template_id" class="form-input">
+                          <option value="">自动推断（推荐）</option>
+                          <option
+                            v-for="template in rssTemplateOptions"
+                            :key="template.id"
+                            :value="template.id"
+                          >
+                            {{ template.name }} · {{ template.profile_label }}
+                          </option>
+                        </select>
+                        <div class="rule-card-hint is-inline">
+                          留空时会在预览阶段根据样本自动推断；选择模板后，会固定使用该模板的默认策略。
+                        </div>
+                        <div
+                          v-if="currentRssTemplateMeta"
+                          class="rule-card-hint is-inline"
+                        >
+                          {{ currentRssTemplateMeta.description }} 默认抓取 {{ currentRssTemplateMeta.default_max_items }} 条。
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="list-card settings-card rule-form-card rule-form-card-wide rule-form-card-stack" @click.stop>
+                  <div class="rule-card-stack-head">
+                    <span class="settings-label">AI 内容增强</span>
+                  </div>
+                  <div class="rule-card-stack-body">
+                    <div class="rule-ai-config">
+                    <div
+                      v-if="ruleForm.source_type === 'rss'"
+                      class="rule-ai-card"
+                    >
+                      <div class="rule-ai-card-head">
+                        <div>
+                          <div class="rule-ai-card-title">排版增强</div>
+                          <div class="rule-ai-card-desc">
+                            优化 Markdown 结构、标题层级、图片与段落节奏。
+                          </div>
+                        </div>
+                        <input
+                          type="checkbox"
+                          class="ios-toggle"
+                          v-model="ruleForm.enable_ai_formatting"
+                        />
+                      </div>
+                      <div
+                        v-if="ruleForm.enable_ai_formatting"
+                        class="custom-prompt-group"
+                        style="margin-top: 12px"
+                      >
+                        <label class="settings-label" style="margin-bottom: 6px">
+                          排版提示词
+                        </label>
+                        <textarea
+                          v-model="ruleForm.formatting_prompt"
+                          rows="3"
+                          class="form-textarea"
+                          placeholder="（可选）定制 RSS 正文排版，例如：&#10;- 优先整理 H3 / H4 层级&#10;- 保留图片并让链接更易读&#10;- 对关键词做适度加粗"
+                          style="font-size: 13px; resize: vertical"
+                        ></textarea>
+                        <span class="settings-hint" style="margin-top: 4px">
+                          留空则使用默认排版提示词；填写后会自动开启排版增强。
+                        </span>
+                      </div>
+                      <span
+                        v-else
+                        class="settings-hint"
+                        style="margin-top: 10px; display: block"
+                      >
+                        关闭后，阅读模式里的“增强”会与原始解析结果保持一致。
+                      </span>
+                    </div>
+
+                    <div class="rule-ai-card">
+                      <div class="rule-ai-card-head">
+                        <div>
+                          <div class="rule-ai-card-title">
+                            {{ ruleForm.source_type === 'rss' ? '摘要 / 彩色标签' : 'AI 摘要 / 标签' }}
+                          </div>
+                          <div class="rule-ai-card-desc">
+                            {{ ruleForm.source_type === 'rss'
+                              ? '生成 3 个彩色标签和更短、更好读的摘要视图。'
+                              : '对网页提取结果进行摘要整理，便于列表与卡片阅读。' }}
+                          </div>
+                        </div>
+                        <input
+                          type="checkbox"
+                          class="ios-toggle"
+                          v-model="ruleForm.enable_ai_summary"
+                        />
+                      </div>
+                      <div
+                        v-if="ruleForm.enable_ai_summary"
+                        class="custom-prompt-group"
+                        style="margin-top: 12px"
+                      >
+                        <label class="settings-label" style="margin-bottom: 6px">
+                          总结提示词
+                        </label>
+                        <textarea
+                          v-model="ruleForm.summary_prompt"
+                          rows="3"
+                          class="form-textarea"
+                          :placeholder="getRuleSummaryPromptPlaceholder(ruleForm.source_type)"
+                          style="font-size: 13px; resize: vertical"
+                        ></textarea>
+                        <span class="settings-hint" style="margin-top: 4px">
+                          留空则使用默认总结提示词；填写后会自动开启摘要/标签。
+                        </span>
+                        <span
+                          v-if="ruleForm.source_type === 'rss'"
+                          class="settings-hint"
+                          style="margin-top: 4px; display: block"
+                        >
+                          阅读模式里的“摘要”和“重新生成总结”会优先复用这里的提示词。
+                        </span>
+                      </div>
+                      <span
+                        v-else
+                        class="settings-hint"
+                        style="margin-top: 10px; display: block"
+                      >
+                        {{ ruleForm.source_type === 'rss'
+                          ? '关闭后，将只保留原始 / 增强正文，不会生成独立摘要和标签。'
+                          : '关闭后，抓取的数据将直接以字段列表形式展示。' }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                </div>
+              </div>
+
+              <div
+                v-if="previewData && previewData.length > 0"
+                class="preview-section custom-rule-inline-preview"
+              >
+                <div class="preview-header">
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span v-if="ruleForm.source_type === 'rss'">
+                    RSS 解析预览成功，提取到 {{ previewData.length }} 条样本数据
+                  </span>
+                  <span v-else>
+                    AI 分析成功，提取到 {{ previewData.length }} 条样本数据
+                  </span>
+                </div>
+                <div v-if="ruleForm.source_type === 'rss' && rssPreviewInfo" class="preview-meta">
+                  <span v-if="rssPreviewInfo.title">订阅源：{{ rssPreviewInfo.title }}</span>
+                  <span v-if="rssPreviewInfo.entry_count !== undefined">条目数：{{ rssPreviewInfo.entry_count }}</span>
+                  <span v-if="rssPreviewInfo.strategy?.profile_label">
+                    源级策略：{{ rssPreviewInfo.strategy.profile_label }}
+                  </span>
+                  <span v-if="rssPreviewInfo.strategy?.template_name">
+                    模板：{{ rssPreviewInfo.strategy.template_name }}
+                  </span>
+                  <span v-if="rssPreviewInfo.strategy?.effective_max_items !== undefined">
+                    抓取上限：{{ rssPreviewInfo.strategy.effective_max_items }} 条
+                  </span>
+                  <span>预览策略：仅展示 1 条代表样本，减少 AI 等待时间</span>
+                </div>
+                <div v-if="ruleForm.source_type !== 'rss'" class="preview-data">
+                  <div
+                    v-for="(item, index) in previewData"
+                    :key="index"
+                    class="preview-item"
+                  >
+                    <div class="preview-item-header">
+                      样本 {{ index + 1 }}
+                    </div>
+                    <div class="preview-item-content">
+                      <div
+                        v-for="(value, key) in item"
+                        :key="key"
+                        class="preview-field"
+                      >
+                        <span class="preview-key">{{ key }}:</span>
+                        <span class="preview-value">{{ value || '-' }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="preview-data rss-preview-data">
+                  <div
+                    v-for="(item, index) in previewData"
+                    :key="item.url || index"
+                    class="preview-item rss-preview-item"
+                  >
+                    <div class="preview-item-header">
+                      样本 {{ index + 1 }} · {{ item.title || '未命名条目' }}
+                    </div>
+                    <div class="preview-item-content" style="display: flex; flex-direction: column; gap: 14px">
+                      <div class="preview-field">
+                        <span class="preview-key">日期:</span>
+                        <span class="preview-value">{{ item.date || '-' }}</span>
+                      </div>
+                      <div class="preview-field">
+                        <span class="preview-key">链接:</span>
+                        <span class="preview-value">{{ item.url || '-' }}</span>
+                      </div>
+                      <div class="preview-field">
+                        <span class="preview-key">资源:</span>
+                        <span class="preview-value">
+                          {{ item.image_count || 0 }} 张图片 / {{ item.attachment_count || 0 }} 个附件
+                        </span>
+                      </div>
+                      <div class="rss-preview-status-row">
+                        <span
+                          :class="['rss-preview-status-badge', 'is-' + (item.preview_status || 'ready')]"
+                        >
+                          {{ item.preview_status_label || '状态良好' }}
+                        </span>
+                        <div class="rss-preview-inline-meta">
+                          <span>正文约 {{ item.body_char_count || 0 }} 字</span>
+                          <span v-if="item.preview_warnings && item.preview_warnings.length > 0">
+                            发现 {{ item.preview_warnings.length }} 项提示
+                          </span>
+                          <span v-else>结构化结果可直接预览</span>
+                        </div>
+                      </div>
+
+                      <div
+                        v-if="item.preview_warnings && item.preview_warnings.length > 0"
+                        class="rss-preview-warning-list"
+                      >
+                        <span
+                          v-for="warning in item.preview_warnings"
+                          :key="warning.code || warning.label"
+                          :class="['rss-preview-warning-chip', 'is-' + (warning.tone || 'warning')]"
+                        >
+                          {{ warning.label }}
+                        </span>
+                      </div>
+
+                      <div v-if="item.ai_tags && item.ai_tags.length > 0" class="tags-container">
+                        <span
+                          v-for="(tag, tagIndex) in item.ai_tags"
+                          :key="tag + '_' + tagIndex"
+                          :class="['tag', 'tag-' + getTagColor(tagIndex)]"
+                        >
+                          {{ tag }}
+                        </span>
+                      </div>
+
+                      <div>
+                        <div class="preview-key" style="display: block; margin-bottom: 8px">原始解析 Markdown</div>
+                        <div
+                          class="markdown-body"
+                          style="padding: 14px; border-radius: 12px; background: rgba(255,255,255,0.72); border: 1px solid rgba(0,0,0,0.06)"
+                          v-html="renderMarkdown(item.raw_markdown || item.content_preview || '（无正文）')"
+                        ></div>
+                      </div>
+
+                      <div v-if="item.enhanced_markdown">
+                        <div class="preview-key" style="display: block; margin-bottom: 8px">AI 增强排版</div>
+                        <div
+                          class="markdown-body"
+                          style="padding: 14px; border-radius: 12px; background: rgba(255,255,255,0.72); border: 1px solid rgba(0,0,0,0.06)"
+                          v-html="renderMarkdown(item.enhanced_markdown)"
+                        ></div>
+                      </div>
+
+                      <div v-if="item.ai_summary">
+                        <div class="preview-key" style="display: block; margin-bottom: 8px">AI 摘要模式</div>
+                        <div
+                          class="markdown-body"
+                          style="padding: 14px; border-radius: 12px; background: rgba(255,255,255,0.72); border: 1px solid rgba(0,0,0,0.06)"
+                          v-html="renderMarkdown(item.ai_summary)"
+                        ></div>
+                      </div>
+
+                      <div
+                        v-if="item.ai_preview_message"
+                        :class="['rss-preview-ai-note', 'is-' + (item.ai_preview_status || 'disabled')]"
+                      >
+                        <span class="rss-preview-ai-note-label">AI 预览</span>
+                        <span>{{ item.ai_preview_message }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                v-if="generatedRuleCache && ruleForm.source_type !== 'rss'"
+                class="selector-tuning-panel"
+              >
+                <div
+                  class="tuning-header"
+                  @click="$emit('toggle-selector-panel')"
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path
+                      d="M12 15a3 3 0 100-6 3 3 0 000 6z"
+                    />
+                    <path
+                      d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"
+                    />
+                  </svg>
+                  <span>⚙️ 手动微调选择器 (Pro)</span>
+                  <svg
+                    :class="{ rotated: showSelectorPanel }"
+                    class="chevron"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </div>
+
+                <div v-show="showSelectorPanel" class="tuning-content">
+                  <div class="tuning-hint">
+                    💡 提示：AI 生成或历史保存的选择器都可能需要微调，修改后建议立即重新测试。
+                  </div>
+                  <div
+                    v-if="getHtmlRulePendingRetestMessage()"
+                    class="tuning-status-note is-warning"
+                  >
+                    {{ getHtmlRulePendingRetestMessage() }}
+                  </div>
+                  <div
+                    v-if="!previewData || previewData.length === 0"
+                    class="tuning-status-note"
+                  >
+                    当前是已有规则的编辑态，样本预览还没有重新加载；如果你修改了 URL、正文来源或选择器，请先测试一次再保存。
+                  </div>
+
+                  <div class="selector-inputs">
+                    <div class="selector-group">
+                      <label>列表容器</label>
+                      <input
+                        v-model="generatedRuleCache.list_container"
+                        type="text"
+                        placeholder="如: ul.news-list"
+                      />
+                    </div>
+
+                    <div class="selector-group">
+                      <label>列表项选择器</label>
+                      <input
+                        v-model="generatedRuleCache.item_selector"
+                        type="text"
+                        placeholder="如: li"
+                      />
+                    </div>
+
+                    <div class="divider"></div>
+
+                    <div
+                      v-for="(selector, fieldName) in generatedRuleCache.field_selectors"
+                      :key="fieldName"
+                      class="selector-group"
+                    >
+                      <label>{{ fieldName }} 字段</label>
+                      <input
+                        v-model="generatedRuleCache.field_selectors[fieldName]"
+                        type="text"
+                        :placeholder="`如: span.${fieldName}::text`"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    class="btn btn-retest"
+                    @click="$emit('manual-retest')"
+                    :disabled="isRetestingRule"
+                    type="button"
+                  >
+                    <svg
+                      v-if="isRetestingRule"
+                      class="spinner"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        fill="none"
+                      />
+                    </svg>
+                    <span v-else>
+                      {{ previewData && previewData.length > 0 ? '🧪 用此规则重新测试' : '🧪 先测试当前规则' }}
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="custom-rule-editor-footer">
+                <button class="btn btn-ghost" @click="$emit('close')" type="button">
+                  取消
+                </button>
+                <button
+                  v-if="ruleForm.source_type !== 'rss'"
+                  class="btn btn-secondary"
+                  @click="$emit('regenerate')"
+                  :disabled="isGeneratingRule"
+                  title="字段结构变化较大时，可重新生成选择器规则"
+                  type="button"
+                >
+                  <svg
+                    v-if="isGeneratingRule"
+                    class="spinner"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    fill="none"
+                    stroke-dasharray="30 70"
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                  </svg>
+                  <span v-else>重新生成规则</span>
+                </button>
+                <button class="btn btn-primary" @click="$emit('save')" type="button">
+                  保存修改
+                </button>
+              </div>
+            </div>
+          </script>
+
           <!-- 🕷️ 自定义爬虫规则向导弹窗 -->
           <div
             v-if="showCustomRuleModal"
             class="modal-overlay"
-            @click.self="closeCustomRuleModal"
           >
             <div class="modal-content custom-rule-modal">
               <div class="modal-header">
@@ -1631,17 +2421,19 @@
                     />
                   </div>
 
-
                   <!-- 🌟 数据源类型切换 -->
                   <div class="form-group">
                     <label class="form-label">数据源类型</label>
-                    <div class="source-type-tabs" style="display: flex; gap: 8px; margin-top: 8px;">
+                    <div
+                      class="source-type-tabs"
+                      role="tablist"
+                      aria-label="数据源类型"
+                    >
                       <button
                         type="button"
                         :class="['tab-btn', { active: ruleForm.source_type === 'html' }]"
                         @click="ruleForm.source_type = 'html'"
-                        style="flex: 1; padding: 10px 16px; border-radius: 8px; border: 1px solid var(--border-color); background: transparent; cursor: pointer; transition: all 0.2s;"
-                        :style="{ background: ruleForm.source_type === 'html' ? 'var(--accent-color)' : 'transparent', color: ruleForm.source_type === 'html' ? 'white' : 'inherit', borderColor: ruleForm.source_type === 'html' ? 'var(--accent-color)' : 'var(--border-color)' }"
+                        :aria-pressed="ruleForm.source_type === 'html' ? 'true' : 'false'"
                       >
                         网页提取
                       </button>
@@ -1649,8 +2441,7 @@
                         type="button"
                         :class="['tab-btn', { active: ruleForm.source_type === 'rss' }]"
                         @click="ruleForm.source_type = 'rss'"
-                        style="flex: 1; padding: 10px 16px; border-radius: 8px; border: 1px solid var(--border-color); background: transparent; cursor: pointer; transition: all 0.2s;"
-                        :style="{ background: ruleForm.source_type === 'rss' ? 'var(--accent-color)' : 'transparent', color: ruleForm.source_type === 'rss' ? 'white' : 'inherit', borderColor: ruleForm.source_type === 'rss' ? 'var(--accent-color)' : 'var(--border-color)' }"
+                        :aria-pressed="ruleForm.source_type === 'rss' ? 'true' : 'false'"
                       >
                         RSS 订阅
                       </button>
@@ -1659,7 +2450,10 @@
 
                   <!-- 目标 URL -->
                   <div class="form-group">
-                    <label class="form-label">{{ ruleForm.source_type === 'rss' ? 'RSS 订阅地址' : '目标网页 URL' }}</label>
+                    <label class="form-label"
+                      >{{ ruleForm.source_type === 'rss' ? 'RSS 订阅地址' :
+                      '目标网页 URL' }}</label
+                    >
                     <input
                       type="text"
                       v-model="ruleForm.url"
@@ -1679,13 +2473,19 @@
                       min="1"
                       max="500"
                     />
-                    <span class="settings-hint" style="margin-top: 4px; display: block;">
+                    <span
+                      class="settings-hint rule-hint-single-line"
+                      style="margin-top: 4px; display: block"
+                    >
                       限制每次抓取的最大文章数量
                     </span>
                   </div>
 
                   <!-- 🌟 动态字段配置区（仅 HTML 模式显示） -->
-                  <div v-if="ruleForm.source_type === 'html'" class="form-group">
+                  <div
+                    v-if="ruleForm.source_type === 'html'"
+                    class="form-group form-group-wide"
+                  >
                     <label class="form-label">提取字段</label>
                     <div class="dynamic-fields">
                       <div
@@ -1737,71 +2537,186 @@
                   </div>
 
                   <!-- 🌟 正文来源字段（仅 HTML 模式显示） -->
-                  <div v-if="ruleForm.source_type === 'html' && ruleForm.target_fields.filter(f => f.trim()).length > 0" class="form-group">
+                  <div
+                    v-if="ruleForm.source_type === 'html' && ruleForm.target_fields.filter(f => f.trim()).length > 0"
+                    class="form-group"
+                  >
                     <label class="form-label">正文来源字段（可选）</label>
                     <select v-model="ruleForm.body_field" class="form-input">
                       <option value="">自动（拼接所有字段）</option>
-                      <option v-for="field in ruleForm.target_fields.filter(f => f.trim())" :key="field" :value="field">{{ field }}</option>
+                      <option
+                        v-for="field in ruleForm.target_fields.filter(f => f.trim())"
+                        :key="field"
+                        :value="field"
+                      >
+                        {{ field }}
+                      </option>
                     </select>
-                    <span class="settings-hint" style="margin-top: 4px; display: block;">
+                    <span
+                      class="settings-hint"
+                      style="margin-top: 4px; display: block"
+                    >
                       选择后，文章正文将使用该字段内容，而非拼接所有字段
                     </span>
                   </div>
 
                   <!-- 🌟 跳过详情页抓取（仅 HTML 模式显示） -->
-                  <div v-if="ruleForm.source_type === 'html'" class="form-group">
+                  <div
+                    v-if="ruleForm.source_type === 'html'"
+                    class="form-group form-group-standalone"
+                  >
                     <div class="settings-row" style="margin: 0">
                       <span class="settings-label">跳过详情页抓取</span>
-                      <input type="checkbox" class="ios-toggle" v-model="ruleForm.skip_detail" />
-                    </div>
-                    <span class="settings-hint" style="margin-top: 8px; display: block;">
-                      当列表页已包含所需全部字段时，开启可提升抓取速度
-                    </span>
-                  </div>
-
-                  <!-- AI 摘要开关 -->
-                  <div class="form-group">
-                    <div class="settings-row" style="margin: 0">
-                      <span class="settings-label">启用 AI 摘要</span>
                       <input
                         type="checkbox"
                         class="ios-toggle"
-                        v-model="ruleForm.require_ai_summary"
+                        v-model="ruleForm.skip_detail"
                       />
                     </div>
                     <span
                       class="settings-hint"
                       style="margin-top: 8px; display: block"
                     >
-                      关闭后，抓取的数据将直接以字段列表形式展示
+                      当列表页已包含所需全部字段时，开启可提升抓取速度
                     </span>
+                  </div>
 
-                    <!-- 🌟 专属 AI 提示词 -->
-                    <div
-                      v-if="ruleForm.require_ai_summary"
-                      class="custom-prompt-group"
-                      style="margin-top: 12px"
+                  <div v-if="ruleForm.source_type === 'rss'" class="form-group">
+                    <label class="form-label">RSS 模板（可选）</label>
+                    <select
+                      v-model="ruleForm.source_template_id"
+                      class="form-input"
                     >
-                      <label class="settings-label" style="margin-bottom: 6px">
-                        专属 AI 提示词
-                      </label>
-                      <textarea
-                        v-model="ruleForm.custom_summary_prompt"
-                        rows="3"
-                        class="form-textarea"
-                        placeholder="（可选）定制 AI 摘要的输出格式，例如：&#10;- 请提取文章核心观点，用 Markdown 排版&#10;- 重点标注日期和来源信息"
-                        style="font-size: 13px; resize: vertical"
-                      ></textarea>
-                      <span class="settings-hint" style="margin-top: 4px">
-                        留空则使用默认提示词
-                      </span>
-                      <span
-                        v-if="ruleForm.source_type === 'rss'"
-                        class="settings-hint"
-                        style="margin-top: 4px; display: block"
+                      <option value="">自动推断（推荐）</option>
+                      <option
+                        v-for="template in rssTemplateOptions"
+                        :key="template.id"
+                        :value="template.id"
                       >
-                        RSS 规则填写专属提示词后，会自动启用 AI 摘要，并在重新生成时优先复用
-                      </span>
+                        {{ template.name }} · {{ template.profile_label }}
+                      </option>
+                    </select>
+                    <span
+                      class="settings-hint"
+                      style="margin-top: 4px; display: block"
+                    >
+                      留空时会在预览阶段根据样本自动推断；选择模板后，会固定使用该模板的默认策略。
+                    </span>
+                    <span
+                      v-if="currentRssTemplateMeta"
+                      class="settings-hint"
+                      style="margin-top: 4px; display: block"
+                    >
+                      {{ currentRssTemplateMeta.description }} 默认抓取 {{
+                      currentRssTemplateMeta.default_max_items }} 条。
+                    </span>
+                  </div>
+
+                  <!-- AI 内容增强配置 -->
+                  <div class="form-group form-group-stack">
+                    <label class="form-label">AI 内容增强</label>
+                    <div class="rule-ai-config">
+                      <div
+                        v-if="ruleForm.source_type === 'rss'"
+                        class="rule-ai-card"
+                      >
+                        <div class="rule-ai-card-head">
+                          <div>
+                            <div class="rule-ai-card-title">排版增强</div>
+                            <div class="rule-ai-card-desc">
+                              优化 Markdown 结构、标题层级、图片与段落节奏。
+                            </div>
+                          </div>
+                          <input
+                            type="checkbox"
+                            class="ios-toggle"
+                            v-model="ruleForm.enable_ai_formatting"
+                          />
+                        </div>
+                        <div
+                          v-if="ruleForm.enable_ai_formatting"
+                          class="custom-prompt-group"
+                          style="margin-top: 12px"
+                        >
+                          <label
+                            class="settings-label"
+                            style="margin-bottom: 6px"
+                          >
+                            排版提示词
+                          </label>
+                          <textarea
+                            v-model="ruleForm.formatting_prompt"
+                            rows="3"
+                            class="form-textarea"
+                            placeholder="（可选）定制 RSS 正文排版，例如：&#10;- 优先整理 H3 / H4 层级&#10;- 保留图片并让链接更易读&#10;- 对关键词做适度加粗"
+                            style="font-size: 13px; resize: vertical"
+                          ></textarea>
+                          <span class="settings-hint" style="margin-top: 4px">
+                            留空则使用默认排版提示词；填写后会自动开启排版增强。
+                          </span>
+                        </div>
+                        <span
+                          v-else
+                          class="settings-hint"
+                          style="margin-top: 10px; display: block"
+                        >
+                          关闭后，阅读模式里的“增强”会与原始解析结果保持一致。
+                        </span>
+                      </div>
+
+                      <div class="rule-ai-card">
+                        <div class="rule-ai-card-head">
+                          <div>
+                            <div class="rule-ai-card-title">
+                              {{ ruleForm.source_type === 'rss' ? '摘要 / 彩色标签' : 'AI 摘要 / 标签' }}
+                            </div>
+                            <div class="rule-ai-card-desc">
+                              {{ ruleForm.source_type === 'rss' ? '生成 3 个彩色标签和更短、更好读的摘要视图。' : '对网页提取结果进行摘要整理，便于列表与卡片阅读。' }}
+                            </div>
+                          </div>
+                          <input
+                            type="checkbox"
+                            class="ios-toggle"
+                            v-model="ruleForm.enable_ai_summary"
+                          />
+                        </div>
+                        <div
+                          v-if="ruleForm.enable_ai_summary"
+                          class="custom-prompt-group"
+                          style="margin-top: 12px"
+                        >
+                          <label
+                            class="settings-label"
+                            style="margin-bottom: 6px"
+                          >
+                            总结提示词
+                          </label>
+                          <textarea
+                            v-model="ruleForm.summary_prompt"
+                            rows="3"
+                            class="form-textarea"
+                            :placeholder="getRuleSummaryPromptPlaceholder(ruleForm.source_type)"
+                            style="font-size: 13px; resize: vertical"
+                          ></textarea>
+                          <span class="settings-hint" style="margin-top: 4px">
+                            留空则使用默认总结提示词；填写后会自动开启摘要/标签。
+                          </span>
+                          <span
+                            v-if="ruleForm.source_type === 'rss'"
+                            class="settings-hint"
+                            style="margin-top: 4px; display: block"
+                          >
+                            阅读模式里的“摘要”和“重新生成总结”会优先复用这里的提示词。
+                          </span>
+                        </div>
+                        <span
+                          v-else
+                          class="settings-hint"
+                          style="margin-top: 10px; display: block"
+                        >
+                          {{ ruleForm.source_type === 'rss' ? '关闭后，将只保留原始 / 增强正文，不会生成独立摘要和标签。' : '关闭后，抓取的数据将直接以字段列表形式展示。' }}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1834,31 +2749,36 @@
                   <!-- 🌟 数据源类型切换 -->
                   <div class="form-group">
                     <label class="form-label">数据源类型</label>
-                    <div class="source-type-tabs" style="display: flex; gap: 8px; margin-top: 8px;">
+                    <div
+                      class="source-type-tabs"
+                      role="tablist"
+                      aria-label="数据源类型"
+                    >
                       <button
                         type="button"
                         :class="['tab-btn', { active: ruleForm.source_type === 'html' }]"
                         @click="ruleForm.source_type = 'html'"
-                        style="flex: 1; padding: 10px 16px; border-radius: 8px; border: 1px solid var(--border-color); background: transparent; cursor: pointer; transition: all 0.2s;"
-                        :style="{ background: ruleForm.source_type === 'html' ? 'var(--accent-color)' : 'transparent', color: ruleForm.source_type === 'html' ? 'white' : 'inherit', borderColor: ruleForm.source_type === 'html' ? 'var(--accent-color)' : 'var(--border-color)' }"
+                        :aria-pressed="ruleForm.source_type === 'html' ? 'true' : 'false'"
                       >
-                        🌐 网页提取
+                        网页提取
                       </button>
                       <button
                         type="button"
                         :class="['tab-btn', { active: ruleForm.source_type === 'rss' }]"
                         @click="ruleForm.source_type = 'rss'"
-                        style="flex: 1; padding: 10px 16px; border-radius: 8px; border: 1px solid var(--border-color); background: transparent; cursor: pointer; transition: all 0.2s;"
-                        :style="{ background: ruleForm.source_type === 'rss' ? 'var(--accent-color)' : 'transparent', color: ruleForm.source_type === 'rss' ? 'white' : 'inherit', borderColor: ruleForm.source_type === 'rss' ? 'var(--accent-color)' : 'var(--border-color)' }"
+                        :aria-pressed="ruleForm.source_type === 'rss' ? 'true' : 'false'"
                       >
-                        📡 RSS 订阅
+                        RSS 订阅
                       </button>
                     </div>
                   </div>
 
                   <!-- 目标 URL -->
                   <div class="form-group">
-                    <label class="form-label">{{ ruleForm.source_type === 'rss' ? 'RSS 订阅地址' : '目标网页 URL' }}</label>
+                    <label class="form-label"
+                      >{{ ruleForm.source_type === 'rss' ? 'RSS 订阅地址' :
+                      '目标网页 URL' }}</label
+                    >
                     <input
                       type="text"
                       v-model="ruleForm.url"
@@ -1878,13 +2798,19 @@
                       min="1"
                       max="500"
                     />
-                    <span class="settings-hint" style="margin-top: 4px; display: block;">
+                    <span
+                      class="settings-hint rule-hint-single-line"
+                      style="margin-top: 4px; display: block"
+                    >
                       限制每次抓取的最大文章数量
                     </span>
                   </div>
 
                   <!-- 🌟 动态字段配置区（仅 HTML 模式显示） -->
-                  <div v-if="ruleForm.source_type === 'html'" class="form-group">
+                  <div
+                    v-if="ruleForm.source_type === 'html'"
+                    class="form-group form-group-wide"
+                  >
                     <label class="form-label">提取字段</label>
                     <div class="dynamic-fields">
                       <div
@@ -1936,78 +2862,193 @@
                   </div>
 
                   <!-- 🌟 正文来源字段（仅 HTML 模式显示） -->
-                  <div v-if="ruleForm.source_type === 'html' && ruleForm.target_fields.filter(f => f.trim()).length > 0" class="form-group">
+                  <div
+                    v-if="ruleForm.source_type === 'html' && ruleForm.target_fields.filter(f => f.trim()).length > 0"
+                    class="form-group"
+                  >
                     <label class="form-label">正文来源字段（可选）</label>
                     <select v-model="ruleForm.body_field" class="form-input">
                       <option value="">自动（拼接所有字段）</option>
-                      <option v-for="field in ruleForm.target_fields.filter(f => f.trim())" :key="field" :value="field">{{ field }}</option>
+                      <option
+                        v-for="field in ruleForm.target_fields.filter(f => f.trim())"
+                        :key="field"
+                        :value="field"
+                      >
+                        {{ field }}
+                      </option>
                     </select>
-                    <span class="settings-hint" style="margin-top: 4px; display: block;">
+                    <span
+                      class="settings-hint"
+                      style="margin-top: 4px; display: block"
+                    >
                       选择后，文章正文将使用该字段内容，而非拼接所有字段
                     </span>
                   </div>
 
                   <!-- 🌟 跳过详情页抓取（仅 HTML 模式显示） -->
-                  <div v-if="ruleForm.source_type === 'html'" class="form-group">
+                  <div
+                    v-if="ruleForm.source_type === 'html'"
+                    class="form-group form-group-standalone"
+                  >
                     <div class="settings-row" style="margin: 0">
                       <span class="settings-label">跳过详情页抓取</span>
-                      <input type="checkbox" class="ios-toggle" v-model="ruleForm.skip_detail" />
-                    </div>
-                    <span class="settings-hint" style="margin-top: 8px; display: block;">
-                      当列表页已包含所需全部字段时，开启可提升抓取速度
-                    </span>
-                  </div>
-
-                  <!-- AI 摘要开关 -->
-                  <div class="form-group">
-                    <div class="settings-row" style="margin: 0">
-                      <span class="settings-label">启用 AI 摘要</span>
                       <input
                         type="checkbox"
                         class="ios-toggle"
-                        v-model="ruleForm.require_ai_summary"
+                        v-model="ruleForm.skip_detail"
                       />
                     </div>
                     <span
                       class="settings-hint"
                       style="margin-top: 8px; display: block"
                     >
-                      关闭后，抓取的数据将直接以字段列表形式展示
+                      当列表页已包含所需全部字段时，开启可提升抓取速度
                     </span>
+                  </div>
 
-                    <!-- 🌟 专属 AI 提示词 -->
-                    <div
-                      v-if="ruleForm.require_ai_summary"
-                      class="custom-prompt-group"
-                      style="margin-top: 12px"
+                  <div v-if="ruleForm.source_type === 'rss'" class="form-group">
+                    <label class="form-label">RSS 模板（可选）</label>
+                    <select
+                      v-model="ruleForm.source_template_id"
+                      class="form-input"
                     >
-                      <label class="settings-label" style="margin-bottom: 6px">
-                        专属 AI 提示词
-                      </label>
-                      <textarea
-                        v-model="ruleForm.custom_summary_prompt"
-                        rows="3"
-                        class="form-textarea"
-                        placeholder="（可选）定制 AI 摘要的输出格式，例如：&#10;- 请提取文章核心观点，用 Markdown 排版&#10;- 重点标注日期和来源信息"
-                        style="font-size: 13px; resize: vertical"
-                      ></textarea>
-                      <span class="settings-hint" style="margin-top: 4px">
-                        留空则使用默认提示词
-                      </span>
-                      <span
-                        v-if="ruleForm.source_type === 'rss'"
-                        class="settings-hint"
-                        style="margin-top: 4px; display: block"
+                      <option value="">自动推断（推荐）</option>
+                      <option
+                        v-for="template in rssTemplateOptions"
+                        :key="template.id"
+                        :value="template.id"
                       >
-                        RSS 规则填写专属提示词后，会自动启用 AI 摘要，并在重新生成时优先复用
-                      </span>
+                        {{ template.name }} · {{ template.profile_label }}
+                      </option>
+                    </select>
+                    <span
+                      class="settings-hint"
+                      style="margin-top: 4px; display: block"
+                    >
+                      留空时会在预览阶段根据样本自动推断；选择模板后，会固定使用该模板的默认策略。
+                    </span>
+                    <span
+                      v-if="currentRssTemplateMeta"
+                      class="settings-hint"
+                      style="margin-top: 4px; display: block"
+                    >
+                      {{ currentRssTemplateMeta.description }} 默认抓取 {{
+                      currentRssTemplateMeta.default_max_items }} 条。
+                    </span>
+                  </div>
+
+                  <!-- AI 内容增强配置 -->
+                  <div class="form-group form-group-stack">
+                    <label class="form-label">AI 内容增强</label>
+                    <div class="rule-ai-config">
+                      <div
+                        v-if="ruleForm.source_type === 'rss'"
+                        class="rule-ai-card"
+                      >
+                        <div class="rule-ai-card-head">
+                          <div>
+                            <div class="rule-ai-card-title">排版增强</div>
+                            <div class="rule-ai-card-desc">
+                              优化 Markdown 结构、标题层级、图片与段落节奏。
+                            </div>
+                          </div>
+                          <input
+                            type="checkbox"
+                            class="ios-toggle"
+                            v-model="ruleForm.enable_ai_formatting"
+                          />
+                        </div>
+                        <div
+                          v-if="ruleForm.enable_ai_formatting"
+                          class="custom-prompt-group"
+                          style="margin-top: 12px"
+                        >
+                          <label
+                            class="settings-label"
+                            style="margin-bottom: 6px"
+                          >
+                            排版提示词
+                          </label>
+                          <textarea
+                            v-model="ruleForm.formatting_prompt"
+                            rows="3"
+                            class="form-textarea"
+                            placeholder="（可选）定制 RSS 正文排版，例如：&#10;- 优先整理 H3 / H4 层级&#10;- 保留图片并让链接更易读&#10;- 对关键词做适度加粗"
+                            style="font-size: 13px; resize: vertical"
+                          ></textarea>
+                          <span class="settings-hint" style="margin-top: 4px">
+                            留空则使用默认排版提示词；填写后会自动开启排版增强。
+                          </span>
+                        </div>
+                        <span
+                          v-else
+                          class="settings-hint"
+                          style="margin-top: 10px; display: block"
+                        >
+                          关闭后，阅读模式里的“增强”会与原始解析结果保持一致。
+                        </span>
+                      </div>
+
+                      <div class="rule-ai-card">
+                        <div class="rule-ai-card-head">
+                          <div>
+                            <div class="rule-ai-card-title">
+                              {{ ruleForm.source_type === 'rss' ? '摘要 / 彩色标签' : 'AI 摘要 / 标签' }}
+                            </div>
+                            <div class="rule-ai-card-desc">
+                              {{ ruleForm.source_type === 'rss' ? '生成 3 个彩色标签和更短、更好读的摘要视图。' : '对网页提取结果进行摘要整理，便于列表与卡片阅读。' }}
+                            </div>
+                          </div>
+                          <input
+                            type="checkbox"
+                            class="ios-toggle"
+                            v-model="ruleForm.enable_ai_summary"
+                          />
+                        </div>
+                        <div
+                          v-if="ruleForm.enable_ai_summary"
+                          class="custom-prompt-group"
+                          style="margin-top: 12px"
+                        >
+                          <label
+                            class="settings-label"
+                            style="margin-bottom: 6px"
+                          >
+                            总结提示词
+                          </label>
+                          <textarea
+                            v-model="ruleForm.summary_prompt"
+                            rows="3"
+                            class="form-textarea"
+                            :placeholder="getRuleSummaryPromptPlaceholder(ruleForm.source_type)"
+                            style="font-size: 13px; resize: vertical"
+                          ></textarea>
+                          <span class="settings-hint" style="margin-top: 4px">
+                            留空则使用默认总结提示词；填写后会自动开启摘要/标签。
+                          </span>
+                          <span
+                            v-if="ruleForm.source_type === 'rss'"
+                            class="settings-hint"
+                            style="margin-top: 4px; display: block"
+                          >
+                            阅读模式里的“摘要”和“重新生成总结”会优先复用这里的提示词。
+                          </span>
+                        </div>
+                        <span
+                          v-else
+                          class="settings-hint"
+                          style="margin-top: 10px; display: block"
+                        >
+                          {{ ruleForm.source_type === 'rss' ? '关闭后，将只保留原始 / 增强正文，不会生成独立摘要和标签。' : '关闭后，抓取的数据将直接以字段列表形式展示。' }}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 <!-- 步骤2：样本预览区（生成后显示） -->
                 <div
-                  v-else-if="previewData && previewData.length > 0"
+                  v-if="previewData && previewData.length > 0"
                   class="preview-section"
                 >
                   <div class="preview-header">
@@ -2021,12 +3062,42 @@
                     >
                       <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <span
-                      >AI 分析成功，提取到 {{ previewData.length }}
-                      条样本数据</span
-                    >
+                    <span v-if="ruleForm.source_type === 'rss'">
+                      RSS 解析预览成功，提取到 {{ previewData.length }}
+                      条样本数据
+                    </span>
+                    <span v-else>
+                      AI 分析成功，提取到 {{ previewData.length }} 条样本数据
+                    </span>
                   </div>
-                  <div class="preview-data">
+                  <div
+                    v-if="ruleForm.source_type === 'rss' && rssPreviewInfo"
+                    class="preview-meta"
+                  >
+                    <span v-if="rssPreviewInfo.title"
+                      >订阅源：{{ rssPreviewInfo.title }}</span
+                    >
+                    <span v-if="rssPreviewInfo.entry_count !== undefined"
+                      >条目数：{{ rssPreviewInfo.entry_count }}</span
+                    >
+                    <span v-if="rssPreviewInfo.strategy?.profile_label">
+                      源级策略：{{ rssPreviewInfo.strategy.profile_label }}
+                    </span>
+                    <span v-if="rssPreviewInfo.strategy?.template_name">
+                      模板：{{ rssPreviewInfo.strategy.template_name }}
+                    </span>
+                    <span
+                      v-if="rssPreviewInfo.strategy?.effective_max_items !== undefined"
+                    >
+                      抓取上限：{{ rssPreviewInfo.strategy.effective_max_items
+                      }} 条
+                    </span>
+                    <span>预览策略：仅展示 1 条代表样本，减少 AI 等待时间</span>
+                  </div>
+                  <div
+                    v-if="ruleForm.source_type !== 'rss'"
+                    class="preview-data"
+                  >
                     <div
                       v-for="(item, index) in previewData"
                       :key="index"
@@ -2047,110 +3118,267 @@
                       </div>
                     </div>
                   </div>
-
-                  <!-- ⚙️ 手动微调选择器面板 -->
-                  <div
-                    v-if="generatedRuleCache"
-                    class="selector-tuning-panel"
-                  >
+                  <div v-else class="preview-data rss-preview-data">
                     <div
-                      class="tuning-header"
-                      @click="showSelectorPanel = !showSelectorPanel"
+                      v-for="(item, index) in previewData"
+                      :key="item.url || index"
+                      class="preview-item rss-preview-item"
                     >
-                      <svg
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                      >
-                        <path
-                          d="M12 15a3 3 0 100-6 3 3 0 000 6z"
-                        />
-                        <path
-                          d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"
-                        />
-                      </svg>
-                      <span>⚙️ 手动微调选择器 (Pro)</span>
-                      <svg
-                        :class="{ rotated: showSelectorPanel }"
-                        class="chevron"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                      >
-                        <polyline points="6 9 12 15 18 9" />
-                      </svg>
-                    </div>
-
-                    <div v-show="showSelectorPanel" class="tuning-content">
-                      <div class="tuning-hint">
-                        💡 提示：AI 生成的选择器可能不准确，您可以手动修改后重新测试
+                      <div class="preview-item-header">
+                        样本 {{ index + 1 }} · {{ item.title || '未命名条目' }}
                       </div>
-
-                      <div class="selector-inputs">
-                        <div class="selector-group">
-                          <label>列表容器</label>
-                          <input
-                            v-model="generatedRuleCache.list_container"
-                            type="text"
-                            placeholder="如: ul.news-list"
-                          />
+                      <div
+                        class="preview-item-content"
+                        style="display: flex; flex-direction: column; gap: 14px"
+                      >
+                        <div class="preview-field">
+                          <span class="preview-key">日期:</span>
+                          <span class="preview-value"
+                            >{{ item.date || '-' }}</span
+                          >
                         </div>
-
-                        <div class="selector-group">
-                          <label>列表项选择器</label>
-                          <input
-                            v-model="generatedRuleCache.item_selector"
-                            type="text"
-                            placeholder="如: li"
-                          />
+                        <div class="preview-field">
+                          <span class="preview-key">链接:</span>
+                          <span class="preview-value"
+                            >{{ item.url || '-' }}</span
+                          >
                         </div>
-
-                        <div class="divider"></div>
+                        <div class="preview-field">
+                          <span class="preview-key">资源:</span>
+                          <span class="preview-value">
+                            {{ item.image_count || 0 }} 张图片 / {{
+                            item.attachment_count || 0 }} 个附件
+                          </span>
+                        </div>
+                        <div class="rss-preview-status-row">
+                          <span
+                            :class="['rss-preview-status-badge', 'is-' + (item.preview_status || 'ready')]"
+                          >
+                            {{ item.preview_status_label || '状态良好' }}
+                          </span>
+                          <div class="rss-preview-inline-meta">
+                            <span
+                              >正文约 {{ item.body_char_count || 0 }} 字</span
+                            >
+                            <span
+                              v-if="item.preview_warnings && item.preview_warnings.length > 0"
+                            >
+                              发现 {{ item.preview_warnings.length }} 项提示
+                            </span>
+                            <span v-else>结构化结果可直接预览</span>
+                          </div>
+                        </div>
 
                         <div
-                          v-for="(selector, fieldName) in generatedRuleCache.field_selectors"
-                          :key="fieldName"
-                          class="selector-group"
+                          v-if="item.preview_warnings && item.preview_warnings.length > 0"
+                          class="rss-preview-warning-list"
                         >
-                          <label>{{ fieldName }} 字段</label>
-                          <input
-                            v-model="generatedRuleCache.field_selectors[fieldName]"
-                            type="text"
-                            :placeholder="`如: span.${fieldName}::text`"
-                          />
+                          <span
+                            v-for="warning in item.preview_warnings"
+                            :key="warning.code || warning.label"
+                            :class="['rss-preview-warning-chip', 'is-' + (warning.tone || 'warning')]"
+                          >
+                            {{ warning.label }}
+                          </span>
+                        </div>
+
+                        <div
+                          v-if="item.ai_tags && item.ai_tags.length > 0"
+                          class="tags-container"
+                        >
+                          <span
+                            v-for="(tag, tagIndex) in item.ai_tags"
+                            :key="tag + '_' + tagIndex"
+                            :class="['tag', 'tag-' + getTagColor(tagIndex)]"
+                          >
+                            {{ tag }}
+                          </span>
+                        </div>
+
+                        <div>
+                          <div
+                            class="preview-key"
+                            style="display: block; margin-bottom: 8px"
+                          >
+                            原始解析 Markdown
+                          </div>
+                          <div
+                            class="markdown-body"
+                            style="
+                              padding: 14px;
+                              border-radius: 12px;
+                              background: rgba(255, 255, 255, 0.72);
+                              border: 1px solid rgba(0, 0, 0, 0.06);
+                            "
+                            v-html="renderMarkdown(item.raw_markdown || item.content_preview || '（无正文）')"
+                          ></div>
+                        </div>
+
+                        <div v-if="item.enhanced_markdown">
+                          <div
+                            class="preview-key"
+                            style="display: block; margin-bottom: 8px"
+                          >
+                            AI 增强排版
+                          </div>
+                          <div
+                            class="markdown-body"
+                            style="
+                              padding: 14px;
+                              border-radius: 12px;
+                              background: rgba(255, 255, 255, 0.72);
+                              border: 1px solid rgba(0, 0, 0, 0.06);
+                            "
+                            v-html="renderMarkdown(item.enhanced_markdown)"
+                          ></div>
+                        </div>
+
+                        <div v-if="item.ai_summary">
+                          <div
+                            class="preview-key"
+                            style="display: block; margin-bottom: 8px"
+                          >
+                            AI 摘要模式
+                          </div>
+                          <div
+                            class="markdown-body"
+                            style="
+                              padding: 14px;
+                              border-radius: 12px;
+                              background: rgba(255, 255, 255, 0.72);
+                              border: 1px solid rgba(0, 0, 0, 0.06);
+                            "
+                            v-html="renderMarkdown(item.ai_summary)"
+                          ></div>
+                        </div>
+
+                        <div
+                          v-if="item.ai_preview_message"
+                          :class="['rss-preview-ai-note', 'is-' + (item.ai_preview_status || 'disabled')]"
+                        >
+                          <span class="rss-preview-ai-note-label">AI 预览</span>
+                          <span>{{ item.ai_preview_message }}</span>
                         </div>
                       </div>
-
-                      <button
-                        class="btn btn-retest"
-                        @click="handleManualRetest"
-                        :disabled="isRetestingRule"
-                      >
-                        <svg
-                          v-if="isRetestingRule"
-                          class="spinner"
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                        >
-                          <circle
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            fill="none"
-                          />
-                        </svg>
-                        <span v-else>🧪 用此规则重新测试</span>
-                      </button>
                     </div>
+                  </div>
+                </div>
+
+                <div
+                  v-if="generatedRuleCache && ruleForm.source_type !== 'rss'"
+                  class="selector-tuning-panel"
+                >
+                  <div
+                    class="tuning-header"
+                    @click="showSelectorPanel = !showSelectorPanel"
+                  >
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
+                      <path
+                        d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"
+                      />
+                    </svg>
+                    <span>⚙️ 手动微调选择器 (Pro)</span>
+                    <svg
+                      :class="{ rotated: showSelectorPanel }"
+                      class="chevron"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </div>
+
+                  <div v-show="showSelectorPanel" class="tuning-content">
+                    <div class="tuning-hint">
+                      💡 提示：AI
+                      生成或历史保存的选择器都可能需要微调，修改后建议立即重新测试。
+                    </div>
+                    <div
+                      v-if="getHtmlRulePendingRetestMessage()"
+                      class="tuning-status-note is-warning"
+                    >
+                      {{ getHtmlRulePendingRetestMessage() }}
+                    </div>
+                    <div
+                      v-if="editingRuleId && (!previewData || previewData.length === 0)"
+                      class="tuning-status-note"
+                    >
+                      当前是已有规则的编辑态，样本预览还没有重新加载；如果你修改了
+                      URL、正文来源或选择器，请先测试一次再保存。
+                    </div>
+
+                    <div class="selector-inputs">
+                      <div class="selector-group">
+                        <label>列表容器</label>
+                        <input
+                          v-model="generatedRuleCache.list_container"
+                          type="text"
+                          placeholder="如: ul.news-list"
+                        />
+                      </div>
+
+                      <div class="selector-group">
+                        <label>列表项选择器</label>
+                        <input
+                          v-model="generatedRuleCache.item_selector"
+                          type="text"
+                          placeholder="如: li"
+                        />
+                      </div>
+
+                      <div class="divider"></div>
+
+                      <div
+                        v-for="(selector, fieldName) in generatedRuleCache.field_selectors"
+                        :key="fieldName"
+                        class="selector-group"
+                      >
+                        <label>{{ fieldName }} 字段</label>
+                        <input
+                          v-model="generatedRuleCache.field_selectors[fieldName]"
+                          type="text"
+                          :placeholder="`如: span.${fieldName}::text`"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      class="btn btn-retest"
+                      @click="handleManualRetest"
+                      :disabled="isRetestingRule"
+                    >
+                      <svg
+                        v-if="isRetestingRule"
+                        class="spinner"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          fill="none"
+                        />
+                      </svg>
+                      <span v-else>
+                        {{ previewData && previewData.length > 0 ? '🧪 用此规则重新测试' : '🧪 先测试当前规则' }}
+                      </span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -2161,6 +3389,28 @@
                   <button class="btn btn-ghost" @click="closeCustomRuleModal">
                     取消
                   </button>
+                  <button
+                    v-if="ruleForm.source_type !== 'rss'"
+                    class="btn btn-secondary"
+                    @click="handleRegenerateRule"
+                    :disabled="isGeneratingRule"
+                    title="字段结构变化较大时，可重新生成选择器规则"
+                  >
+                    <svg
+                      v-if="isGeneratingRule"
+                      class="spinner"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      fill="none"
+                      stroke-dasharray="30 70"
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                    </svg>
+                    <span v-else>重新生成规则</span>
+                  </button>
                   <button class="btn btn-primary" @click="confirmAndSaveRule">
                     保存修改
                   </button>
@@ -2170,7 +3420,7 @@
                   <button class="btn btn-ghost" @click="closeCustomRuleModal">
                     取消
                   </button>
-                  <!-- 🌟 RSS 模式：直接保存 -->
+                  <!-- 🌟 RSS 模式：先预览，再确认保存 -->
                   <button
                     v-if="ruleForm.source_type === 'rss'"
                     class="btn btn-primary"
@@ -2194,7 +3444,7 @@
                         stroke-dasharray="30 70"
                       />
                     </svg>
-                    <span v-else>💾 保存 RSS 规则</span>
+                    <span v-else>RSS 解析预览</span>
                   </button>
                   <!-- 🌟 HTML 模式: AI 分析 -->
                   <button
@@ -2221,6 +3471,36 @@
                       />
                     </svg>
                     <span v-else>🤖 AI 智能分析并测试</span>
+                  </button>
+                </template>
+                <!-- RSS 预览后按钮 -->
+                <template v-else-if="ruleForm.source_type === 'rss'">
+                  <button class="btn btn-ghost" @click="resetRuleForm">
+                    放弃
+                  </button>
+                  <button
+                    class="btn btn-primary"
+                    @click="confirmAndSaveRssRule"
+                    :disabled="isGeneratingRule"
+                  >
+                    <svg
+                      v-if="isGeneratingRule"
+                      class="spinner"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        fill="none"
+                        stroke-dasharray="30 70"
+                      />
+                    </svg>
+                    <span v-else>确认无误，保存 RSS 规则</span>
                   </button>
                 </template>
                 <!-- 生成后按钮 -->
@@ -2282,16 +3562,13 @@
               v-for="(item, index) in processedArticles"
               :key="item.isHeader ? `header_${item.title}` : `card_${item.id || item.url || index}`"
             >
-              <div
-                v-if="item.isHeader"
-                class="date-group-header"
-              >
+              <div v-if="item.isHeader" class="date-group-header">
                 {{ item.title }}
               </div>
 
               <div
                 v-else
-                v-memo="[item.id, item.url, item.title, item.is_read, item.is_favorite, item.is_announcement, item.department, item.source_name, item.formattedTime, item.parsedTags?.[0], item.parsedAttachments?.length]"
+                v-memo="[item.id, item.url, item.title, item.is_read, item.is_favorite, item.is_announcement, item.department, item.source_name, item.formattedTime, item.parsedTags?.[0], item.parsedAttachments?.length, item.source_type, item.department]"
                 :data-url="item.url"
                 :data-id="item.id"
                 :class="['list-card', { 'announcement-card': item.is_announcement, 'read': item.is_read && item.is_announcement && item.id !== 'balance_warning' }]"
@@ -2299,12 +3576,31 @@
               >
                 <!-- 🌟 部门图标：显示在左侧 -->
                 <div v-if="!item.is_announcement" class="card-left-column">
-                  <div class="icon-row">
+                  <div
+                    class="icon-row"
+                    :class="{ 'rss-icon-row': item.source_type === 'rss' }"
+                  >
                     <span
                       class="unread-dot"
                       :class="{ 'unread-dot-hidden': item.is_read !== 0 }"
                     ></span>
                     <div
+                      v-if="item.source_type === 'rss'"
+                      class="rss-site-icon-stack"
+                    >
+                      <div
+                        class="department-icon rss-site-icon"
+                        title="RSS 订阅"
+                      ></div>
+                      <span
+                        class="rss-source-label"
+                        :style="getRssSourceLabelStyle(item)"
+                      >
+                        RSS
+                      </span>
+                    </div>
+                    <div
+                      v-else
                       class="department-icon"
                       :style="{ backgroundColor: getDepartmentColor(item.department) }"
                       v-html="getDepartmentIcon(item.department)"
@@ -2312,7 +3608,7 @@
                   </div>
 
                   <span
-                    v-if="item.parsedTags && item.parsedTags.length > 0"
+                    v-if="item.parsedTags && item.parsedTags.length > 0 && String(item.source_type || '').toLowerCase() !== 'rss'"
                     class="tag ai-tag-left"
                     :style="{ backgroundColor: getAITagBgColor(item.department) }"
                   >
@@ -2587,7 +3883,10 @@
                 data-tooltip="更新公文"
               >
                 <span v-if="isReadOnlyMode" class="btn-text">只读</span>
-                <span v-else-if="updateButtonLoadingVisible" class="btn-text"></span>
+                <span
+                  v-else-if="updateButtonLoadingVisible"
+                  class="btn-text"
+                ></span>
                 <span v-else-if="isUpdateDisabled" class="btn-text"
                   >{{ updateCooldown }}s</span
                 >
@@ -2675,9 +3974,7 @@
         >
           <div class="detail-header">
             <div class="provider-row">
-              <span
-                class="provider-info"
-              >
+              <span class="provider-info">
                 <span
                   v-if="localAiIconSvg && !iconLoadError"
                   class="inline-ai-icon"
@@ -2731,7 +4028,7 @@
                   class="badge-edit"
                   :class="{ 'is-editing': isEditingSummary }"
                   @click="startEditSummary"
-                  :data-tooltip="isEditingSummary ? '编辑中' : '编辑摘要'"
+                  :data-tooltip="isEditingSummary ? '编辑中' : getRssEditTooltip(activeArticle)"
                 >
                   <svg
                     class="icon-svg"
@@ -2969,32 +4266,362 @@
                   activeArticle.date) }}</span
                 >
               </div>
-              <!-- 🌟 编辑状态时显示的取消和保存按钮 -->
-              <div v-if="isEditingSummary" class="meta-badges-right">
-                <span
-                  class="badge-action badge-cancel"
-                  @click="cancelEditSummary"
+              <div
+                v-if="isEditingSummary || activeArticle.source_type === 'rss'"
+                class="meta-badges-right"
+              >
+                <template v-if="isEditingSummary">
+                  <span
+                    class="badge-action badge-cancel"
+                    @click="cancelEditSummary"
+                  >
+                    取消
+                  </span>
+                  <span class="badge-action badge-save" @click="saveSummary">
+                    保存
+                  </span>
+                </template>
+                <div
+                  v-else-if="activeArticle.source_type === 'rss'"
+                  class="rss-detail-mode-switch"
                 >
-                  取消
-                </span>
-                <span class="badge-action badge-save" @click="saveSummary">
-                  保存
-                </span>
+                  <div
+                    class="rss-detail-mode-group"
+                    role="tablist"
+                    aria-label="RSS 阅读模式"
+                  >
+                    <button
+                      type="button"
+                      class="rss-detail-mode-btn mode-raw"
+                      :class="{ active: rssDetailMode === 'raw' }"
+                      :data-tooltip="getRssDetailModeTooltip('raw', activeArticle)"
+                      role="tab"
+                      aria-label="原始模式"
+                      :aria-selected="rssDetailMode === 'raw'"
+                      @click="setRssDetailMode('raw', activeArticle)"
+                    >
+                      <svg
+                        class="icon-svg rss-detail-mode-icon"
+                        version="1.1"
+                        xmlns="http://www.w3.org/2000/svg"
+                        xmlns:xlink="http://www.w3.org/1999/xlink"
+                        viewBox="0 0 20.0391 16.9238"
+                        aria-hidden="true"
+                      >
+                        <g>
+                          <rect
+                            height="16.9238"
+                            opacity="0"
+                            width="20.0391"
+                            x="0"
+                            y="0"
+                          />
+                          <path
+                            d="M0.78125 16.9043L18.877 16.9043C19.3164 16.9043 19.6777 16.5625 19.6777 16.123C19.6777 15.6836 19.3164 15.332 18.877 15.332L0.78125 15.332C0.341797 15.332 0 15.6836 0 16.123C0 16.5625 0.341797 16.9043 0.78125 16.9043Z"
+                            fill="currentColor"
+                          />
+                          <path
+                            d="M0.78125 11.7969L18.877 11.7969C19.3164 11.7969 19.6777 11.4551 19.6777 11.0156C19.6777 10.5664 19.3164 10.2246 18.877 10.2246L0.78125 10.2246C0.341797 10.2246 0 10.5664 0 11.0156C0 11.4551 0.341797 11.7969 0.78125 11.7969Z"
+                            fill="currentColor"
+                          />
+                          <path
+                            d="M0.78125 6.68945L18.877 6.68945C19.3164 6.68945 19.6777 6.33789 19.6777 5.89844C19.6777 5.45898 19.3164 5.11719 18.877 5.11719L0.78125 5.11719C0.341797 5.11719 0 5.45898 0 5.89844C0 6.33789 0.341797 6.68945 0.78125 6.68945Z"
+                            fill="currentColor"
+                          />
+                          <path
+                            d="M0.78125 1.57227L18.877 1.57227C19.3164 1.57227 19.6777 1.23047 19.6777 0.791016C19.6777 0.351562 19.3164 0 18.877 0L0.78125 0C0.341797 0 0 0.351562 0 0.791016C0 1.23047 0.341797 1.57227 0.78125 1.57227Z"
+                            fill="currentColor"
+                          />
+                        </g>
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      class="rss-detail-mode-btn mode-enhanced"
+                      :class="{ active: rssDetailMode === 'enhanced' }"
+                      :disabled="!isRssEnhancedModeEnabled(activeArticle)"
+                      :data-tooltip="getRssDetailModeTooltip('enhanced', activeArticle)"
+                      role="tab"
+                      aria-label="增强模式"
+                      :aria-selected="rssDetailMode === 'enhanced'"
+                      @click="setRssDetailMode('enhanced', activeArticle)"
+                    >
+                      <svg
+                        class="icon-svg rss-detail-mode-icon"
+                        version="1.1"
+                        xmlns="http://www.w3.org/2000/svg"
+                        xmlns:xlink="http://www.w3.org/1999/xlink"
+                        viewBox="0 0 37.8418 29.834"
+                        aria-hidden="true"
+                      >
+                        <g>
+                          <rect
+                            height="29.834"
+                            opacity="0"
+                            width="37.8418"
+                            x="0"
+                            y="0"
+                          />
+                          <path
+                            d="M30.2539 18.0078L30.2539 20.8887C30.2539 22.9004 29.2383 23.916 27.1875 23.916L10.2832 23.916C8.25195 23.916 7.22656 22.9102 7.22656 20.8887L7.22656 18.0078C7.22656 17.5 7.50977 17.2168 8.00781 17.2168C8.50586 17.2168 8.79883 17.5 8.79883 18.0078L8.79883 20.8105C8.79883 21.8262 9.33594 22.3438 10.3125 22.3438L27.168 22.3438C28.125 22.3438 28.6816 21.8262 28.6816 20.8105L28.6816 18.0078C28.6816 17.5 28.9551 17.2168 29.4629 17.2168C29.9707 17.2168 30.2539 17.5 30.2539 18.0078ZM9.27734 14.668C9.27734 15.3711 8.71094 15.9473 8.00781 15.9473C7.31445 15.9473 6.73828 15.3711 6.73828 14.668C6.73828 13.9746 7.31445 13.4082 8.00781 13.4082C8.71094 13.4082 9.27734 13.9746 9.27734 14.668ZM30.7324 14.668C30.7324 15.3711 30.1562 15.9473 29.4629 15.9473C28.7598 15.9473 28.1934 15.3711 28.1934 14.668C28.1934 13.9648 28.7598 13.4082 29.4629 13.4082C30.1562 13.4082 30.7324 13.9746 30.7324 14.668ZM22.9199 6.55273C22.9199 6.90499 23.0212 7.23424 23.2013 7.50977L10.3125 7.50977C9.33594 7.50977 8.79883 8.02734 8.79883 9.04297L8.79883 11.3574C8.79883 11.8652 8.50586 12.1582 8.00781 12.1582C7.50977 12.1582 7.22656 11.8652 7.22656 11.3574L7.22656 8.96484C7.22656 6.94336 8.25195 5.9375 10.2832 5.9375L23.0299 5.9375C22.9582 6.12877 22.9199 6.33611 22.9199 6.55273Z"
+                            fill="currentColor"
+                          />
+                          <path
+                            d="M15.5371 19.5117C15.8887 19.5117 16.1328 19.3457 16.2793 18.8867L16.9922 16.8066L20.4883 16.8066L21.2012 18.8867C21.3477 19.3359 21.6016 19.5117 21.9531 19.5117C22.3828 19.5117 22.6758 19.2285 22.6758 18.8379C22.6758 18.6816 22.6465 18.5449 22.5684 18.3301L19.834 10.957C19.6387 10.4492 19.2676 10.1855 18.7305 10.1855C18.2031 10.1855 17.8418 10.4492 17.6562 10.957L14.9121 18.3301C14.8438 18.5449 14.8047 18.6816 14.8047 18.8281C14.8047 19.2383 15.0977 19.5117 15.5371 19.5117ZM17.3926 15.6348L18.6914 11.8555L18.7988 11.8555L20.0977 15.6348ZM29.4727 11.7773C29.707 11.7773 29.8633 11.6211 29.8926 11.3965C30.4004 8.08594 30.8398 7.45117 34.2969 6.98242C34.5312 6.95312 34.6973 6.78711 34.6973 6.5625C34.6973 6.33789 34.5312 6.17188 34.2969 6.14258C30.8301 5.67383 30.5273 5.03906 29.8926 1.71875C29.8535 1.49414 29.6875 1.33789 29.4727 1.33789C29.248 1.33789 29.082 1.50391 29.0527 1.72852C28.5547 4.99023 28.1055 5.67383 24.6484 6.14258C24.4141 6.17188 24.248 6.33789 24.248 6.5625C24.248 6.78711 24.4141 6.95312 24.6484 6.98242C28.1152 7.45117 28.3984 8.08594 29.0527 11.4062C29.0918 11.6211 29.248 11.7773 29.4727 11.7773ZM33.8867 13.75C34.0723 13.75 34.1797 13.623 34.2188 13.4375C34.5508 11.7969 34.4238 11.7578 36.1914 11.4746C36.3867 11.4453 36.5039 11.3184 36.5039 11.1426C36.5039 10.9766 36.3867 10.8398 36.2109 10.8105C34.4238 10.5078 34.5508 10.4492 34.2188 8.83789C34.1797 8.65234 34.0625 8.53516 33.8867 8.53516C33.7109 8.53516 33.584 8.66211 33.5547 8.83789C33.2324 10.4492 33.3594 10.5078 31.5625 10.8105C31.377 10.8398 31.2695 10.9766 31.2695 11.1426C31.2695 11.2988 31.377 11.4453 31.5625 11.4746C33.3594 11.7578 33.2324 11.7969 33.5547 13.4668C33.584 13.6328 33.7207 13.75 33.8867 13.75Z"
+                            fill="currentColor"
+                          />
+                        </g>
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      class="rss-detail-mode-btn mode-summary"
+                      :class="{ active: rssDetailMode === 'summary' }"
+                      :disabled="!isRssSummaryModeEnabled(activeArticle)"
+                      :data-tooltip="getRssDetailModeTooltip('summary', activeArticle)"
+                      role="tab"
+                      aria-label="摘要模式"
+                      :aria-selected="rssDetailMode === 'summary'"
+                      @click="setRssDetailMode('summary', activeArticle)"
+                    >
+                      <svg
+                        class="icon-svg rss-detail-mode-icon"
+                        version="1.1"
+                        xmlns="http://www.w3.org/2000/svg"
+                        xmlns:xlink="http://www.w3.org/1999/xlink"
+                        viewBox="0 0 20.0391 16.9238"
+                        aria-hidden="true"
+                      >
+                        <g>
+                          <rect
+                            height="16.9238"
+                            opacity="0"
+                            width="20.0391"
+                            x="0"
+                            y="0"
+                          />
+                          <path
+                            d="M0.78125 16.9043L18.877 16.9043C19.3164 16.9043 19.6777 16.5625 19.6777 16.123C19.6777 15.6836 19.3164 15.332 18.877 15.332L0.78125 15.332C0.341797 15.332 0 15.6836 0 16.123C0 16.5625 0.341797 16.9043 0.78125 16.9043Z"
+                            fill="currentColor"
+                          />
+                          <path
+                            d="M0.78125 11.7969L18.877 11.7969C19.3164 11.7969 19.6777 11.4551 19.6777 11.0156C19.6777 10.5664 19.3164 10.2246 18.877 10.2246L0.78125 10.2246C0.341797 10.2246 0 10.5664 0 11.0156C0 11.4551 0.341797 11.7969 0.78125 11.7969Z"
+                            fill="currentColor"
+                          />
+                          <path
+                            d="M13.4668 6.68945L18.877 6.68945C19.3164 6.68945 19.6777 6.33789 19.6777 5.89844C19.6777 5.45898 19.3164 5.11719 18.877 5.11719L13.4668 5.11719C13.0273 5.11719 12.6855 5.45898 12.6855 5.89844C12.6855 6.33789 13.0273 6.68945 13.4668 6.68945Z"
+                            fill="currentColor"
+                          />
+                          <path
+                            d="M13.4668 1.57227L18.877 1.57227C19.3164 1.57227 19.6777 1.23047 19.6777 0.791016C19.6777 0.351562 19.3164 0 18.877 0L13.4668 0C13.0273 0 12.6855 0.351562 12.6855 0.791016C12.6855 1.23047 13.0273 1.57227 13.4668 1.57227Z"
+                            fill="currentColor"
+                          />
+                          <path
+                            d="M2.69531 7.24609C3.93555 7.24609 4.96094 6.41602 4.96094 5.09766C4.96094 3.84766 4.11133 3.02734 2.94922 3.02734C2.13867 3.02734 1.57227 3.45703 1.37695 4.29688L1.5332 4.31641C1.63086 2.58789 2.76367 1.42578 4.38477 1.34766C4.75586 1.32812 5.0293 1.06445 5.0293 0.693359C5.0293 0.244141 4.6582 0.00976562 4.17969 0.00976562C1.97266 0.00976562 0.0292969 1.88477 0.0292969 4.35547C0.0292969 6.11328 1.20117 7.24609 2.69531 7.24609ZM8.67188 7.24609C9.91211 7.24609 10.9473 6.41602 10.9473 5.09766C10.9473 3.84766 10.0977 3.02734 8.92578 3.02734C8.125 3.02734 7.55859 3.45703 7.35352 4.29688L7.50977 4.31641C7.60742 2.58789 8.74023 1.41602 10.3516 1.34766C10.7324 1.32812 11.0156 1.06445 11.0156 0.693359C11.0156 0.244141 10.6543 0.00976562 10.1562 0.00976562C7.96875 0.00976562 6.00586 1.88477 6.00586 4.35547C6.00586 6.11328 7.1875 7.24609 8.67188 7.24609Z"
+                            fill="currentColor"
+                          />
+                        </g>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          <div class="detail-content markdown-body" id="scroll-container">
+          <div
+            :class="[
+              'detail-content',
+              'markdown-body',
+              activeArticle.source_type === 'rss'
+                ? 'detail-content-rss'
+                : 'detail-content-standard',
+            ]"
+            id="scroll-container"
+            ref="detailScrollContainerRef"
+            @scroll="handleDetailContentScroll"
+          >
             <!-- 预览模式 -->
             <div v-if="!isEditingSummary">
-              <div v-html="renderMarkdown(activeArticle.parsedBody)"></div>
+              <div
+                v-if="activeArticle.source_type === 'rss'"
+                class="rss-reader-layout"
+                :class="{ 'has-floating-toc': showRssFloatingToc }"
+              >
+                <aside
+                  v-if="showRssFloatingToc"
+                  class="rss-floating-toc"
+                  aria-label="文章目录"
+                >
+                  <div class="rss-floating-toc-list">
+                    <button
+                      v-for="item in rssTocItems"
+                      :key="item.id"
+                      type="button"
+                      class="rss-floating-toc-item"
+                      :class="{ 'is-active': activeRssTocId === item.id }"
+                      :data-level="item.level"
+                      @click="scrollToRssHeading(item.id)"
+                    >
+                      <span class="rss-floating-toc-dot"></span>
+                      <span class="rss-floating-toc-copy">
+                        <span class="rss-floating-toc-level"
+                          >H{{ item.level }}</span
+                        >
+                        <span class="rss-floating-toc-text"
+                          >{{ item.text }}</span
+                        >
+                      </span>
+                    </button>
+                  </div>
+                </aside>
+
+                <div class="rss-reader-main">
+                  <div ref="rssBodyShellRef" class="rss-body-shell">
+                    <div
+                      ref="rssBodyContentRef"
+                      class="rss-body-content"
+                      v-html="renderMarkdown(getDetailBodyText(activeArticle))"
+                    ></div>
+                  </div>
+
+                  <div
+                    v-if="rssDetailMode === 'enhanced' && (getRssCoverMedia(activeArticle) || getRssMediaSections(activeArticle).length > 0)"
+                    class="rss-visual-section"
+                    :class="`is-${getRssImageDisplayMode(activeArticle)}`"
+                  >
+                    <div
+                      v-if="getRssCoverMedia(activeArticle)"
+                      class="rss-cover-hero"
+                    >
+                      <button
+                        type="button"
+                        class="rss-cover-button"
+                        @click="openImagePreview({ url: getRssCoverMedia(activeArticle).url, name: getRssCoverMedia(activeArticle).name, caption: getRssCoverMedia(activeArticle).caption, label: '封面图', category: 'cover', hostname: getRssCoverMedia(activeArticle).hostname, width: getRssCoverMedia(activeArticle).width, height: getRssCoverMedia(activeArticle).height, aspectRatio: getRssCoverMedia(activeArticle).aspectRatio, isWechat: getRssCoverMedia(activeArticle).isWechat }, $event)"
+                        :title="getRssCoverMedia(activeArticle).name || '封面图'"
+                      >
+                        <div
+                          v-if="hasRssImageLoadError(getRssCoverMedia(activeArticle).url)"
+                          class="rss-image-fallback-panel rss-cover-fallback"
+                        >
+                          <span class="rss-image-fallback-badge"
+                            >封面图加载失败</span
+                          >
+                          <span class="rss-image-fallback-text">
+                            {{ getRssCoverMedia(activeArticle).name ||
+                            '该封面图暂时无法显示' }}
+                          </span>
+                          <span class="rss-image-fallback-hint"
+                            >仍可点击卡片在浏览器中查看原图</span
+                          >
+                        </div>
+                        <img
+                          v-else
+                          class="rss-cover-image"
+                          :src="getRssCoverMedia(activeArticle).url"
+                          :alt="getRssCoverMedia(activeArticle).name || '封面图'"
+                          :style="getRssCoverMediaStyle(activeArticle)"
+                          loading="lazy"
+                          referrerpolicy="no-referrer"
+                          @load="clearRssImageLoadError(getRssCoverMedia(activeArticle).url)"
+                          @error="markRssImageLoadError(getRssCoverMedia(activeArticle).url)"
+                        />
+                        <span class="rss-cover-overlay">
+                          <span class="rss-cover-label">封面图</span>
+                          <span class="rss-cover-name">
+                            {{ getRssCoverMedia(activeArticle).name ||
+                            '点击站内预览' }}
+                          </span>
+                        </span>
+                      </button>
+                    </div>
+                    <div
+                      v-for="section in getRssMediaSections(activeArticle)"
+                      :key="section.key"
+                      class="rss-media-strip"
+                      :class="[
+                        `is-${section.key}-strip`,
+                        `is-${getRssImageDisplayMode(activeArticle)}`,
+                      ]"
+                    >
+                      <div class="rss-media-strip-header">
+                        <div class="rss-media-strip-title-wrap">
+                          <span class="rss-media-strip-title"
+                            >{{ section.title }}</span
+                          >
+                          <span class="rss-media-strip-subtitle">
+                            {{ section.key === 'external' ?
+                            '外链资源不会入附件区' :
+                            '点击卡片可站内预览，仍可打开原图' }}
+                          </span>
+                        </div>
+                        <span class="rss-media-strip-count">
+                          {{ section.items.length }} 张
+                        </span>
+                      </div>
+                      <div
+                        class="rss-media-grid"
+                        :class="`is-${getRssImageDisplayMode(activeArticle)}`"
+                      >
+                        <button
+                          v-for="(media, index) in getRssVisibleMediaItems(section, activeArticle)"
+                          :key="media.url + '_' + index"
+                          type="button"
+                          class="rss-media-card"
+                          :class="`is-${section.key}-card`"
+                          @click="openImagePreview({ url: media.url, name: media.name, caption: media.caption, label: section.key === 'attachment' ? '附件图片' : section.key === 'external' ? '外链图片' : '正文图片', category: section.key, hostname: media.hostname, width: media.width, height: media.height, aspectRatio: media.aspectRatio, isWechat: media.isWechat, groupId: media.groupId, groupSize: media.groupSize, groupIndex: media.groupIndex, gallery: section.items, index }, $event)"
+                          :title="media.name"
+                        >
+                          <div
+                            v-if="hasRssImageLoadError(media.url)"
+                            class="rss-image-fallback-panel rss-media-thumb rss-media-thumb-fallback"
+                          >
+                            <span class="rss-image-fallback-badge"
+                              >加载失败</span
+                            >
+                            <span class="rss-image-fallback-text">
+                              {{ media.name || '该图片暂时无法显示' }}
+                            </span>
+                          </div>
+                          <img
+                            v-else
+                            class="rss-media-thumb"
+                            :src="media.url"
+                            :alt="media.name"
+                            :style="getRssMediaThumbStyle(media, section.key)"
+                            loading="lazy"
+                            referrerpolicy="no-referrer"
+                            @load="clearRssImageLoadError(media.url)"
+                            @error="markRssImageLoadError(media.url)"
+                          />
+                          <span class="rss-media-badge">
+                            {{ getRssImageCategoryLabel(section.key) }}
+                          </span>
+                          <span class="rss-media-caption"
+                            >{{ media.name }}</span
+                          >
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div
+                v-else
+                v-html="renderMarkdown(getDetailBodyText(activeArticle))"
+              ></div>
+              <div
+                v-if="!isEditingSummary && activeArticle.searchSnippetHtml"
+                class="search-result-snippet"
+                v-html="activeArticle.searchSnippetHtml"
+              ></div>
             </div>
             <!-- 编辑模式 -->
             <div v-else class="summary-edit-container">
               <textarea id="summary-editor"></textarea>
             </div>
             <div
-              v-if="!isEditingSummary && activeArticle.parsedAttachments && activeArticle.parsedAttachments.length > 0"
+              v-if="!isEditingSummary && activeArticle.parsedAttachments && activeArticle.parsedAttachments.length > 0 && (activeArticle.source_type !== 'rss' || rssDetailMode === 'enhanced')"
               class="attachments-section"
               id="attachments-area"
             >
@@ -3245,7 +4872,7 @@
               <button
                 ref="copyBtnRef"
                 class="action-btn btn-copy"
-                data-tooltip="复制"
+                :data-tooltip="getArticleCopyTooltip(activeArticle)"
                 @click="copyText(activeArticle, $event)"
               >
                 <svg
@@ -3351,9 +4978,7 @@
             </svg>
             <h3>确认删除</h3>
           </div>
-          <p class="delete-confirm-message">
-            点击空白区域可取消
-          </p>
+          <p class="delete-confirm-message">点击空白区域可取消</p>
           <div class="delete-confirm-options">
             <button
               class="delete-option delete-option-hard"
@@ -3373,7 +4998,242 @@
         </div>
       </div>
 
+      <div
+        v-if="imagePreviewState && currentView === 'detail'"
+        class="image-preview-overlay"
+        @click.self="closeImagePreview"
+      >
+        <div
+          class="image-preview-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-label="图片预览"
+        >
+          <div class="image-preview-toolbar">
+            <div class="image-preview-meta">
+              <div class="meta-header">
+                <span class="image-preview-label">
+                  {{ imagePreviewState.label || '图片预览' }}
+                </span>
+                <span
+                  v-if="imagePreviewState.total > 1"
+                  class="image-preview-count"
+                >
+                  {{ imagePreviewState.index + 1 }} / {{ imagePreviewState.total }}
+                </span>
+              </div>
+              <span class="image-preview-title">
+                {{ imagePreviewState.name ||
+                '已在应用内打开图片预览，可继续在浏览器查看原图。' }}
+              </span>
+              <span
+                v-if="imagePreviewState.caption && imagePreviewState.caption !== imagePreviewState.name"
+                class="image-preview-caption"
+              >
+                {{ imagePreviewState.caption }}
+              </span>
+              <div
+                v-if="imagePreviewMetaItems.length > 0"
+                class="image-preview-meta-tags"
+              >
+                <span
+                  v-for="item in imagePreviewMetaItems"
+                  :key="item.key"
+                  class="image-preview-meta-tag"
+                >
+                  {{ item.text }}
+                </span>
+              </div>
+            </div>
+            <div class="image-preview-actions">
+              <div class="action-group">
+                <button
+                  type="button"
+                  class="image-preview-action icon-btn"
+                  :disabled="!hasImagePreviewZoom"
+                  title="缩小"
+                  @click="zoomImagePreview(-0.18)"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    aria-hidden="true"
+                  >
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  class="image-preview-action text-btn"
+                  :disabled="!hasImagePreviewZoom"
+                  title="重置"
+                  @click="resetImagePreviewZoom"
+                >
+                  {{ imagePreviewZoomPercent }}
+                </button>
+                <button
+                  type="button"
+                  class="image-preview-action icon-btn"
+                  :disabled="!hasImagePreviewZoom"
+                  title="放大"
+                  @click="zoomImagePreview(0.18)"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    aria-hidden="true"
+                  >
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                </button>
+              </div>
+              <button
+                type="button"
+                class="image-preview-action icon-btn"
+                title="在浏览器打开"
+                @click="openBrowser(imagePreviewState.url, $event)"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"
+                  ></path>
+                  <polyline points="15 3 21 3 21 9"></polyline>
+                  <line x1="10" y1="14" x2="21" y2="3"></line>
+                </svg>
+              </button>
+              <button
+                type="button"
+                class="image-preview-action image-preview-close"
+                @click="closeImagePreview"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+
+          <div
+            ref="imagePreviewStageRef"
+            class="image-preview-stage"
+            @wheel="handleImagePreviewWheel"
+          >
+            <button
+              v-if="imagePreviewState.total > 1"
+              type="button"
+              class="image-preview-nav image-preview-nav-prev"
+              :disabled="!hasPreviewPrev"
+              @click="openAdjacentPreviewImage(-1)"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
+            </button>
+            <div v-if="imagePreviewLoadError" class="image-preview-fallback">
+              <span class="image-preview-fallback-badge">图片暂时无法显示</span>
+              <span class="image-preview-fallback-text">
+                {{ imagePreviewState.name ||
+                '当前图片加载失败，你仍然可以在浏览器中尝试打开原图。' }}
+              </span>
+              <span
+                v-if="imagePreviewState.caption"
+                class="image-preview-fallback-text"
+              >
+                {{ imagePreviewState.caption }}
+              </span>
+              <div class="image-preview-fallback-actions">
+                <button
+                  type="button"
+                  class="image-preview-action"
+                  @click="openBrowser(imagePreviewState.url, $event)"
+                >
+                  在浏览器打开原图
+                </button>
+              </div>
+            </div>
+            <div v-else class="image-preview-canvas">
+              <div class="image-preview-media" :style="imagePreviewMediaStyle">
+                <img
+                  class="image-preview-image"
+                  :src="imagePreviewState.url"
+                  :alt="imagePreviewState.name || imagePreviewState.label || '图片预览'"
+                  referrerpolicy="no-referrer"
+                  @load="handleImagePreviewLoaded"
+                  @error="imagePreviewLoadError = true"
+                />
+              </div>
+            </div>
+            <button
+              v-if="imagePreviewState.total > 1"
+              type="button"
+              class="image-preview-nav image-preview-nav-next"
+              :disabled="!hasPreviewNext"
+              @click="openAdjacentPreviewImage(1)"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </button>
+          </div>
+
+          <div
+            v-if="imagePreviewState.total > 1"
+            class="image-preview-thumbnails"
+          >
+            <button
+              v-for="(item, thumbIndex) in imagePreviewState.gallery"
+              :key="item.url + '_' + thumbIndex"
+              type="button"
+              class="image-preview-thumb"
+              :class="{ 'is-active': thumbIndex === imagePreviewState.index }"
+              @click="setImagePreviewIndex(thumbIndex)"
+            >
+              <img
+                class="image-preview-thumb-image"
+                :src="item.url"
+                :alt="item.name || item.label || '缩略图'"
+                loading="lazy"
+                referrerpolicy="no-referrer"
+              />
+              <span class="image-preview-thumb-label">
+                {{ item.name || item.label || `图片 ${thumbIndex + 1}` }}
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- Prompt 编辑详情页 -->
+      <transition name="slide">
         <div
           v-if="currentView === 'prompt_editor'"
           class="detail-view"
@@ -3382,9 +5242,7 @@
           <div class="detail-header">
             <div class="provider-row">
               <!-- 左侧：AI 标识 -->
-              <span
-                class="provider-info"
-              >
+              <span class="provider-info">
                 <span
                   v-if="localAiIconSvg && !iconLoadError"
                   class="inline-ai-icon"

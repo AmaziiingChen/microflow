@@ -12,8 +12,23 @@ from email.mime.image import MIMEImage
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from src.utils.text_cleaner import strip_emoji
+from src.utils.ai_markdown import resolve_article_summary_payload
 
 logger = logging.getLogger(__name__)
+
+
+def _markdown_preview_to_plain_text(markdown_text: str) -> str:
+    text = str(markdown_text or "")
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"!\[[^\]]*]\([^)]+\)", " [图片] ", text)
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    text = re.sub(r"`{1,3}.*?`{1,3}", " ", text, flags=re.S)
+    text = re.sub(r"(^|\n)\s{0,3}#{1,6}\s*", " ", text)
+    text = re.sub(r"(^|\n)\s*>\s*", " ", text)
+    text = re.sub(r"(^|\n)\s*[-*+]\s*", " ", text)
+    text = re.sub(r"\n+", " ", text)
+    text = re.sub(r"\s{2,}", " ", text).strip()
+    return strip_emoji(text[:200])
 
 
 class EmailService:
@@ -251,12 +266,13 @@ class EmailService:
         source_name = article_data.get("source_name", "")
         category = article_data.get("category", "")
         date = article_data.get("date", "")
-        summary = article_data.get("summary", "")
         url = article_data.get("url", "")
+        summary_payload = resolve_article_summary_payload(article_data)
 
-        # 提取摘要纯文本预览（去除 HTML 标签）
-        summary_text = re.sub(r"<[^>]+>", "", summary)
-        summary_preview = strip_emoji(summary_text[:200])
+        # 提取摘要纯文本预览（优先使用新字段，再回退兼容字段）
+        summary_preview = _markdown_preview_to_plain_text(
+            summary_payload.get("preview_markdown", ""),
+        )
 
         # 邮件主题
         subject = f"【MicroFlow】：{title[:30]}{'...' if len(title) > 30 else ''}"

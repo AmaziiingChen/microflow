@@ -1,19 +1,24 @@
 import logging
 import time
 import threading
+import hashlib
+import json
+import re
 from openai import OpenAI
 import os
 import random
 from contextlib import contextmanager
-from typing import Optional
+from typing import Optional, Dict, Any, List
 from dotenv import load_dotenv
 from src.utils.text_cleaner import strip_emoji
+from src.utils.ai_markdown import build_tag_items, extract_leading_tags, normalize_tags
 
 load_dotenv()
 logger = logging.getLogger(__name__)
 
 # 全局配置服务实例（延迟初始化）
 _config_service = None
+_database = None
 
 
 def _get_config_service():
@@ -27,19 +32,32 @@ def _get_config_service():
     return _config_service
 
 
+def _get_database():
+    """获取数据库实例（延迟导入避免循环依赖）"""
+    global _database
+    if _database is None:
+        from src.database import db
+
+        _database = db
+    return _database
+
+
 class LLMService:
     """
     AI 处理层：支持任何兼容 OpenAI 标准的 API服务
     """
 
     # 重试配置
-    MAX_RETRIES = 5
+    MAX_RETRIES = 3
     BASE_DELAY = 1.0  # 初始延迟 1 秒
     MAX_DELAY = 32.0  # 最大延迟 32 秒
 
     # 并发控制：批量总结 2 路，手动总结 1 路
     MAX_BATCH_CONCURRENCY = 2
     MAX_MANUAL_CONCURRENCY = 1
+    RSS_CHUNK_TRIGGER_LENGTH = 7000
+    RSS_CHUNK_TARGET_LENGTH = 3600
+    RSS_CHUNK_HARD_LIMIT = 4600
 
     def __init__(
         self,
@@ -111,6 +129,89 @@ class LLMService:
 {raw_text}
 """
 
+        self.rss_system_prompt = """# Role: RSS 阅读排版编辑器
+
+## 任务目标
+你要把 RSS/Atom 订阅内容整理成适合卡片阅读的 Markdown 文本，同时保留原文事实，不要编造。
+
+## 输出要求
+1. 第一行必须输出 3 个彩色标签，格式固定为：【标签1】【标签2】【标签3】
+2. 标签要简洁有力，每个不超过 15 个字，优先概括主题、对象、动作。
+3. 正文必须使用 Markdown 排版，优先使用 ###/#### 标题、- 列表、** 加粗。
+4. 如果原文包含图片或链接，请尽量保留对应的 Markdown 形式，不能删除关键信息。
+5. 如果内容较长，请先提炼结构，再按段落重排，保持阅读顺畅。
+6. 不要使用 emoji，不要输出多余的客套话。
+
+## 排版策略
+- 标题要清晰，避免一大段平铺直叙。
+- 关键词可适度加粗。
+- 图片尽量放在对应段落附近。
+- 对纯摘要型内容，输出更短、更密度高的总结。
+
+## Input:
+{raw_text}
+"""
+
+        self.rss_format_system_prompt = """# Role: RSS Markdown 排版编辑器
+
+## 任务目标
+将 RSS/Atom 原文整理成更适合阅读的 Markdown 正文，但不要额外编造事实，也不要加入总结标签行。
+
+## 输出要求
+1. 只输出 Markdown 正文，不要输出解释，不要输出 JSON。
+2. 不要输出任何 `【标签】` 行。
+3. 优先使用 `###` / `####` 标题、列表、加粗整理结构。
+4. 尽量保留原文中的图片、链接、引用和列表。
+5. 如果原文已经结构清晰，做轻度润色即可，不要过度改写。
+6. 不要使用 emoji，不要加“以下为整理后内容”等提示语。
+"""
+
+        self.rss_summary_system_prompt = """# Role: RSS 摘要与标签生成器
+
+## 任务目标
+基于 RSS 正文输出一个适合卡片阅读的精简摘要，并生成 3 个彩色标签。
+
+## 输出格式
+1. 第一行必须是 3 个标签，格式固定：`【标签1】【标签2】【标签3】`
+2. 第二行开始输出 Markdown 摘要正文。
+
+## 约束
+1. 每个标签不超过 15 个字。
+2. 标签优先覆盖：主题、对象、动作。
+3. 标签不要和日期、来源名、任务名称做简单重复。
+4. 摘要正文必须使用 Markdown，可使用 `###` / `-` / `**`。
+5. 摘要要突出最值得读的内容，不要照搬整篇全文。
+6. 不要输出 JSON，不要输出客套话，不要使用 emoji。
+"""
+
+        self.rss_chunk_summary_system_prompt = """# Role: RSS 长文分段提炼器
+
+## 任务目标
+你将收到一篇 RSS 长文中的一个分段，请提炼这一段最值得保留的信息，供后续汇总使用。
+
+## 输出要求
+1. 只输出 Markdown，不要输出标签行，不要输出 JSON。
+2. 优先保留该分段的核心观点、事实、步骤、结论。
+3. 可以使用 `###`、`-`、`**`，但要简洁，不要复写原文。
+4. 不要编造，不要加入客套话，不要使用 emoji。
+"""
+
+        self.rss_summary_synthesis_system_prompt = """# Role: RSS 长文汇总编辑器
+
+## 任务目标
+你会收到一篇 RSS 长文的多段摘要，请将它们汇总成最终的阅读摘要，并输出 3 个标签。
+
+## 输出格式
+1. 第一行必须是 3 个标签，格式固定：`【标签1】【标签2】【标签3】`
+2. 第二行开始输出 Markdown 摘要正文。
+
+## 约束
+1. 每个标签不超过 15 个字。
+2. 标签优先覆盖主题、对象、动作，并按重要性排序。
+3. 摘要要整合多段信息，避免重复。
+4. 不要输出 JSON，不要解释过程，不要使用 emoji。
+"""
+
         if not self.api_key:
             logger.warning("未检测到 API Key，AI 总结功能将无法工作！")
             return
@@ -120,13 +221,72 @@ class LLMService:
     def _init_client(self):
         """初始化或重新初始化 OpenAI 客户端"""
         if self.api_key:
-            self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
+            self.client = OpenAI(
+                api_key=self.api_key,
+                base_url=self.base_url,
+                max_retries=0,
+                timeout=45.0,
+            )
             logger.info(
                 f"已初始化 AI 客户端，模型: {self.model_name}，地址: {self.base_url}"
             )
         else:
             self.client = None
             logger.warning("API Key 为空，客户端未初始化")
+
+    def _normalize_openai_error(self, error_msg: str) -> str:
+        """
+        将 OpenAI SDK / 兼容接口返回的底层错误归一化成更可读的提示。
+        """
+        raw = str(error_msg or "").strip()
+        if not raw:
+            return "未知错误"
+
+        lowered = raw.lower()
+
+        if "401" in lowered or "authentication" in lowered or "invalid api key" in lowered:
+            return "API Key 无效或认证失败"
+
+        if "403" in lowered or "permission" in lowered or "forbidden" in lowered:
+            return "当前 API Key 没有该模型或接口的访问权限"
+
+        if "404" in lowered or "not found" in lowered:
+            return "接口路径或模型名称错误，请检查 Base URL 与模型名称"
+
+        if "400" in lowered or "bad request" in lowered:
+            return f"请求参数无效：{raw}"
+
+        if (
+            "insufficient_quota" in lowered
+            or "insufficient_balance" in lowered
+            or "quota exceeded" in lowered
+            or "balance" in lowered
+            or "402" in lowered
+        ):
+            return f"API 余额不足或额度超限：{raw}"
+
+        if "timeout" in lowered or "timed out" in lowered:
+            return "请求超时，长内容可能需要更久，请稍后重试"
+
+        if (
+            "connection error" in lowered
+            or "connecterror" in lowered
+            or "apiconnectionerror" in lowered
+            or "connection" in lowered
+            or "dns" in lowered
+            or "name or service not known" in lowered
+            or "nodename nor servname provided" in lowered
+            or "failed to establish a new connection" in lowered
+        ):
+            return "无法连接到 AI 服务，请检查 Base URL、网络环境或代理设置"
+
+        if "429" in lowered or "rate limit" in lowered or "rate_limit" in lowered:
+            return f"请求过于频繁或服务限流：{raw}"
+
+        if any(code in lowered for code in ("500", "502", "503", "504", "overloaded")):
+            return f"AI 服务暂时不可用：{raw}"
+
+        return raw
 
     def _is_retryable_error(self, error_msg: str) -> bool:
         """
@@ -152,6 +312,10 @@ class LLMService:
         ]
         error_lower = error_msg.lower()
         return any(pattern in error_lower for pattern in retryable_patterns)
+
+    def _is_timeout_error(self, error_msg: str) -> bool:
+        error_lower = str(error_msg or "").lower()
+        return "timeout" in error_lower or "timed out" in error_lower
 
     # ==================== 取消控制 ====================
 
@@ -188,6 +352,370 @@ class LLMService:
         """统一构造可被上层识别的失败结果"""
         return f"{prefix} {message}".strip()
 
+    def _build_ai_cache_payload(
+        self,
+        *,
+        cache_scope: str,
+        system_prompt: str,
+        user_content: str,
+    ) -> Dict[str, str]:
+        base_url = str(self.base_url or "").strip()
+        model_name = str(self.model_name or "").strip()
+        content_hash = hashlib.sha256(user_content.encode("utf-8")).hexdigest()
+        prompt_hash = hashlib.sha256(system_prompt.encode("utf-8")).hexdigest()
+        cache_key = hashlib.sha256(
+            json.dumps(
+                {
+                    "scope": cache_scope,
+                    "model": model_name,
+                    "base_url": base_url,
+                    "content_hash": content_hash,
+                    "prompt_hash": prompt_hash,
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest()
+        return {
+            "cache_key": cache_key,
+            "cache_scope": cache_scope,
+            "content_hash": content_hash,
+            "prompt_hash": prompt_hash,
+            "model_name": model_name,
+            "base_url": base_url,
+        }
+
+    def _read_cached_result(self, cache_payload: Dict[str, str]) -> Optional[str]:
+        try:
+            cache_entry = _get_database().get_ai_result_cache(
+                cache_payload.get("cache_key", "")
+            )
+        except Exception as e:
+            logger.debug(f"读取 AI 缓存失败: {e}")
+            return None
+
+        if not cache_entry:
+            return None
+
+        result_text = str(cache_entry.get("result_text") or "").strip()
+        if not result_text:
+            return None
+
+        logger.info(
+            "命中 AI 缓存: scope=%s, model=%s",
+            cache_payload.get("cache_scope", ""),
+            cache_payload.get("model_name", ""),
+        )
+        return result_text
+
+    def _write_cached_result(
+        self,
+        cache_payload: Dict[str, str],
+        result_text: str,
+    ) -> None:
+        cleaned_result = str(result_text or "").strip()
+        if not cleaned_result or cleaned_result.startswith(("⚠️", "❌")):
+            return
+
+        try:
+            _get_database().upsert_ai_result_cache(
+                cache_key=cache_payload.get("cache_key", ""),
+                cache_scope=cache_payload.get("cache_scope", ""),
+                content_hash=cache_payload.get("content_hash", ""),
+                prompt_hash=cache_payload.get("prompt_hash", ""),
+                model_name=cache_payload.get("model_name", ""),
+                base_url=cache_payload.get("base_url", ""),
+                result_text=cleaned_result,
+            )
+        except Exception as e:
+            logger.debug(f"写入 AI 缓存失败: {e}")
+
+    def _generate_cached_with_retry(
+        self,
+        *,
+        cache_scope: str,
+        title: str,
+        raw_text: str,
+        system_prompt: str,
+        user_content: str,
+        priority: str,
+        cancel_event: Optional[threading.Event],
+        target_label: str,
+    ) -> str:
+        cache_payload = self._build_ai_cache_payload(
+            cache_scope=cache_scope,
+            system_prompt=system_prompt,
+            user_content=user_content,
+        )
+        cached_result = self._read_cached_result(cache_payload)
+        if cached_result is not None:
+            return cached_result
+
+        result = self._generate_with_retry(
+            title=title,
+            raw_text=raw_text,
+            system_prompt=system_prompt,
+            user_content=user_content,
+            priority=priority,
+            cancel_event=cancel_event,
+            target_label=target_label,
+        )
+        self._write_cached_result(cache_payload, result)
+        return result
+
+    def _split_rss_markdown_chunks(self, markdown_text: str) -> List[str]:
+        text = str(markdown_text or "").strip()
+        if not text:
+            return []
+
+        raw_blocks = [
+            block.strip()
+            for block in re.split(r"\n\s*\n", text)
+            if block and block.strip()
+        ]
+        if not raw_blocks:
+            return [text]
+
+        normalized_blocks: List[str] = []
+        for block in raw_blocks:
+            if len(block) <= self.RSS_CHUNK_HARD_LIMIT:
+                normalized_blocks.append(block)
+                continue
+
+            lines = [line.rstrip() for line in block.splitlines() if line.strip()]
+            current_lines: List[str] = []
+            current_length = 0
+            for line in lines:
+                line_length = len(line) + 1
+                if (
+                    current_lines
+                    and current_length + line_length > self.RSS_CHUNK_HARD_LIMIT
+                ):
+                    normalized_blocks.append("\n".join(current_lines).strip())
+                    current_lines = [line]
+                    current_length = line_length
+                else:
+                    current_lines.append(line)
+                    current_length += line_length
+
+            if current_lines:
+                normalized_blocks.append("\n".join(current_lines).strip())
+
+        chunks: List[str] = []
+        current_blocks: List[str] = []
+        current_length = 0
+
+        for block in normalized_blocks:
+            block_length = len(block)
+            separator_length = 2 if current_blocks else 0
+            projected_length = current_length + separator_length + block_length
+
+            if (
+                current_blocks
+                and projected_length > self.RSS_CHUNK_HARD_LIMIT
+            ):
+                chunks.append("\n\n".join(current_blocks).strip())
+                current_blocks = [block]
+                current_length = block_length
+                continue
+
+            if (
+                current_blocks
+                and current_length >= self.RSS_CHUNK_TARGET_LENGTH
+                and block.startswith("#")
+            ):
+                chunks.append("\n\n".join(current_blocks).strip())
+                current_blocks = [block]
+                current_length = block_length
+                continue
+
+            current_blocks.append(block)
+            current_length = projected_length
+
+        if current_blocks:
+            chunks.append("\n\n".join(current_blocks).strip())
+
+        return [chunk for chunk in chunks if chunk]
+
+    def _should_use_chunked_rss_summary(self, raw_text: str) -> bool:
+        text = str(raw_text or "").strip()
+        if len(text) < self.RSS_CHUNK_TRIGGER_LENGTH:
+            return False
+        return len(self._split_rss_markdown_chunks(text)) > 1
+
+    def _summarize_rss_article_chunked(
+        self,
+        *,
+        title: str,
+        raw_text: str,
+        custom_prompt: str,
+        priority: str,
+        cancel_event: Optional[threading.Event],
+    ) -> Dict[str, Any]:
+        chunks = self._split_rss_markdown_chunks(raw_text)
+        if len(chunks) <= 1:
+            return self._summarize_rss_article_single_pass(
+                title=title,
+                raw_text=raw_text,
+                custom_prompt=custom_prompt,
+                priority=priority,
+                cancel_event=cancel_event,
+            )
+
+        logger.info("RSS 长文启用分块摘要: title=%s, chunks=%d", title, len(chunks))
+        chunk_summaries: List[str] = []
+        extra_instruction = (
+            f"\n\n源级额外要求：{custom_prompt.strip()}"
+            if custom_prompt and custom_prompt.strip()
+            else ""
+        )
+
+        for index, chunk in enumerate(chunks, start=1):
+            chunk_user_content = (
+                f"以下是 RSS 长文《{title}》的第 {index}/{len(chunks)} 个分段。"
+                f"{extra_instruction}\n\n---\n\n{chunk}"
+            )
+            chunk_result = self._generate_cached_with_retry(
+                cache_scope="rss_summary_chunk",
+                title=f"{title} - chunk {index}",
+                raw_text=chunk,
+                system_prompt=self.rss_chunk_summary_system_prompt,
+                user_content=chunk_user_content,
+                priority=priority,
+                cancel_event=cancel_event,
+                target_label="RSS 分块摘要",
+            )
+            if chunk_result.startswith(("⚠️", "❌")):
+                return {
+                    "status": "error",
+                    "message": chunk_result,
+                    "markdown": chunk_result,
+                    "summary": "",
+                    "tags": [],
+                }
+            chunk_summaries.append(f"### 分段 {index}\n{chunk_result.strip()}")
+
+        synthesis_instruction = (
+            f"\n\n源级额外要求：{custom_prompt.strip()}"
+            if custom_prompt and custom_prompt.strip()
+            else ""
+        )
+        synthesis_source = "\n\n".join(chunk_summaries)
+        synthesis_user_content = (
+            f"以下是 RSS 长文《{title}》的分段摘要，请整合为最终摘要。"
+            f"{synthesis_instruction}\n\n---\n\n{synthesis_source}"
+        )
+        markdown = self._generate_cached_with_retry(
+            cache_scope="rss_summary_final",
+            title=title,
+            raw_text=synthesis_source,
+            system_prompt=self.rss_summary_synthesis_system_prompt,
+            user_content=synthesis_user_content,
+            priority=priority,
+            cancel_event=cancel_event,
+            target_label="RSS 摘要汇总",
+        )
+        if markdown.startswith(("⚠️", "❌")):
+            return {
+                "status": "error",
+                "message": markdown,
+                "markdown": markdown,
+                "summary": "",
+                "tags": [],
+            }
+
+        tags, summary = extract_leading_tags(markdown)
+        return {
+            "status": "success",
+            "markdown": markdown,
+            "summary": summary.strip(),
+            "tags": normalize_tags(tags),
+            "tag_items": build_tag_items(tags),
+        }
+
+    def _summarize_rss_article_single_pass(
+        self,
+        *,
+        title: str,
+        raw_text: str,
+        custom_prompt: str,
+        priority: str,
+        cancel_event: Optional[threading.Event],
+    ) -> Dict[str, Any]:
+        extra_instruction = (
+            f"\n\n源级额外要求：{custom_prompt.strip()}"
+            if custom_prompt and custom_prompt.strip()
+            else ""
+        )
+        user_content = (
+            f"以下是 RSS 订阅内容《{title}》的正文，请输出三枚标签和结构化 Markdown 摘要。"
+            f"{extra_instruction}\n\n---\n\n{raw_text}"
+        )
+        markdown = self._generate_cached_with_retry(
+            cache_scope="rss_summary",
+            title=title,
+            raw_text=raw_text,
+            system_prompt=self.rss_summary_system_prompt,
+            user_content=user_content,
+            priority=priority,
+            cancel_event=cancel_event,
+            target_label="RSS 摘要生成",
+        )
+        if markdown.startswith(("⚠️", "❌")):
+            return {
+                "status": "error",
+                "message": markdown,
+                "markdown": markdown,
+                "summary": "",
+                "tags": [],
+            }
+
+        tags, summary = extract_leading_tags(markdown)
+        return {
+            "status": "success",
+            "markdown": markdown,
+            "summary": summary.strip(),
+            "tags": normalize_tags(tags),
+            "tag_items": build_tag_items(tags),
+        }
+
+    def _resolve_request_timeout(
+        self,
+        raw_text: str,
+        target_label: str,
+        priority: str,
+    ) -> float:
+        text = str(raw_text or "").strip()
+        content_length = len(text)
+        label_lower = str(target_label or "").lower()
+
+        timeout = 60.0
+        if "rss" in label_lower:
+            timeout = 90.0
+        if priority == "manual":
+            timeout += 15.0
+
+        if content_length > 4000:
+            timeout += 15.0
+        if content_length > 8000:
+            timeout += 20.0
+        if content_length > 12000:
+            timeout += 25.0
+        if content_length > 20000:
+            timeout += 30.0
+        if content_length > 32000:
+            timeout += 30.0
+
+        timeout = min(max(timeout, 45.0), 210.0)
+        logger.debug(
+            "AI 请求超时阈值已调整为 %.1fs (%s, length=%d, priority=%s)",
+            timeout,
+            target_label,
+            content_length,
+            priority,
+        )
+        return timeout
+
     @contextmanager
     def _summary_slot(self, priority: str):
         """
@@ -220,6 +748,7 @@ class LLMService:
         custom_prompt: str = None,
         priority: str = "batch",
         cancel_event: Optional[threading.Event] = None,
+        content_kind: str = "default",
     ) -> str:
         """
         调用大模型对公文正文进行结构化总结（带指数退避重试和可中断机制）
@@ -230,14 +759,109 @@ class LLMService:
             custom_prompt: 🌟 专属 AI 提示词（用于定制摘要输出格式）
             priority: 并发优先级，manual 为手动高优先级通道
             cancel_event: 可选的独立取消事件；不传则使用全局取消事件
+            content_kind: 内容类型，rss 会使用 RSS 专用排版系统提示词
 
         Returns:
             摘要内容或错误标识字符串
         """
+        system_prompt = (
+            self.rss_system_prompt if content_kind == "rss" else self.system_prompt
+        )
+        if content_kind == "rss":
+            if custom_prompt and custom_prompt.strip():
+                user_content = (
+                    f"以下是 RSS 订阅内容《{title}》的正文。\n\n"
+                    f"专属指令：{custom_prompt}\n\n---\n\n{raw_text}"
+                )
+            else:
+                user_content = (
+                    f"以下是 RSS 订阅内容《{title}》的正文，请按照系统设定的 Markdown 排版规范进行整理：\n\n"
+                    f"{raw_text}"
+                )
+        elif custom_prompt and custom_prompt.strip():
+            user_content = f"以下是文章《{title}》的正文内容。\n\n专属指令：{custom_prompt}\n\n---\n\n{raw_text}"
+        else:
+            user_content = f"以下是公文《{title}》的正文内容，请按照系统设定的规范进行总结：\n\n{raw_text}"
+
+        target_label = "RSS 订阅内容" if content_kind == "rss" else "公文"
+        cache_scope = "rss_article_summary" if content_kind == "rss" else "article_summary"
+        return self._generate_cached_with_retry(
+            cache_scope=cache_scope,
+            title=title,
+            raw_text=raw_text,
+            system_prompt=system_prompt,
+            user_content=user_content,
+            priority=priority,
+            cancel_event=cancel_event,
+            target_label=target_label,
+        )
+
+    def format_rss_article(
+        self,
+        title: str,
+        raw_text: str,
+        custom_prompt: str = None,
+        priority: str = "batch",
+        cancel_event: Optional[threading.Event] = None,
+    ) -> str:
+        extra_instruction = (
+            f"\n\n源级额外要求：{custom_prompt.strip()}"
+            if custom_prompt and custom_prompt.strip()
+            else ""
+        )
+        user_content = (
+            f"以下是 RSS 订阅内容《{title}》的原始 Markdown/正文。"
+            f"{extra_instruction}\n\n---\n\n{raw_text}"
+        )
+        return self._generate_cached_with_retry(
+            cache_scope="rss_formatting",
+            title=title,
+            raw_text=raw_text,
+            system_prompt=self.rss_format_system_prompt,
+            user_content=user_content,
+            priority=priority,
+            cancel_event=cancel_event,
+            target_label="RSS 排版增强",
+        )
+
+    def summarize_rss_article(
+        self,
+        title: str,
+        raw_text: str,
+        custom_prompt: str = None,
+        priority: str = "batch",
+        cancel_event: Optional[threading.Event] = None,
+    ) -> Dict[str, Any]:
+        if self._should_use_chunked_rss_summary(raw_text):
+            return self._summarize_rss_article_chunked(
+                title=title,
+                raw_text=raw_text,
+                custom_prompt=custom_prompt or "",
+                priority=priority,
+                cancel_event=cancel_event,
+            )
+
+        return self._summarize_rss_article_single_pass(
+            title=title,
+            raw_text=raw_text,
+            custom_prompt=custom_prompt or "",
+            priority=priority,
+            cancel_event=cancel_event,
+        )
+
+    def _generate_with_retry(
+        self,
+        *,
+        title: str,
+        raw_text: str,
+        system_prompt: str,
+        user_content: str,
+        priority: str,
+        cancel_event: Optional[threading.Event],
+        target_label: str,
+    ) -> str:
         active_cancel_event = cancel_event or self._cancel_event
 
-        # 🌟 对于默认全局取消事件，开始新任务前先清理旧状态；
-        # 外部显式传入的取消事件保持原样，避免把用户刚触发的取消擦掉。
         if cancel_event is None:
             active_cancel_event.clear()
 
@@ -249,18 +873,15 @@ class LLMService:
 
             if not raw_text or len(raw_text.strip()) < 10:
                 return self._error_result(
-                    "原文内容过短或抓取失败，无法进行有效的 AI 总结。"
+                    "原文内容过短或抓取失败，无法进行有效的 AI 处理。"
                 )
 
-            # 🌟 检查取消状态
             if active_cancel_event.is_set():
                 return self._error_result("用户取消", prefix="⚠️")
 
-            # 🌟 检查余额状态：如果欠费，直接返回提示
             try:
                 config_service = _get_config_service()
                 if not config_service.get_api_balance_ok():
-                    # 🌟 通知前端显示欠费卡片（用户可能之前点击了"不再提醒"）
                     try:
                         import webview
 
@@ -278,25 +899,20 @@ class LLMService:
             except Exception as e:
                 logger.warning(f"检查余额状态失败: {e}")
 
-            logger.info(f"正在调用 AI 分析公文: {title}")
-
-            # 🌟 构建用户消息：支持自定义提示词
-            if custom_prompt and custom_prompt.strip():
-                user_content = f"以下是文章《{title}》的正文内容。\n\n专属指令：{custom_prompt}\n\n---\n\n{raw_text}"
-                logger.info(f"使用自定义提示词: {custom_prompt[:50]}...")
-            else:
-                user_content = f"以下是公文《{title}》的正文内容，请按照系统设定的规范进行总结：\n\n{raw_text}"
-
+            logger.info(f"正在调用 AI 分析{target_label}: {title}")
             last_error = None
+            request_timeout = self._resolve_request_timeout(
+                raw_text=raw_text,
+                target_label=target_label,
+                priority=priority,
+            )
 
             for attempt in range(self.MAX_RETRIES):
-                # 🌟 在每次尝试前检查取消状态
                 if active_cancel_event.is_set():
                     logger.info(f"AI 调用被用户取消（尝试 {attempt + 1}）: {title}")
                     return "⚠️ 用户取消"
 
                 try:
-                    # 🌟 使用线程执行 API 调用，支持中断
                     result_container = {"content": None, "error": None}
                     call_completed = threading.Event()
 
@@ -305,13 +921,13 @@ class LLMService:
                             response = self.client.chat.completions.create(
                                 model=self.model_name,
                                 messages=[
-                                    {"role": "system", "content": self.system_prompt},
+                                    {"role": "system", "content": system_prompt},
                                     {"role": "user", "content": user_content},
                                 ],
                                 temperature=0.3,
                                 max_tokens=3000,
                                 top_p=0.9,
-                                timeout=45.0,  # 🌟 缩短超时：60 -> 45 秒
+                                timeout=request_timeout,
                             )
                             result_container["content"] = response.choices[
                                 0
@@ -321,25 +937,20 @@ class LLMService:
                         finally:
                             call_completed.set()
 
-                    # 启动 API 调用线程
                     api_thread = threading.Thread(target=_api_call, daemon=True)
                     api_thread.start()
 
-                    # 🌟 等待 API 调用完成或被取消（每 0.5 秒检查一次取消状态）
                     while not call_completed.wait(timeout=0.5):
                         if active_cancel_event.is_set():
                             logger.info(f"用户取消，等待 API 线程结束: {title}")
-                            # 等待线程结束（最多再等 2 秒）
                             call_completed.wait(timeout=2.0)
                             return "⚠️ 用户取消"
 
-                    # 检查结果
                     error = result_container["error"]
                     if error is not None:
                         if isinstance(error, Exception):
                             raise error
-                        else:
-                            raise RuntimeError(str(error))
+                        raise RuntimeError(str(error))
 
                     content = result_container["content"]
                     if content:
@@ -347,18 +958,16 @@ class LLMService:
                         if cleaned_content:
                             return cleaned_content
                         return "⚠️ AI 返回了空内容或非文本数据。"
-                    else:
-                        return "⚠️ AI 返回了空内容或非文本数据。"
+                    return "⚠️ AI 返回了空内容或非文本数据。"
 
                 except Exception as e:
                     last_error = str(e)
                     error_lower = last_error.lower()
+                    normalized_error = self._normalize_openai_error(last_error)
 
-                    # 🌟 如果是取消导致的异常，直接返回
                     if active_cancel_event.is_set():
                         return "⚠️ 用户取消"
 
-                    # 🌟 检测余额不足错误并更新状态
                     balance_error_patterns = [
                         "insufficient_quota",
                         "insufficient_balance",
@@ -375,7 +984,6 @@ class LLMService:
                             config_service.set_api_balance_ok(False)
                             logger.info("已更新欠费状态到配置文件")
 
-                            # 🌟 主动通知前端更新余额状态
                             try:
                                 import webview
 
@@ -391,38 +999,43 @@ class LLMService:
                                 logger.debug(f"通知前端失败: {notify_err}")
                         except Exception as config_err:
                             logger.warning(f"更新欠费状态失败: {config_err}")
-                        return f"❌ API 余额不足：{last_error}"
+                        return f"❌ {normalized_error}"
 
-                    # 不可重试的错误：直接返回
                     if "401" in error_lower:
                         logger.error(f"AI 调用失败（不可重试）({title}): {last_error}")
-                        return f"❌ API 认证失败：{last_error}"
+                        return f"❌ {normalized_error}"
 
-                    # 可重试的错误：执行指数退避
+                    if "403" in error_lower or "404" in error_lower:
+                        logger.error(f"AI 调用失败（不可重试）({title}): {last_error}")
+                        return f"❌ {normalized_error}"
+
                     if self._is_retryable_error(last_error):
                         if attempt < self.MAX_RETRIES - 1:
                             delay = self._calculate_delay(attempt)
                             logger.warning(
-                                f"AI 调用失败（第 {attempt + 1} 次），{delay:.1f}秒后重试 ({title}): {last_error}"
+                                f"AI 调用失败（第 {attempt + 1} 次），{delay:.1f}秒后重试 ({title}): {normalized_error}"
                             )
-                            # 🌟 在退避等待期间也检查取消状态
                             for _ in range(int(delay * 10)):
                                 if active_cancel_event.is_set():
                                     return "⚠️ 用户取消"
                                 time.sleep(0.1)
                             continue
-                        else:
-                            logger.error(
-                                f"AI 调用失败（已达最大重试次数 {self.MAX_RETRIES}）({title}): {last_error}"
+                        logger.error(
+                            f"AI 调用失败（已达最大重试次数 {self.MAX_RETRIES}）({title}): {last_error}"
+                        )
+                        if self._is_timeout_error(last_error):
+                            return (
+                                "⚠️ AI 请求超时，"
+                                f"已重试 {self.MAX_RETRIES} 次仍未完成。"
+                                f"本次已将等待时间放宽到约 {request_timeout:.0f} 秒，"
+                                "长内容请稍后重试。"
                             )
-                            return f"⚠️ AI 服务暂时不可用，已重试 {self.MAX_RETRIES} 次仍失败：{last_error}"
+                        return f"⚠️ AI 服务暂时不可用，已重试 {self.MAX_RETRIES} 次仍失败：{normalized_error}"
 
-                    # 其他未知错误
                     logger.error(f"AI 总结失败 ({title}): {last_error}")
-                    return f"⚠️ AI 处理遇到未知错误：{last_error}"
+                    return f"⚠️ AI 处理遇到错误：{normalized_error}"
 
-            # 理论上不会到达这里，但作为安全保护
-            return f"⚠️ AI 处理失败：{last_error}"
+            return f"⚠️ AI 处理失败：{self._normalize_openai_error(last_error)}"
 
     def update_config(
         self,
@@ -478,7 +1091,12 @@ class LLMService:
 
         try:
             # 使用临时客户端进行测试，不影响全局 client 状态
-            temp_client = OpenAI(api_key=api_key, base_url=final_base_url)
+            temp_client = OpenAI(
+                api_key=api_key,
+                base_url=final_base_url,
+                max_retries=0,
+                timeout=10,
+            )
 
             # 发起极简请求
             temp_client.chat.completions.create(
@@ -486,7 +1104,6 @@ class LLMService:
                 messages=[{"role": "user", "content": "1"}],
                 max_tokens=5,
                 temperature=0.1,
-                timeout=10,  # 测试时使用较短的超时
             )
 
             # 🌟 测试成功，清除欠费状态
@@ -516,6 +1133,7 @@ class LLMService:
 
         except Exception as e:
             error_msg = str(e)
+            normalized_error = self._normalize_openai_error(error_msg)
             # 增强型错误识别
             if "Authentication" in error_msg or "401" in error_msg:
                 return False, "API Key 无效或认证失败"
@@ -524,11 +1142,8 @@ class LLMService:
             ):
                 return False, "API 余额不足或额度超限"
             elif "timeout" in error_msg.lower():
-                return False, "连接超时，请检查网络环境或代理设置"
+                return False, normalized_error
             elif "404" in error_msg:
-                return (
-                    False,
-                    f"模型路径错误(404)，请检查 Base URL 或模型名称: {final_model}",
-                )
+                return False, f"{normalized_error}：{final_model}"
 
-            return False, f"连接失败: {error_msg}"
+            return False, f"连接失败: {normalized_error}"

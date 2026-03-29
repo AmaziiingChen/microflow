@@ -7,8 +7,9 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, Any, Optional, Tuple, Callable, TYPE_CHECKING
+from typing import Dict, Any, Optional, Tuple, Callable, TYPE_CHECKING, List
 from src.utils.text_cleaner import strip_emoji
+from src.utils.ai_markdown import compose_tagged_markdown
 
 if TYPE_CHECKING:
     from src.spiders import BaseSpider
@@ -31,7 +32,15 @@ class ArticleContext:
     department: str = ""
     require_ai_summary: bool = True  # 🌟 是否需要 AI 摘要（动态爬虫可设置为 False）
     custom_summary_prompt: str = ""  # 🌟 专属 AI 提示词（用于定制摘要输出格式）
+    enable_ai_formatting: bool = False  # 🌟 RSS 是否启用 AI 排版增强
+    enable_ai_summary: bool = True  # 🌟 RSS 是否启用 AI 摘要/标签
+    formatting_prompt: str = ""  # 🌟 RSS 排版提示词
+    summary_prompt: str = ""  # 🌟 RSS 总结提示词
     rule_id: str = ""  # 🌟 规则 ID（用于摘要重生成时反查专属提示词）
+    attachments: Optional[List[Dict[str, Any]]] = None  # 🌟 文章附件/图片链接
+    content_blocks: Optional[List[Dict[str, Any]]] = None  # 🌟 结构化块级内容
+    image_assets: Optional[List[Dict[str, Any]]] = None  # 🌟 分类后的图片资产
+    source_type: str = "html"  # 🌟 数据源类型（rss/html）
 
 
 @dataclass
@@ -270,7 +279,7 @@ class ArticleProcessor:
         ctx = task.ctx
 
         # 🌟 获取数据源类型（用于分流处理）
-        source_type = getattr(spider, '_source_type', 'html')
+        source_type = getattr(spider, '_source_type', getattr(ctx, 'source_type', 'html'))
         # 🌟 获取跳过详情配置（仅 HTML 爬虫有效）
         skip_detail = getattr(spider, 'skip_detail', False)
 
@@ -278,13 +287,20 @@ class ArticleProcessor:
         # 🌟 根据数据源类型和配置决定是否抓取详情
         if source_type == 'rss':
             # RSS 订阅：列表中已包含完整内容，无需抓取详情
+            rss_image_assets = ctx.image_assets or []
             detail = {
                 'title': ctx.title,
                 'url': ctx.url,
                 'body_text': ctx.raw_text,
                 'body_html': '',
-                'images': [],
-                'attachments': [],
+                'images': [
+                    asset.get("url", "")
+                    for asset in rss_image_assets
+                    if asset.get("category") == "body" and asset.get("url")
+                ],
+                'attachments': ctx.attachments or [],
+                'content_blocks': ctx.content_blocks or [],
+                'image_assets': rss_image_assets,
                 'exact_time': '',
                 'dynamic_fields': {}
             }
@@ -297,7 +313,9 @@ class ArticleProcessor:
                 'body_text': ctx.raw_text,
                 'body_html': '',
                 'images': [],
-                'attachments': [],
+                'attachments': ctx.attachments or [],
+                'content_blocks': [],
+                'image_assets': [],
                 'exact_time': '',
                 'dynamic_fields': getattr(spider, 'field_selectors', {})
             }
@@ -310,7 +328,9 @@ class ArticleProcessor:
                 'body_text': ctx.raw_text,
                 'body_html': '',
                 'images': [],
-                'attachments': [],
+                'attachments': ctx.attachments or [],
+                'content_blocks': [],
+                'image_assets': [],
                 'exact_time': ''
             }
             logger.debug(f"[{ctx.source_name}] 列表中已包含内容，跳过详情抓取: {ctx.title[:30]}...")
@@ -422,13 +442,25 @@ class ArticleProcessor:
             return False, "cancelled", None
 
         # 6. 🌟 检查是否需要 AI 摘要（动态爬虫可设置 require_ai_summary=False）
-        skip_ai_summary = not ctx.require_ai_summary
+        rss_format_enabled = bool(ctx.enable_ai_formatting)
+        rss_summary_enabled = bool(ctx.enable_ai_summary)
+        skip_ai_summary = (
+            not ctx.require_ai_summary
+            if source_type != "rss"
+            else (not rss_format_enabled and not rss_summary_enabled)
+        )
 
         # 7. 🌟 统计任务总数（包括纯图片内容和跳过 AI 的动态内容），并通知前端进度
         with self._stats_lock:
             self._stats["ai_total"] += 1
             ai_completed = self._stats["ai_completed"]
             ai_total = self._stats["ai_total"]
+
+        rss_raw_markdown = raw_text if source_type == "rss" else ""
+        rss_enhanced_markdown = rss_raw_markdown
+        rss_ai_summary = ""
+        rss_ai_tags: List[str] = []
+        summary = ""
 
         # 8. 🌟 纯图片内容：跳过 AI 调用，使用图片 HTML 作为摘要
         if is_pure_image:
@@ -453,9 +485,9 @@ class ArticleProcessor:
                 summary = self._format_dynamic_summary(detail, raw_text)
                 logger.info(f"[{ctx.source_name}] HTML 动态爬虫跳过 AI，使用字段摘要: {ctx.title}")
             elif source_type == 'rss':
-                # RSS 订阅：直接使用完整原始内容作为摘要
-                summary = raw_text if raw_text else "【无内容】"
-                logger.info(f"[{ctx.source_name}] RSS 订阅跳过 AI，使用原始内容: {ctx.title[:30]}...")
+                rss_enhanced_markdown = rss_raw_markdown
+                summary = rss_enhanced_markdown if rss_enhanced_markdown else "【无内容】"
+                logger.info(f"[{ctx.source_name}] RSS 订阅跳过 AI，保留结构化正文: {ctx.title[:30]}...")
             else:
                 # 其他类型：兜底处理
                 summary = raw_text if raw_text else "【无内容】"
@@ -481,13 +513,43 @@ class ArticleProcessor:
             # 9. AI 生成摘要（此处已有指数退避重试）
             logger.info(f"[{ctx.source_name}] 发现变动 ({reason}) -> {ctx.title}")
             try:
-                # 🌟 传递专属 AI 提示词
-                summary = self.llm.summarize_article(
-                    ctx.title,
-                    raw_text,
-                    custom_prompt=ctx.custom_summary_prompt,
-                    priority="batch",
-                )
+                if source_type == "rss":
+                    if rss_format_enabled:
+                        rss_enhanced_markdown = self.llm.format_rss_article(
+                            ctx.title,
+                            rss_raw_markdown,
+                            custom_prompt=ctx.formatting_prompt,
+                            priority="batch",
+                        )
+                        if rss_enhanced_markdown.startswith(self.AI_FAILURE_PREFIXES):
+                            summary = rss_enhanced_markdown
+                    else:
+                        rss_enhanced_markdown = rss_raw_markdown
+
+                    if not summary and rss_summary_enabled:
+                        rss_summary_result = self.llm.summarize_rss_article(
+                            ctx.title,
+                            rss_enhanced_markdown or rss_raw_markdown,
+                            custom_prompt=ctx.summary_prompt or ctx.custom_summary_prompt,
+                            priority="batch",
+                        )
+                        if rss_summary_result.get("status") != "success":
+                            summary = str(rss_summary_result.get("message") or "⚠️ RSS AI 总结失败")
+                        else:
+                            rss_ai_summary = str(rss_summary_result.get("summary") or "").strip()
+                            rss_ai_tags = list(rss_summary_result.get("tags") or [])
+                            summary = compose_tagged_markdown(rss_ai_tags, rss_ai_summary)
+                    elif not summary:
+                        summary = rss_enhanced_markdown or rss_raw_markdown or "【无内容】"
+                else:
+                    # 🌟 传递专属 AI 提示词
+                    summary = self.llm.summarize_article(
+                        ctx.title,
+                        raw_text,
+                        custom_prompt=ctx.custom_summary_prompt,
+                        priority="batch",
+                        content_kind="default",
+                    )
             except Exception as e:
                 logger.warning(f"AI 摘要生成异常 ({ctx.title}): {e}")
                 with self._stats_lock:
@@ -518,6 +580,19 @@ class ArticleProcessor:
                 return False, "ai_failed", None
 
         summary = strip_emoji(summary)
+        rss_raw_markdown = strip_emoji(rss_raw_markdown)
+        rss_enhanced_markdown = strip_emoji(rss_enhanced_markdown)
+        rss_ai_summary = strip_emoji(rss_ai_summary)
+
+        if source_type == "rss" and not rss_enhanced_markdown:
+            rss_enhanced_markdown = rss_raw_markdown
+        if source_type == "rss" and not summary:
+            summary = (
+                compose_tagged_markdown(rss_ai_tags, rss_ai_summary)
+                or rss_enhanced_markdown
+                or rss_raw_markdown
+                or "【无内容】"
+            )
 
         # 7. 添加时间戳（已禁用）
         # timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -527,7 +602,21 @@ class ArticleProcessor:
         attachments_data = detail.get("attachments") or []
         if not isinstance(attachments_data, list):
             attachments_data = []
+        filtered_attachments: List[Dict[str, Any]] = []
+        for attachment in attachments_data:
+            if not isinstance(attachment, dict):
+                continue
+            attachment_url = str(attachment.get("url") or "").strip()
+            attachment_type = str(attachment.get("type") or "").strip().lower()
+            if attachment_type.startswith("image/") or attachment_url.lower().endswith(
+                (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".avif")
+            ):
+                continue
+            filtered_attachments.append(attachment)
+        attachments_data = filtered_attachments
         attachments_json = json.dumps(attachments_data, ensure_ascii=False)
+        content_blocks = detail.get("content_blocks") or []
+        image_assets = detail.get("image_assets") or []
 
         # 9. 入库（🌟 异步写入：通过写队列串行化，不阻塞当前 Worker）
         self.db.insert_or_update_article(
@@ -542,7 +631,18 @@ class ArticleProcessor:
             raw_content=raw_text,
             source_name=ctx.source_name,
             rule_id=ctx.rule_id,
-            custom_summary_prompt=ctx.custom_summary_prompt,
+            custom_summary_prompt=ctx.summary_prompt or ctx.custom_summary_prompt,
+            source_type=source_type,
+            raw_markdown=rss_raw_markdown,
+            enhanced_markdown=rss_enhanced_markdown,
+            ai_summary=rss_ai_summary,
+            ai_tags=rss_ai_tags,
+            formatting_prompt=ctx.formatting_prompt,
+            summary_prompt=ctx.summary_prompt or ctx.custom_summary_prompt,
+            enable_ai_formatting=ctx.enable_ai_formatting,
+            enable_ai_summary=ctx.enable_ai_summary,
+            content_blocks=content_blocks,
+            image_assets=image_assets,
         )
 
         logger.info(f"[{ctx.source_name}] 文章入库成功: {ctx.title}")
@@ -559,12 +659,23 @@ class ArticleProcessor:
             "attachments": (
                 attachments_data if isinstance(attachments_data, list) else []
             ),
+            "content_blocks": content_blocks,
+            "image_assets": image_assets,
             "summary": summary,
             "raw_content": raw_text,
+            "raw_markdown": rss_raw_markdown,
+            "enhanced_markdown": rss_enhanced_markdown,
+            "ai_summary": rss_ai_summary,
+            "ai_tags": rss_ai_tags,
             "is_read": 0,
             "model_name": self.config_service.get('modelName', 'AI'),  # 🌟 传递模型名称用于快照
             "rule_id": ctx.rule_id,
-            "custom_summary_prompt": ctx.custom_summary_prompt,
+            "custom_summary_prompt": ctx.summary_prompt or ctx.custom_summary_prompt,
+            "formatting_prompt": ctx.formatting_prompt,
+            "summary_prompt": ctx.summary_prompt or ctx.custom_summary_prompt,
+            "enable_ai_formatting": ctx.enable_ai_formatting,
+            "enable_ai_summary": ctx.enable_ai_summary,
+            "source_type": source_type,
         }
         logger.info(f"📸 article_data.model_name = {article_data.get('model_name')}")
 
@@ -711,9 +822,29 @@ class ArticleProcessor:
             raw_text=article.get("body_text", ""),  # 🌟 传递列表中已获取的内容（RSS 等场景）
             category=article.get("category", ""),
             department=department,
-            require_ai_summary=article.get("require_ai_summary", True),
-            custom_summary_prompt=article.get("custom_summary_prompt", ""),
+            require_ai_summary=article.get(
+                "enable_ai_summary",
+                article.get("require_ai_summary", True),
+            ),
+            custom_summary_prompt=article.get(
+                "summary_prompt",
+                article.get("custom_summary_prompt", ""),
+            ),
+            enable_ai_formatting=article.get("enable_ai_formatting", False),
+            enable_ai_summary=article.get(
+                "enable_ai_summary",
+                article.get("require_ai_summary", True),
+            ),
+            formatting_prompt=article.get("formatting_prompt", ""),
+            summary_prompt=article.get(
+                "summary_prompt",
+                article.get("custom_summary_prompt", ""),
+            ),
             rule_id=article.get("rule_id", ""),
+            attachments=article.get("attachments", []),
+            content_blocks=article.get("content_blocks", []),
+            image_assets=article.get("image_assets", []),
+            source_type=article.get("source_type", "html"),
         )
 
     def get_stats(self) -> Dict[str, int]:

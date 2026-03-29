@@ -11,6 +11,7 @@ V2 版本后端调度引擎 - 多源数据订阅架构
 
 import sys
 import logging
+import re
 
 # 🛡️ 安全模块：SSL 原生信任库注入 (必须在 requests 导入前执行)
 try:
@@ -33,13 +34,30 @@ import tempfile
 import platform
 import subprocess
 import base64
+import colorsys
+import hashlib
 import threading
 import queue
+import io
 from typing import Dict, Any, Optional, List
 import time
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin, urlparse
 from src.database import db
 from src.llm_service import LLMService
 from src.utils.text_cleaner import strip_emoji
+from src.utils.ai_markdown import (
+    build_tag_items,
+    compose_tagged_markdown,
+    extract_leading_tags,
+)
+from src.utils.rss_preview import analyze_rss_preview_content
+from src.utils.rule_ai_config import normalize_rule_ai_config
+from src.utils.rss_strategy import (
+    attach_rss_strategy_metadata,
+    get_rss_strategy_catalog,
+    resolve_rss_rule_strategy,
+)
 from src.services import SystemService, DownloadService, ConfigService
 from src.services.rule_generator import RuleGeneratorService
 from src.services.custom_spider_rules_manager import get_rules_manager
@@ -121,6 +139,8 @@ class Api:
         self._summary_lock = threading.Lock()
         self._active_summary_tokens: Dict[int, int] = {}
         self._active_summary_events: Dict[int, threading.Event] = {}
+        self._rss_preview_lock = threading.Lock()
+        self._active_rss_preview_events: Dict[int, threading.Event] = {}
         self._ai_prereq_cache_lock = threading.Lock()
         self._ai_prereq_refresh_lock = threading.Lock()
         self._ai_prereq_cache: Dict[str, Any] = {
@@ -657,9 +677,7 @@ class Api:
             return {"status": "cooling", "remaining": remaining}
         return {"status": "ready", "remaining": 0}
 
-    def get_network_access_status(
-        self, force_refresh: bool = False
-    ) -> Dict[str, Any]:
+    def get_network_access_status(self, force_refresh: bool = False) -> Dict[str, Any]:
         """获取校园网访问状态，支持强制刷新。"""
         snapshot = self._daemon_manager.get_network_status_snapshot(
             force_refresh=force_refresh
@@ -811,26 +829,176 @@ class Api:
             return {"status": "error", "message": str(e)}
 
     def update_article_summary(
-        self, article_id: int, new_summary: str
+        self, article_id: int, new_summary: str, content_mode: str = "summary"
     ) -> Dict[str, Any]:
         """
-        更新文章摘要（用户二次编辑）
+        更新文章摘要/正文（用户二次编辑）
 
         Args:
             article_id: 文章 ID
-            new_summary: 新的摘要内容
+            new_summary: 新的内容
+            content_mode: 编辑模式（summary/raw/enhanced）
 
         Returns:
             {"status": "success"} 或 {"status": "error", ...}
         """
         try:
-            new_summary = strip_emoji(new_summary)
-            success = db.update_summary(article_id, new_summary)
-            if success:
-                logger.info(f"文章 {article_id} 摘要已更新")
-                return {"status": "success", "message": "摘要已更新"}
-            else:
+            article = db.get_article_by_id(article_id)
+            if not article:
                 return {"status": "error", "message": "文章不存在或更新失败"}
+
+            source_type = self._resolve_article_source_type(article)
+            mode = str(content_mode or "summary").strip().lower()
+            clean_content = strip_emoji(new_summary)
+            ai_config = self._resolve_article_ai_config(article)
+
+            if source_type != "rss" or mode == "summary":
+                tags, body = extract_leading_tags(clean_content)
+                compatibility_summary = compose_tagged_markdown(tags, body)
+                success = (
+                    db.update_rss_detail_content(
+                        article_id,
+                        ai_summary=body,
+                        ai_tags=tags,
+                        summary=compatibility_summary,
+                    )
+                    if source_type == "rss"
+                    else db.update_summary(article_id, clean_content)
+                )
+                if success:
+                    logger.info(f"文章 {article_id} 摘要已更新")
+                    return {
+                        "status": "success",
+                        "message": "摘要已更新",
+                        "summary": compatibility_summary,
+                        "ai_summary": body,
+                        "ai_tags": tags,
+                        "raw_text": str(article.get("raw_text") or ""),
+                        "raw_markdown": str(article.get("raw_markdown") or ""),
+                        "enhanced_markdown": str(
+                            article.get("enhanced_markdown") or article.get("raw_markdown") or ""
+                        ),
+                        "enable_ai_formatting": bool(
+                            ai_config.get("enable_ai_formatting", False)
+                        ),
+                        "enable_ai_summary": bool(
+                            ai_config.get("enable_ai_summary", False)
+                        ),
+                        "formatting_prompt": str(
+                            ai_config.get("formatting_prompt") or ""
+                        ).strip(),
+                        "summary_prompt": str(
+                            ai_config.get("summary_prompt") or ""
+                        ).strip(),
+                    }
+                return {"status": "error", "message": "文章不存在或更新失败"}
+
+            current_raw = str(
+                article.get("raw_markdown") or article.get("raw_text") or ""
+            ).strip()
+            current_enhanced = str(
+                article.get("enhanced_markdown") or current_raw
+            ).strip()
+            current_ai_summary = str(article.get("ai_summary") or "").strip()
+            current_ai_tags_raw = article.get("ai_tags")
+            if isinstance(current_ai_tags_raw, list):
+                current_ai_tags = [
+                    str(tag or "").replace("【", "").replace("】", "").strip()
+                    for tag in current_ai_tags_raw
+                    if str(tag or "").strip()
+                ][:3]
+            elif isinstance(current_ai_tags_raw, str) and current_ai_tags_raw.strip():
+                try:
+                    parsed_tags = json.loads(current_ai_tags_raw)
+                    current_ai_tags = (
+                        [
+                            str(tag or "").replace("【", "").replace("】", "").strip()
+                            for tag in parsed_tags
+                            if str(tag or "").strip()
+                        ][:3]
+                        if isinstance(parsed_tags, list)
+                        else []
+                    )
+                except Exception:
+                    current_ai_tags, _ = extract_leading_tags(current_ai_tags_raw)
+            else:
+                current_ai_tags = []
+            summary_enabled = bool(ai_config.get("enable_ai_summary", False))
+            formatting_enabled = bool(ai_config.get("enable_ai_formatting", False))
+
+            if mode == "raw":
+                sync_enhanced = (not formatting_enabled) or (
+                    current_enhanced == current_raw
+                )
+                next_enhanced = clean_content if sync_enhanced else current_enhanced
+                next_summary = (
+                    compose_tagged_markdown(current_ai_tags, current_ai_summary)
+                    if summary_enabled
+                    else (next_enhanced or clean_content)
+                )
+                success = db.update_rss_detail_content(
+                    article_id,
+                    raw_text=clean_content,
+                    raw_markdown=clean_content,
+                    enhanced_markdown=next_enhanced if sync_enhanced else None,
+                    summary=next_summary,
+                )
+                if success:
+                    logger.info(f"RSS 原文已更新: {article_id}")
+                    return {
+                        "status": "success",
+                        "message": "原文已更新",
+                        "summary": next_summary,
+                        "ai_summary": current_ai_summary,
+                        "ai_tags": current_ai_tags,
+                        "raw_text": clean_content,
+                        "raw_markdown": clean_content,
+                        "enhanced_markdown": next_enhanced,
+                        "enable_ai_formatting": formatting_enabled,
+                        "enable_ai_summary": summary_enabled,
+                        "formatting_prompt": str(
+                            ai_config.get("formatting_prompt") or ""
+                        ).strip(),
+                        "summary_prompt": str(
+                            ai_config.get("summary_prompt") or ""
+                        ).strip(),
+                    }
+                return {"status": "error", "message": "原文更新失败"}
+
+            if mode == "enhanced":
+                next_summary = (
+                    compose_tagged_markdown(current_ai_tags, current_ai_summary)
+                    if summary_enabled
+                    else clean_content
+                )
+                success = db.update_rss_detail_content(
+                    article_id,
+                    enhanced_markdown=clean_content,
+                    summary=next_summary,
+                )
+                if success:
+                    logger.info(f"RSS 增强正文已更新: {article_id}")
+                    return {
+                        "status": "success",
+                        "message": "增强正文已更新",
+                        "summary": next_summary,
+                        "ai_summary": current_ai_summary,
+                        "ai_tags": current_ai_tags,
+                        "raw_text": str(article.get("raw_text") or ""),
+                        "raw_markdown": current_raw,
+                        "enhanced_markdown": clean_content,
+                        "enable_ai_formatting": formatting_enabled,
+                        "enable_ai_summary": summary_enabled,
+                        "formatting_prompt": str(
+                            ai_config.get("formatting_prompt") or ""
+                        ).strip(),
+                        "summary_prompt": str(
+                            ai_config.get("summary_prompt") or ""
+                        ).strip(),
+                    }
+                return {"status": "error", "message": "增强正文更新失败"}
+
+            return {"status": "error", "message": "不支持的编辑模式"}
         except Exception as e:
             logger.error(f"更新文章摘要失败: {e}")
             return {"status": "error", "message": str(e)}
@@ -883,6 +1051,28 @@ class Api:
             return {"status": "success", "message": "已请求取消当前 AI 总结"}
         except Exception as e:
             logger.error(f"取消当前 AI 总结失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def cancel_rss_rule_preview(self, request_token: int = 0) -> dict:
+        """取消当前正在进行的 RSS 规则预览"""
+        try:
+            if not request_token:
+                return {"status": "ignored", "message": "缺少 RSS 预览请求标识"}
+
+            with self._rss_preview_lock:
+                cancel_event = self._active_rss_preview_events.get(request_token)
+
+            if not cancel_event:
+                return {
+                    "status": "ignored",
+                    "message": "当前 RSS 预览已结束，取消请求已忽略",
+                }
+
+            cancel_event.set()
+            logger.info(f"已请求取消 RSS 规则预览: {request_token}")
+            return {"status": "success", "message": "已请求取消 RSS 规则预览"}
+        except Exception as e:
+            logger.error(f"取消 RSS 规则预览失败: {e}")
             return {"status": "error", "message": str(e)}
 
     def clear_ai_cancel(self) -> dict:
@@ -1027,7 +1217,8 @@ class Api:
 
     def open_system_link(self, url: str):
         """调用系统原生应用打开链接"""
-        return self._system_service.open_system_link(url)
+        success = self._system_service.open_system_link(url)
+        return {"status": "success" if success else "error"}
 
     def save_snapshot(self, b64_data: str, title: str) -> dict:
         """保存快照图片"""
@@ -1207,8 +1398,7 @@ class Api:
     def _get_ai_prereq_signature(self) -> str:
         api_key = str(self._config_service.get("apiKey", "") or "").strip()
         model_name = str(
-            self._config_service.get("modelName", "deepseek-chat")
-            or "deepseek-chat"
+            self._config_service.get("modelName", "deepseek-chat") or "deepseek-chat"
         ).strip()
         base_url = str(
             self._config_service.get("baseUrl", "https://api.deepseek.com/v1")
@@ -1230,12 +1420,18 @@ class Api:
         stage = result.get("stage")
 
         if status == "success":
-            if age <= self._ai_prereq_success_ttl and self._config_service.get_api_balance_ok():
+            if (
+                age <= self._ai_prereq_success_ttl
+                and self._config_service.get_api_balance_ok()
+            ):
                 return dict(result)
             return None
 
         if stage == "balance_error":
-            if age <= self._ai_prereq_failure_ttl and not self._config_service.get_api_balance_ok():
+            if (
+                age <= self._ai_prereq_failure_ttl
+                and not self._config_service.get_api_balance_ok()
+            ):
                 return dict(result)
             return None
 
@@ -1846,12 +2042,10 @@ class Api:
             logger.error(f"获取托盘未读数量失败: {e}")
             return {"status": "error", "count": 0}
 
-    def _resolve_article_custom_prompt(self, article: Dict[str, Any]) -> str:
-        """按文章上下文解析专属摘要提示词"""
-        article_prompt = str(article.get("custom_summary_prompt") or "").strip()
-        if article_prompt:
-            return article_prompt
-
+    def _find_matching_rule_for_article(
+        self, article: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """按文章上下文匹配对应的规则。"""
         rule_id = str(article.get("rule_id") or "").strip()
         article_url = str(article.get("url") or "").strip()
         source_name = str(article.get("source_name") or "").strip()
@@ -1861,39 +2055,185 @@ class Api:
             if rule_id:
                 rule = self._rules_manager.get_rule_by_id(rule_id)
                 if rule:
-                    prompt = str(rule.get("custom_summary_prompt") or "").strip()
-                    if prompt:
-                        return prompt
+                    return normalize_rule_ai_config(rule)
 
             rules = self._rules_manager.load_custom_rules()
             if article_url:
                 for rule in rules:
                     if str(rule.get("url") or "").strip() == article_url:
-                        prompt = str(rule.get("custom_summary_prompt") or "").strip()
-                        if prompt:
-                            return prompt
+                        return normalize_rule_ai_config(rule)
 
             if source_name:
                 for rule in rules:
                     if not rule.get("enabled", True):
                         continue
                     if str(rule.get("task_name") or "").strip() == source_name:
-                        prompt = str(rule.get("custom_summary_prompt") or "").strip()
-                        if prompt:
-                            return prompt
+                        return normalize_rule_ai_config(rule)
 
             if department and department != source_name:
                 for rule in rules:
                     if not rule.get("enabled", True):
                         continue
                     if str(rule.get("task_name") or "").strip() == department:
-                        prompt = str(rule.get("custom_summary_prompt") or "").strip()
-                        if prompt:
-                            return prompt
+                        return normalize_rule_ai_config(rule)
         except Exception as e:
-            logger.debug(f"解析文章专属提示词失败: {e}")
+            logger.debug(f"匹配文章规则失败: {e}")
 
-        return ""
+        return None
+
+    def _resolve_article_ai_config(self, article: Dict[str, Any]) -> Dict[str, Any]:
+        """按文章上下文解析 AI 配置，兼容新旧规则字段。"""
+        source_type = self._resolve_article_source_type(article)
+        article_base = {
+            **article,
+            "source_type": source_type,
+            "task_name": article.get("department") or article.get("source_name") or "",
+        }
+        article_summary_prompt = str(
+            article.get("summary_prompt") or article.get("custom_summary_prompt") or ""
+        ).strip()
+        article_formatting_prompt = str(article.get("formatting_prompt") or "").strip()
+        has_explicit_rss_ai_flags = source_type == "rss" and (
+            "enable_ai_formatting" in article or "enable_ai_summary" in article
+        )
+        enable_ai_formatting = (
+            bool(article.get("enable_ai_formatting", False))
+            if has_explicit_rss_ai_flags
+            else bool(article.get("enable_ai_formatting", False) or article_formatting_prompt)
+        )
+        enable_ai_summary = (
+            bool(
+                article.get(
+                    "enable_ai_summary", article.get("require_ai_summary", False)
+                )
+            )
+            if has_explicit_rss_ai_flags
+            else bool(
+                article.get(
+                    "enable_ai_summary", article.get("require_ai_summary", False)
+                )
+                or article_summary_prompt
+            )
+        )
+
+        if (
+            source_type == "rss"
+            and article.get("require_ai_summary", False)
+            and not has_explicit_rss_ai_flags
+        ):
+            # 兼容旧 RSS 文章：历史上一个开关会同时驱动排版和摘要。
+            enable_ai_formatting = enable_ai_formatting or not (
+                "enable_ai_formatting" in article or "formatting_prompt" in article
+            )
+            enable_ai_summary = True
+            if not article_formatting_prompt and article_summary_prompt:
+                article_formatting_prompt = article_summary_prompt
+
+        has_article_ai_snapshot = any(
+            [
+                article_formatting_prompt,
+                article_summary_prompt,
+                enable_ai_formatting,
+                enable_ai_summary,
+            ]
+        )
+        if has_article_ai_snapshot:
+            if source_type == "rss":
+                strategy = resolve_rss_rule_strategy(article_base)
+                article_formatting_prompt = (
+                    article_formatting_prompt
+                    or str(strategy.get("effective_formatting_prompt") or "").strip()
+                )
+                article_summary_prompt = (
+                    article_summary_prompt
+                    or str(strategy.get("effective_summary_prompt") or "").strip()
+                )
+            return {
+                "source_type": source_type,
+                "enable_ai_formatting": enable_ai_formatting,
+                "enable_ai_summary": enable_ai_summary,
+                "formatting_prompt": article_formatting_prompt,
+                "summary_prompt": article_summary_prompt,
+            }
+
+        matched_rule = self._find_matching_rule_for_article(article)
+        if matched_rule:
+            if source_type == "rss":
+                matched_rule = attach_rss_strategy_metadata(matched_rule)
+                strategy = resolve_rss_rule_strategy(matched_rule)
+                return {
+                    "source_type": source_type,
+                    "enable_ai_formatting": bool(
+                        matched_rule.get("enable_ai_formatting", False)
+                    ),
+                    "enable_ai_summary": bool(
+                        matched_rule.get(
+                            "enable_ai_summary",
+                            matched_rule.get("require_ai_summary", False),
+                        )
+                    ),
+                    "formatting_prompt": str(
+                        strategy.get("effective_formatting_prompt") or ""
+                    ).strip(),
+                    "summary_prompt": str(
+                        strategy.get("effective_summary_prompt") or ""
+                    ).strip(),
+                }
+            return {
+                "source_type": source_type,
+                "enable_ai_formatting": bool(
+                    matched_rule.get("enable_ai_formatting", False)
+                ),
+                "enable_ai_summary": bool(
+                    matched_rule.get(
+                        "enable_ai_summary",
+                        matched_rule.get("require_ai_summary", False),
+                    )
+                ),
+                "formatting_prompt": str(
+                    matched_rule.get("formatting_prompt") or ""
+                ).strip(),
+                "summary_prompt": str(
+                    matched_rule.get("summary_prompt")
+                    or matched_rule.get("custom_summary_prompt")
+                    or ""
+                ).strip(),
+            }
+
+        return {
+            "source_type": source_type,
+            "enable_ai_formatting": enable_ai_formatting,
+            "enable_ai_summary": enable_ai_summary,
+            "formatting_prompt": (
+                str(resolve_rss_rule_strategy(article_base).get("effective_formatting_prompt") or "").strip()
+                if source_type == "rss"
+                else article_formatting_prompt
+            ),
+            "summary_prompt": (
+                str(resolve_rss_rule_strategy(article_base).get("effective_summary_prompt") or "").strip()
+                if source_type == "rss"
+                else article_summary_prompt
+            ),
+        }
+
+    def _resolve_article_source_type(self, article: Dict[str, Any]) -> str:
+        """按文章上下文解析来源类型（rss/html）"""
+        rule_id = str(article.get("rule_id") or "").strip()
+        try:
+            if rule_id:
+                rule = self._rules_manager.get_rule_by_id(rule_id)
+                if rule:
+                    rule_type = str(rule.get("source_type") or "").strip().lower()
+                    if rule_type in {"rss", "html"}:
+                        return rule_type
+        except Exception as e:
+            logger.debug(f"解析文章来源类型失败: {e}")
+
+        article_type = str(article.get("source_type") or "").strip().lower()
+        if article_type in {"rss", "html"}:
+            return article_type
+
+        return "html"
 
     def regenerate_summary(
         self, article_id: int, request_token: int = 0, skip_ai_precheck: bool = False
@@ -1924,20 +2264,33 @@ class Api:
                 }
 
             # 3. 🌟 获取文章专属提示词：优先文章自身，其次按规则反查，最后回退默认提示词
-            custom_prompt = self._resolve_article_custom_prompt(article)
+            ai_config = self._resolve_article_ai_config(article)
+            source_type = ai_config.get("source_type", "html")
+            formatting_prompt = str(ai_config.get("formatting_prompt") or "").strip()
+            summary_prompt = str(ai_config.get("summary_prompt") or "").strip()
+            enable_ai_formatting = bool(ai_config.get("enable_ai_formatting", False))
+            enable_ai_summary = bool(ai_config.get("enable_ai_summary", False))
 
             # 4. 调用 LLM 服务重新生成总结
             logger.info(f"正在重新生成文章总结: {title}")
-            if custom_prompt:
-                logger.info(f"使用自定义提示词: {custom_prompt[:50]}...")
+            if formatting_prompt or summary_prompt:
+                logger.info(
+                    "使用 RSS 自定义提示词: format=%s / summary=%s",
+                    formatting_prompt[:32] if formatting_prompt else "-",
+                    summary_prompt[:32] if summary_prompt else "-",
+                )
 
             summary_cancel_event = threading.Event()
+            result_kind = "default"
             if request_token:
                 with self._summary_lock:
                     self._active_summary_tokens[article_id] = request_token
                     self._active_summary_events[article_id] = summary_cancel_event
 
-            if not skip_ai_precheck:
+            requires_ai_call = (
+                source_type != "rss" or enable_ai_formatting or enable_ai_summary
+            )
+            if requires_ai_call and not skip_ai_precheck:
                 ai_gate = self.validate_ai_prerequisites()
                 if ai_gate.get("status") != "success":
                     return {
@@ -1946,13 +2299,86 @@ class Api:
                         "message": ai_gate.get("message", "API 前置检查失败"),
                     }
 
-            new_summary = self._llm.summarize_article(
-                title,
-                raw_text,
-                custom_prompt,
-                priority="manual",
-                cancel_event=summary_cancel_event,
-            )
+            enhanced_markdown = str(article.get("enhanced_markdown") or "").strip()
+            ai_tags: List[str] = []
+            ai_summary = ""
+
+            if source_type == "rss":
+                if enable_ai_formatting:
+                    enhanced_markdown = self._llm.format_rss_article(
+                        title,
+                        raw_text,
+                        formatting_prompt,
+                        priority="manual",
+                        cancel_event=summary_cancel_event,
+                    )
+                    if enhanced_markdown.startswith(
+                        "⚠️"
+                    ) or enhanced_markdown.startswith("❌"):
+                        new_summary = enhanced_markdown
+                    else:
+                        if not enable_ai_summary:
+                            ai_summary = ""
+                            ai_tags = []
+                            new_summary = ""
+                            result_kind = "rss_formatting"
+                        else:
+                            rss_summary_result = self._llm.summarize_rss_article(
+                                title,
+                                enhanced_markdown or raw_text,
+                                summary_prompt,
+                                priority="manual",
+                                cancel_event=summary_cancel_event,
+                            )
+                            if rss_summary_result.get("status") != "success":
+                                new_summary = str(
+                                    rss_summary_result.get("message")
+                                    or "⚠️ RSS 总结失败"
+                                )
+                            else:
+                                ai_tags = list(rss_summary_result.get("tags") or [])
+                                ai_summary = str(
+                                    rss_summary_result.get("summary") or ""
+                                ).strip()
+                                new_summary = compose_tagged_markdown(
+                                    ai_tags, ai_summary
+                                )
+                                result_kind = "rss_full"
+                else:
+                    enhanced_markdown = raw_text
+                    if not enable_ai_summary:
+                        ai_summary = ""
+                        ai_tags = []
+                        new_summary = ""
+                        result_kind = "rss_reset"
+                    else:
+                        rss_summary_result = self._llm.summarize_rss_article(
+                            title,
+                            raw_text,
+                            summary_prompt,
+                            priority="manual",
+                            cancel_event=summary_cancel_event,
+                        )
+                        if rss_summary_result.get("status") != "success":
+                            new_summary = str(
+                                rss_summary_result.get("message") or "⚠️ RSS 总结失败"
+                            )
+                        else:
+                            ai_tags = list(rss_summary_result.get("tags") or [])
+                            ai_summary = str(
+                                rss_summary_result.get("summary") or ""
+                            ).strip()
+                            new_summary = compose_tagged_markdown(ai_tags, ai_summary)
+                            result_kind = "rss_summary"
+            else:
+                new_summary = self._llm.summarize_article(
+                    title,
+                    raw_text,
+                    summary_prompt,
+                    priority="manual",
+                    cancel_event=summary_cancel_event,
+                    content_kind="default",
+                )
 
             # 5. 检查是否生成成功
             if new_summary.startswith("⚠️") or new_summary.startswith("❌"):
@@ -1967,12 +2393,36 @@ class Api:
             new_summary = strip_emoji(new_summary)
 
             # 6. 更新数据库
-            success = db.update_summary(article_id, new_summary)
+            if source_type == "rss":
+                success = db.update_rss_ai_content(
+                    article_id,
+                    enhanced_markdown,
+                    ai_summary,
+                    ai_tags,
+                )
+            else:
+                success = db.update_summary(article_id, new_summary)
             if not success:
                 return {"status": "error", "message": "更新数据库失败"}
 
             logger.info(f"文章总结重新生成成功: {title}")
-            return {"status": "success", "summary": new_summary}
+            return {
+                "status": "success",
+                "summary": new_summary,
+                "ai_summary": ai_summary,
+                "ai_tags": ai_tags,
+                "ai_tag_items": build_tag_items(ai_tags),
+                "raw_text": str(article.get("raw_text") or raw_text or ""),
+                "raw_markdown": str(
+                    article.get("raw_markdown") or article.get("raw_text") or raw_text or ""
+                ),
+                "enhanced_markdown": enhanced_markdown,
+                "result_kind": result_kind,
+                "enable_ai_formatting": enable_ai_formatting,
+                "enable_ai_summary": enable_ai_summary,
+                "formatting_prompt": formatting_prompt,
+                "summary_prompt": summary_prompt,
+            }
 
         except Exception as e:
             logger.error(f"重新生成总结失败: {e}")
@@ -2586,7 +3036,12 @@ class Api:
             logger.error(f"保存规则失败: {e}")
             return {"status": "error", "message": str(e)}
 
-    def validate_and_save_rss_rule(self, rule_dict: dict) -> Dict[str, Any]:
+    def validate_and_save_rss_rule(
+        self,
+        rule_dict: dict,
+        preview_only: bool = False,
+        request_token: int = 0,
+    ) -> Dict[str, Any]:
         """
         验证并直接保存 RSS 规则（无需 AI 生成选择器）
 
@@ -2599,9 +3054,283 @@ class Api:
             {"status": "success/error", "message": str, "feed_info": dict}
         """
         import feedparser
+        from src.spiders.rss_spider import create_rss_spider_from_rule
+
+        class RssPreviewCancelled(Exception):
+            """RSS 预览被用户取消"""
+
+        preview_cancel_event: Optional[threading.Event] = None
+
+        def ensure_preview_not_cancelled() -> None:
+            if preview_cancel_event and preview_cancel_event.is_set():
+                raise RssPreviewCancelled()
+
+        def build_sample_data(
+            rule: dict, limit: int = 1
+        ) -> tuple[List[Dict[str, Any]], Dict[str, Any], Dict[str, Any]]:
+            """从 RSS 规则生成代表样本数据，用于前端预览。"""
+            sample_rows: List[Dict[str, Any]] = []
+
+            def build_strategy_payload(strategy: Dict[str, Any]) -> Dict[str, Any]:
+                return {
+                    "profile": strategy.get("profile"),
+                    "profile_label": strategy.get("profile_label"),
+                    "profile_source": strategy.get("profile_source"),
+                    "profile_reason": strategy.get("profile_reason"),
+                    "template_id": strategy.get("template_id"),
+                    "template_name": strategy.get("template_name"),
+                    "template_description": strategy.get("template_description"),
+                    "default_max_items": strategy.get("default_max_items"),
+                    "effective_max_items": strategy.get("effective_max_items"),
+                }
+
+            def is_image_attachment(item: Dict[str, Any]) -> bool:
+                item_type = str(item.get("type") or "").strip().lower()
+                item_url = str(item.get("url") or "").strip().lower()
+                return item_type.startswith("image") or item_url.endswith(
+                    (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".avif")
+                )
+
+            def get_ai_preview_success_message(
+                formatting_enabled_flag: bool,
+                summary_enabled_flag: bool,
+            ) -> str:
+                if formatting_enabled_flag and summary_enabled_flag:
+                    return "已生成 AI 排版与摘要预览。"
+                if formatting_enabled_flag:
+                    return "已生成 AI 排版预览。"
+                if summary_enabled_flag:
+                    return "已生成 AI 摘要预览。"
+                return "已生成 AI 预览。"
+
+            preview_rule = normalize_rule_ai_config(rule)
+            # 预览模式不应受规则启停状态影响，否则编辑已禁用规则时会拿不到样本。
+            preview_rule["enabled"] = True
+            ensure_preview_not_cancelled()
+            spider = create_rss_spider_from_rule(preview_rule)
+            if not spider:
+                strategy = resolve_rss_rule_strategy(preview_rule)
+                return (
+                    sample_rows,
+                    build_strategy_payload(strategy),
+                    attach_rss_strategy_metadata(preview_rule),
+                )
+
+            try:
+                articles = spider.fetch_list(limit=limit)
+            except Exception as exc:
+                logger.debug(f"生成 RSS 预览样本失败: {exc}")
+                strategy = resolve_rss_rule_strategy(preview_rule)
+                return (
+                    sample_rows,
+                    build_strategy_payload(strategy),
+                    attach_rss_strategy_metadata(preview_rule),
+                )
+            ensure_preview_not_cancelled()
+
+            resolved_preview_rule = attach_rss_strategy_metadata(
+                preview_rule,
+                sample_articles=articles,
+            )
+            strategy = resolve_rss_rule_strategy(
+                resolved_preview_rule,
+                sample_articles=articles,
+            )
+
+            formatting_enabled = (
+                bool(preview_rule.get("enable_ai_formatting")) and preview_only
+            )
+            summary_enabled = (
+                bool(preview_rule.get("enable_ai_summary")) and preview_only
+            )
+            formatting_prompt = str(
+                strategy.get("effective_formatting_prompt") or ""
+            ).strip()
+            summary_prompt = str(
+                strategy.get("effective_summary_prompt") or ""
+            ).strip()
+            ai_enabled = formatting_enabled or summary_enabled
+            ai_preview_ready = False
+            ai_preview_error = ""
+            if ai_enabled:
+                ensure_preview_not_cancelled()
+                ai_gate = self.validate_ai_prerequisites()
+                ensure_preview_not_cancelled()
+                ai_preview_ready = ai_gate.get("status") == "success"
+                if not ai_preview_ready:
+                    ai_preview_error = str(ai_gate.get("message") or "AI 不可用")
+
+            for index, article in enumerate(articles[:limit]):
+                ensure_preview_not_cancelled()
+                body_text = strip_emoji(str(article.get("body_text") or "")).strip()
+                attachments = article.get("attachments") or []
+                image_assets = article.get("image_assets") or []
+                asset_image_urls = {
+                    str(asset.get("url") or "").strip()
+                    for asset in image_assets
+                    if str(asset.get("url") or "").strip()
+                }
+                image_urls = set(asset_image_urls)
+                image_category_counts = {
+                    "cover": 0,
+                    "body": 0,
+                    "attachment": 0,
+                    "external": 0,
+                }
+                for asset in image_assets:
+                    category = str(asset.get("category") or "").strip().lower()
+                    if category in image_category_counts:
+                        image_category_counts[category] += 1
+                for att in attachments:
+                    if not is_image_attachment(att):
+                        continue
+                    clean_url = str(att.get("url") or "").strip()
+                    if clean_url:
+                        image_urls.add(clean_url)
+                        if clean_url not in asset_image_urls:
+                            image_category_counts["attachment"] += 1
+
+                preview_signals = analyze_rss_preview_content(
+                    body_text,
+                    image_count=len(image_urls),
+                    attachment_count=len(attachments),
+                )
+                body_preview = str(preview_signals.get("body_plain_text") or "")
+                if len(body_preview) > 180:
+                    body_preview = body_preview[:180].rstrip() + "..."
+                sample_item = {
+                    "title": strip_emoji(str(article.get("title") or "")).strip(),
+                    "date": str(article.get("date") or "").strip(),
+                    "url": str(article.get("url") or "").strip(),
+                    "content_preview": body_preview or "（无正文）",
+                    "raw_markdown": body_text,
+                    "image_count": len(image_urls),
+                    "image_asset_count": len(image_urls),
+                    "cover_image_count": image_category_counts["cover"],
+                    "body_image_count": image_category_counts["body"],
+                    "attachment_image_count": image_category_counts["attachment"],
+                    "external_image_count": image_category_counts["external"],
+                    "attachment_count": len(attachments),
+                    "attachments": attachments,
+                    "ai_enabled": ai_enabled,
+                    "ai_formatting_enabled": formatting_enabled,
+                    "ai_summary_enabled": summary_enabled,
+                    "ai_preview_ready": ai_preview_ready,
+                    "has_ai_preview": False,
+                    **preview_signals,
+                }
+
+                if not ai_enabled:
+                    sample_item["ai_preview_status"] = "disabled"
+                    sample_item["ai_preview_message"] = (
+                        "已关闭 AI 预览，本次仅展示结构化解析结果。"
+                    )
+                elif not ai_preview_ready:
+                    sample_item["ai_preview_status"] = "unavailable"
+                    sample_item["ai_preview_message"] = (
+                        ai_preview_error or "AI 当前不可用，已跳过预览。"
+                    )
+                elif not sample_item["has_body"]:
+                    sample_item["ai_preview_status"] = "skipped"
+                    sample_item["ai_preview_message"] = (
+                        "未识别到可读正文，已跳过 AI 预览。"
+                    )
+                else:
+                    sample_item["ai_preview_status"] = "pending"
+                    sample_item["ai_preview_message"] = "正在生成 AI 预览。"
+
+                if ai_enabled and ai_preview_ready and body_text:
+                    ensure_preview_not_cancelled()
+                    enhanced_markdown = body_text
+                    if formatting_enabled:
+                        enhanced_markdown = self._llm.format_rss_article(
+                            sample_item["title"],
+                            body_text,
+                            custom_prompt=formatting_prompt,
+                            priority="manual",
+                            cancel_event=preview_cancel_event,
+                        )
+                    if enhanced_markdown.startswith(("⚠️", "❌")):
+                        if "用户取消" in enhanced_markdown:
+                            raise RssPreviewCancelled()
+                        sample_item["ai_preview_error"] = enhanced_markdown
+                        sample_item["ai_preview_status"] = "unavailable"
+                        sample_item["ai_preview_message"] = enhanced_markdown
+                    else:
+                        if formatting_enabled:
+                            sample_item["enhanced_markdown"] = enhanced_markdown
+                            sample_item["has_ai_preview"] = True
+                        if summary_enabled:
+                            summary_result = self._llm.summarize_rss_article(
+                                sample_item["title"],
+                                enhanced_markdown or body_text,
+                                custom_prompt=summary_prompt,
+                                priority="manual",
+                                cancel_event=preview_cancel_event,
+                            )
+                            if summary_result.get("status") == "success":
+                                sample_item["ai_summary"] = str(
+                                    summary_result.get("summary") or ""
+                                ).strip()
+                                sample_item["ai_tags"] = list(
+                                    summary_result.get("tags") or []
+                                )
+                                sample_item["ai_tag_items"] = list(
+                                    summary_result.get("tag_items")
+                                    or build_tag_items(sample_item["ai_tags"])
+                                )
+                                sample_item["has_ai_preview"] = bool(
+                                    sample_item.get("has_ai_preview")
+                                    or sample_item["ai_summary"]
+                                    or sample_item["ai_tags"]
+                                )
+                            else:
+                                if "用户取消" in str(
+                                    summary_result.get("message") or ""
+                                ):
+                                    raise RssPreviewCancelled()
+                                sample_item["ai_preview_error"] = str(
+                                    summary_result.get("message") or "AI 预览失败"
+                                )
+                        if sample_item.get("ai_preview_error") and sample_item.get(
+                            "has_ai_preview"
+                        ):
+                            sample_item["ai_preview_status"] = "warning"
+                            sample_item["ai_preview_message"] = (
+                                f"AI 预览部分生成：{sample_item['ai_preview_error']}"
+                            )
+                        elif sample_item.get("ai_preview_error"):
+                            sample_item["ai_preview_status"] = "unavailable"
+                            sample_item["ai_preview_message"] = str(
+                                sample_item["ai_preview_error"]
+                            )
+                        elif sample_item.get("has_ai_preview"):
+                            sample_item["ai_preview_status"] = "ready"
+                            sample_item["ai_preview_message"] = (
+                                get_ai_preview_success_message(
+                                    formatting_enabled,
+                                    summary_enabled,
+                                )
+                            )
+                        else:
+                            sample_item["ai_preview_status"] = "skipped"
+                            sample_item["ai_preview_message"] = (
+                                "AI 已启用，但当前样本没有生成可展示结果。"
+                            )
+                elif ai_enabled and not ai_preview_ready:
+                    sample_item["ai_preview_error"] = ai_preview_error
+
+                sample_rows.append(sample_item)
+
+            return sample_rows, build_strategy_payload(strategy), resolved_preview_rule
 
         try:
-            logger.info(f"📡 鷻加 RSS 规则: {rule_dict.get('task_name', 'unknown')}")
+            logger.info(f"📡 追加 RSS 规则: {rule_dict.get('task_name', 'unknown')}")
+            rule_dict = normalize_rule_ai_config(rule_dict)
+            if preview_only and request_token:
+                preview_cancel_event = threading.Event()
+                with self._rss_preview_lock:
+                    self._active_rss_preview_events[request_token] = preview_cancel_event
 
             # 参数验证
             if not rule_dict:
@@ -2622,6 +3351,7 @@ class Api:
             # 鋰前验证：尝试解析 RSS
             logger.info(f"📡 正在验证 RSS: {url}")
             feed = feedparser.parse(url)
+            ensure_preview_not_cancelled()
 
             # 检查是否为有效的 RSS
             if feed.bozo and not feed.entries:
@@ -2641,30 +3371,69 @@ class Api:
 
             logger.info(f"📡 RSS 验证成功: {feed_title} ({entry_count} 条目)")
 
+            sample_data, strategy_info, resolved_rule_dict = build_sample_data(
+                rule_dict, limit=1
+            )
+
+            if preview_only:
+                return {
+                    "status": "success",
+                    "message": "RSS 规则预览成功",
+                    "rule": resolved_rule_dict,
+                    "feed_info": {
+                        "title": feed_title,
+                        "link": feed_link,
+                        "entry_count": entry_count,
+                        "strategy": strategy_info,
+                    },
+                    "sample_data": sample_data,
+                }
+
             # 填充默认值（RSS 规则不需要 HTML 选择器字段）
             rule_dict.setdefault("source_type", "rss")
             # 🌟 不再填充冗余的 HTML 选择器字段，由 save_custom_rule 统一处理
-            rule_dict.setdefault("custom_summary_prompt", "")
-            if str(rule_dict.get("custom_summary_prompt") or "").strip():
-                rule_dict["require_ai_summary"] = True
-            else:
-                rule_dict.setdefault("require_ai_summary", False)
+            rule_dict = attach_rss_strategy_metadata(
+                normalize_rule_ai_config(resolved_rule_dict),
+                sample_articles=None,
+            )
             rule_dict.setdefault("enabled", True)
 
             # 保存规则
             success = self._rules_manager.save_custom_rule(rule_dict)
 
             if success:
+                synced_articles = db.sync_rss_rule_ai_config(
+                    str(rule_dict.get("rule_id") or "").strip(),
+                    formatting_prompt=str(
+                        rule_dict.get("formatting_prompt") or ""
+                    ).strip(),
+                    summary_prompt=str(rule_dict.get("summary_prompt") or "").strip(),
+                    custom_summary_prompt=str(
+                        rule_dict.get("custom_summary_prompt")
+                        or rule_dict.get("summary_prompt")
+                        or ""
+                    ).strip(),
+                    enable_ai_formatting=bool(
+                        rule_dict.get("enable_ai_formatting", False)
+                    ),
+                    enable_ai_summary=bool(
+                        rule_dict.get("enable_ai_summary", False)
+                    ),
+                )
                 logger.info(f"RSS 规则保存成功: {rule_dict.get('rule_id')}")
                 return {
                     "status": "success",
                     "message": "RSS 规则保存成功",
                     "rule_id": rule_dict.get("rule_id"),
+                    "rule": rule_dict,
+                    "synced_articles": synced_articles,
                     "feed_info": {
                         "title": feed_title,
                         "link": feed_link,
                         "entry_count": entry_count,
+                        "strategy": strategy_info,
                     },
+                    "sample_data": sample_data,
                 }
             else:
                 return {"status": "error", "message": "规则保存失败"}
@@ -2675,9 +3444,16 @@ class Api:
                 "status": "error",
                 "message": "feedparser 模块未安装，请检查 requirements.txt",
             }
+        except RssPreviewCancelled:
+            logger.info("RSS 规则预览已取消")
+            return {"status": "cancelled", "message": "已取消 RSS 规则预览"}
         except Exception as e:
             logger.error(f"保存 RSS 规则失败: {e}")
             return {"status": "error", "message": str(e)}
+        finally:
+            if preview_only and request_token:
+                with self._rss_preview_lock:
+                    self._active_rss_preview_events.pop(request_token, None)
 
     def get_custom_spider_rules(self) -> Dict[str, Any]:
         """
@@ -2688,10 +3464,73 @@ class Api:
         """
         try:
             rules = self._rules_manager.load_custom_rules()
-            return {"status": "success", "rules": rules}
+            return {
+                "status": "success",
+                "rules": rules,
+                "rss_strategy_catalog": get_rss_strategy_catalog(),
+                "rss_health_summary": self._build_rss_health_summary(rules),
+            }
         except Exception as e:
             logger.error(f"获取规则列表失败: {e}")
             return {"status": "error", "message": str(e)}
+
+    def _build_rss_health_summary(self, rules: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """汇总 RSS 规则健康状态，供前端做轻量提示。"""
+        rss_rules = [
+            rule
+            for rule in (rules or [])
+            if str(rule.get("source_type") or "").strip().lower() == "rss"
+        ]
+
+        summary = {
+            "total_rules": len(rss_rules),
+            "healthy_count": 0,
+            "empty_count": 0,
+            "error_count": 0,
+            "attention_count": 0,
+            "attention_rules": [],
+        }
+
+        if not rss_rules:
+            return summary
+
+        attention_rules: List[Dict[str, Any]] = []
+        for rule in rss_rules:
+            health = rule.get("health") if isinstance(rule.get("health"), dict) else {}
+            status = str(health.get("status") or "").strip().lower()
+            if status == "healthy":
+                summary["healthy_count"] += 1
+            elif status == "empty":
+                summary["empty_count"] += 1
+            elif status == "error":
+                summary["error_count"] += 1
+
+            consecutive_failures = int(health.get("consecutive_failures") or 0)
+            if status == "error" or consecutive_failures >= 2:
+                attention_rules.append(
+                    {
+                        "rule_id": str(rule.get("rule_id") or "").strip(),
+                        "task_name": str(rule.get("task_name") or "").strip(),
+                        "status": status or "unknown",
+                        "consecutive_failures": consecutive_failures,
+                        "last_checked_at": str(
+                            health.get("last_checked_at") or ""
+                        ).strip(),
+                        "last_error_message": str(
+                            health.get("last_error_message") or ""
+                        ).strip(),
+                    }
+                )
+
+        attention_rules.sort(
+            key=lambda item: (
+                -int(item.get("consecutive_failures") or 0),
+                item.get("last_checked_at") or "",
+            )
+        )
+        summary["attention_rules"] = attention_rules[:5]
+        summary["attention_count"] = len(attention_rules)
+        return summary
 
     def debug_effective_sources(self) -> Dict[str, Any]:
         """
@@ -2750,9 +3589,20 @@ class Api:
             {"status": "success/error"}
         """
         try:
+            rule = self._rules_manager.get_rule_by_id(rule_id)
+            if not rule:
+                return {"status": "error", "message": "删除失败或规则不存在"}
+
             success = self._rules_manager.delete_rule(rule_id)
             if success:
-                return {"status": "success", "message": "规则已删除"}
+                deleted_articles_count = db.delete_articles_by_rule_id(
+                    rule_id, hard_delete=True
+                )
+                return {
+                    "status": "success",
+                    "message": "规则已删除",
+                    "deleted_articles_count": deleted_articles_count,
+                }
             else:
                 return {"status": "error", "message": "删除失败或规则不存在"}
         except Exception as e:

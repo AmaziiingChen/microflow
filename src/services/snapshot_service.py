@@ -10,6 +10,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 import mistune
 from src.utils.text_cleaner import strip_emoji
+from src.utils.ai_markdown import resolve_article_summary_payload
 
 logger = logging.getLogger(__name__)
 
@@ -326,21 +327,9 @@ def _generate_html_template(article_data: Dict[str, Any]) -> str:
         elif isinstance(attachments_raw, list):
             attachments = attachments_raw
 
-    # 🌟 提取彩色标签（复刻前端逻辑：从 summary 第一行提取【】标签）
-    parsed_tags = []
-    parsed_body = summary
-
-    if summary and "【" in summary:
-        lines = summary.split("\n")
-        first_line = lines[0].strip() if lines else ""
-        if first_line.startswith("【"):
-            import re
-
-            matches = re.findall(r"【(.*?)】", first_line)
-            if matches:
-                parsed_tags = matches
-            # 移除第一行标签，保留正文
-            parsed_body = "\n".join(lines[1:]).strip()
+    summary_payload = resolve_article_summary_payload(article_data)
+    parsed_tags = list(summary_payload.get("tags") or [])
+    parsed_body = str(summary_payload.get("preview_markdown") or summary or "").strip()
 
     # 使用 mistune 渲染 Markdown
     content_html = _render_markdown(parsed_body)

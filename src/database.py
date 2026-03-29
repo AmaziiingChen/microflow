@@ -32,6 +32,7 @@ SQLite 连接池 - 高并发优化的数据库管理器
 4. 超时保护：防止无限等待
 """
 
+import json
 import sqlite3
 import hashlib
 import logging
@@ -39,6 +40,7 @@ import threading
 import queue
 import re
 from src.utils.text_cleaner import strip_emoji
+from src.utils.ai_markdown import compose_tagged_markdown, extract_leading_tags, serialize_tags
 from typing import Optional, Dict, Any, List, Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -400,15 +402,43 @@ class DatabaseManager:
                     attachments TEXT,
                     summary TEXT,
                     raw_text TEXT,
+                    raw_markdown TEXT DEFAULT '',
+                    enhanced_markdown TEXT DEFAULT '',
+                    ai_summary TEXT DEFAULT '',
+                    ai_tags TEXT DEFAULT '',
                     raw_hash TEXT NOT NULL,
                     is_read INTEGER DEFAULT 0,
                     is_favorite INTEGER DEFAULT 0,
                     is_deleted INTEGER DEFAULT 0,
                     source_name TEXT DEFAULT '公文通',
+                    source_type TEXT DEFAULT 'html',
                     rule_id TEXT DEFAULT '',
                     custom_summary_prompt TEXT DEFAULT '',
+                    formatting_prompt TEXT DEFAULT '',
+                    summary_prompt TEXT DEFAULT '',
+                    enable_ai_formatting INTEGER DEFAULT 0,
+                    enable_ai_summary INTEGER DEFAULT 0,
+                    content_blocks TEXT DEFAULT '[]',
+                    image_assets TEXT DEFAULT '[]',
                     created_at TIMESTAMP DEFAULT (datetime('now', 'localtime'))
                 )
+            ''')
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS ai_result_cache (
+                    cache_key TEXT PRIMARY KEY,
+                    cache_scope TEXT NOT NULL,
+                    content_hash TEXT NOT NULL,
+                    prompt_hash TEXT NOT NULL,
+                    model_name TEXT DEFAULT '',
+                    base_url TEXT DEFAULT '',
+                    result_text TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT (datetime('now', 'localtime')),
+                    updated_at TIMESTAMP DEFAULT (datetime('now', 'localtime'))
+                )
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_ai_result_cache_scope_updated
+                ON ai_result_cache(cache_scope, updated_at DESC)
             ''')
             return True
 
@@ -426,6 +456,12 @@ class DatabaseManager:
                 cursor.execute("ALTER TABLE articles ADD COLUMN source_name TEXT DEFAULT '公文通'")
                 cursor.execute("UPDATE articles SET source_name = '公文通' WHERE source_name IS NULL")
                 logger.info("source_name 字段迁移完成")
+
+            if 'source_type' not in columns:
+                logger.info("正在执行 source_type 字段迁移...")
+                cursor.execute("ALTER TABLE articles ADD COLUMN source_type TEXT DEFAULT 'html'")
+                cursor.execute("UPDATE articles SET source_type = 'html' WHERE source_type IS NULL")
+                logger.info("source_type 字段迁移完成")
 
             # 🌟 新增：is_favorite 字段迁移
             if 'is_favorite' not in columns:
@@ -448,6 +484,105 @@ class DatabaseManager:
                 logger.info("正在执行 custom_summary_prompt 字段迁移...")
                 cursor.execute("ALTER TABLE articles ADD COLUMN custom_summary_prompt TEXT DEFAULT ''")
                 logger.info("custom_summary_prompt 字段迁移完成")
+
+            if 'formatting_prompt' not in columns:
+                logger.info("正在执行 formatting_prompt 字段迁移...")
+                cursor.execute("ALTER TABLE articles ADD COLUMN formatting_prompt TEXT DEFAULT ''")
+                logger.info("formatting_prompt 字段迁移完成")
+
+            if 'summary_prompt' not in columns:
+                logger.info("正在执行 summary_prompt 字段迁移...")
+                cursor.execute("ALTER TABLE articles ADD COLUMN summary_prompt TEXT DEFAULT ''")
+                logger.info("summary_prompt 字段迁移完成")
+
+            if 'enable_ai_formatting' not in columns:
+                logger.info("正在执行 enable_ai_formatting 字段迁移...")
+                cursor.execute("ALTER TABLE articles ADD COLUMN enable_ai_formatting INTEGER DEFAULT 0")
+                logger.info("enable_ai_formatting 字段迁移完成")
+
+            if 'enable_ai_summary' not in columns:
+                logger.info("正在执行 enable_ai_summary 字段迁移...")
+                cursor.execute("ALTER TABLE articles ADD COLUMN enable_ai_summary INTEGER DEFAULT 0")
+                logger.info("enable_ai_summary 字段迁移完成")
+
+            if 'content_blocks' not in columns:
+                logger.info("正在执行 content_blocks 字段迁移...")
+                cursor.execute("ALTER TABLE articles ADD COLUMN content_blocks TEXT DEFAULT '[]'")
+                logger.info("content_blocks 字段迁移完成")
+
+            if 'image_assets' not in columns:
+                logger.info("正在执行 image_assets 字段迁移...")
+                cursor.execute("ALTER TABLE articles ADD COLUMN image_assets TEXT DEFAULT '[]'")
+                logger.info("image_assets 字段迁移完成")
+
+            if 'raw_markdown' not in columns:
+                logger.info("正在执行 raw_markdown 字段迁移...")
+                cursor.execute("ALTER TABLE articles ADD COLUMN raw_markdown TEXT DEFAULT ''")
+                logger.info("raw_markdown 字段迁移完成")
+
+            if 'enhanced_markdown' not in columns:
+                logger.info("正在执行 enhanced_markdown 字段迁移...")
+                cursor.execute("ALTER TABLE articles ADD COLUMN enhanced_markdown TEXT DEFAULT ''")
+                logger.info("enhanced_markdown 字段迁移完成")
+
+            if 'ai_summary' not in columns:
+                logger.info("正在执行 ai_summary 字段迁移...")
+                cursor.execute("ALTER TABLE articles ADD COLUMN ai_summary TEXT DEFAULT ''")
+                logger.info("ai_summary 字段迁移完成")
+
+            if 'ai_tags' not in columns:
+                logger.info("正在执行 ai_tags 字段迁移...")
+                cursor.execute("ALTER TABLE articles ADD COLUMN ai_tags TEXT DEFAULT ''")
+                logger.info("ai_tags 字段迁移完成")
+
+            # 为历史 RSS 数据补默认值，保证新旧前端都能回退读取
+            cursor.execute("""
+                UPDATE articles
+                SET raw_markdown = raw_text
+                WHERE source_type = 'rss'
+                  AND (raw_markdown IS NULL OR raw_markdown = '')
+                  AND raw_text IS NOT NULL
+                  AND raw_text != ''
+            """)
+            cursor.execute("""
+                UPDATE articles
+                SET enhanced_markdown = CASE
+                    WHEN summary IS NOT NULL AND summary != '' THEN summary
+                    ELSE raw_text
+                END
+                WHERE source_type = 'rss'
+                  AND (enhanced_markdown IS NULL OR enhanced_markdown = '')
+            """)
+
+            cursor.execute("""
+                UPDATE articles
+                SET summary_prompt = custom_summary_prompt
+                WHERE source_type = 'rss'
+                  AND (summary_prompt IS NULL OR summary_prompt = '')
+                  AND custom_summary_prompt IS NOT NULL
+                  AND custom_summary_prompt != ''
+            """)
+            cursor.execute("""
+                UPDATE articles
+                SET enable_ai_summary = CASE
+                    WHEN summary_prompt IS NOT NULL AND summary_prompt != '' THEN 1
+                    WHEN ai_summary IS NOT NULL AND ai_summary != '' THEN 1
+                    ELSE enable_ai_summary
+                END
+                WHERE source_type = 'rss'
+            """)
+            cursor.execute("""
+                UPDATE articles
+                SET enable_ai_formatting = CASE
+                    WHEN raw_markdown IS NOT NULL
+                         AND raw_markdown != ''
+                         AND enhanced_markdown IS NOT NULL
+                         AND enhanced_markdown != ''
+                         AND enhanced_markdown != raw_markdown THEN 1
+                    ELSE enable_ai_formatting
+                END
+                WHERE source_type = 'rss'
+            """)
 
             return True
 
@@ -527,6 +662,85 @@ class DatabaseManager:
     def generate_hash(self, text: str) -> str:
         """生成文本的 MD5 哈希值"""
         return hashlib.md5(text.encode('utf-8')).hexdigest()
+
+    def get_ai_result_cache(self, cache_key: str) -> Optional[Dict[str, Any]]:
+        """读取 AI 结果缓存。"""
+        cache_key = str(cache_key or "").strip()
+        if not cache_key:
+            return None
+
+        with self._get_read_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT cache_key, cache_scope, content_hash, prompt_hash,
+                       model_name, base_url, result_text, created_at, updated_at
+                FROM ai_result_cache
+                WHERE cache_key = ?
+                LIMIT 1
+                """,
+                (cache_key,),
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def upsert_ai_result_cache(
+        self,
+        *,
+        cache_key: str,
+        cache_scope: str,
+        content_hash: str,
+        prompt_hash: str,
+        model_name: str,
+        base_url: str,
+        result_text: str,
+    ) -> bool:
+        """写入或更新 AI 结果缓存。"""
+        cache_key = str(cache_key or "").strip()
+        if not cache_key:
+            return False
+
+        cache_scope = str(cache_scope or "").strip()
+        content_hash = str(content_hash or "").strip()
+        prompt_hash = str(prompt_hash or "").strip()
+        model_name = strip_emoji(str(model_name or "").strip())
+        base_url = strip_emoji(str(base_url or "").strip())
+        result_text = strip_emoji(str(result_text or "").strip())
+
+        def do_upsert(cursor: sqlite3.Cursor):
+            cursor.execute(
+                """
+                INSERT INTO ai_result_cache (
+                    cache_key, cache_scope, content_hash, prompt_hash,
+                    model_name, base_url, result_text, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+                ON CONFLICT(cache_key) DO UPDATE SET
+                    cache_scope = excluded.cache_scope,
+                    content_hash = excluded.content_hash,
+                    prompt_hash = excluded.prompt_hash,
+                    model_name = excluded.model_name,
+                    base_url = excluded.base_url,
+                    result_text = excluded.result_text,
+                    updated_at = datetime('now', 'localtime')
+                """,
+                (
+                    cache_key,
+                    cache_scope,
+                    content_hash,
+                    prompt_hash,
+                    model_name,
+                    base_url,
+                    result_text,
+                ),
+            )
+            return True
+
+        try:
+            return bool(self._write_worker.submit(do_upsert, wait=True, timeout=10.0))
+        except Exception as e:
+            logger.error(f"写入 AI 缓存失败: {e}")
+            return False
 
     # ==================== 读操作 ====================
 
@@ -609,9 +823,18 @@ class DatabaseManager:
             if conditions:
                 base_query += " WHERE " + " AND ".join(conditions)
 
-            # 🌟 统一排序：优先使用入库时间 created_at（确保新抓取的文章显示在前面）
-            # 然后按发布日期 exact_time/date 排序
-            base_query += " ORDER BY created_at DESC, COALESCE(NULLIF(exact_time, ''), date || ' 00:00:00') DESC LIMIT ? OFFSET ?"
+            # 🌟 合并视图排序：核心公文通优先，其余来源再按入库时间倒序
+            # 这样“全部”首屏不会被高频 RSS 挤掉，但单源筛选仍保持时间优先
+            if source_names is not None and len(source_names) > 1:
+                base_query += (
+                    " ORDER BY CASE WHEN source_name = '公文通' THEN 0 ELSE 1 END,"
+                    " created_at DESC, COALESCE(NULLIF(exact_time, ''), date || ' 00:00:00') DESC"
+                )
+            else:
+                base_query += (
+                    " ORDER BY created_at DESC, COALESCE(NULLIF(exact_time, ''), date || ' 00:00:00') DESC"
+                )
+            base_query += " LIMIT ? OFFSET ?"
             params.extend([limit, offset])
 
             cursor.execute(base_query, tuple(params))
@@ -758,14 +981,15 @@ class DatabaseManager:
                     # 标签格式：【标签名】，存储在 summary 字段开头
                     # 使用 SQLite 的 substr 和 instr 函数提取标签进行匹配
                     term_cond = ("(title LIKE ? OR date LIKE ? OR raw_text LIKE ? OR summary LIKE ? "
+                                 "OR raw_markdown LIKE ? OR enhanced_markdown LIKE ? OR ai_summary LIKE ? OR ai_tags LIKE ? "
                                  "OR department LIKE ? OR category LIKE ? OR source_name LIKE ? "
                                  "OR attachments LIKE ? "
                                  # 🌟 新增：专门搜索标签部分（summary 中【】内的内容）
-                                 f"OR (summary LIKE '%【%{term}%】%' OR summary LIKE '%【{term}%'))")
+                                 f"OR (summary LIKE '%【%{term}%】%' OR summary LIKE '%【{term}%') "
+                                 f"OR (ai_tags LIKE '%{term}%'))")
                     and_conditions.append(term_cond)
 
-                    # 🌟 现在有 8 个问号 + 2 个内嵌条件
-                    params.extend([like_term] * 8)
+                    params.extend([like_term] * 12)
 
                 sql_or_conditions.append("(" + " AND ".join(and_conditions) + ")")
 
@@ -816,10 +1040,15 @@ class DatabaseManager:
                 summary = item.get('summary') or ""
                 title = item.get('title') or ""
                 raw_text = item.get('raw_text') or ""
+                enhanced_markdown = item.get('enhanced_markdown') or ""
+                ai_summary = item.get('ai_summary') or ""
 
                 missed_in_ui = [
                     t for t in terms
-                    if t.lower() not in summary.lower() and t.lower() not in title.lower()
+                    if t.lower() not in summary.lower()
+                    and t.lower() not in title.lower()
+                    and t.lower() not in enhanced_markdown.lower()
+                    and t.lower() not in ai_summary.lower()
                 ]
 
                 if missed_in_ui and raw_text:
@@ -846,7 +1075,7 @@ class DatabaseManager:
     </div>
     <div class="snippet-content">{snippets_html}</div>
 </div>"""
-                        item['summary'] = summary + "\n\n" + html_block
+                        item['search_snippet_html'] = html_block
 
                 results.append(item)
 
@@ -932,11 +1161,28 @@ class DatabaseManager:
     def insert_or_update_article(self, title: str, url: str, date: str, exact_time: str,
                                   category: str, department: str, attachments: str,
                                   summary: str, raw_content: str, source_name: str = '公文通',
-                                  rule_id: str = '', custom_summary_prompt: str = ''):
+                                  rule_id: str = '', custom_summary_prompt: str = '',
+                                  source_type: str = 'html', raw_markdown: str = '',
+                                  enhanced_markdown: str = '', ai_summary: str = '',
+                                  ai_tags: Optional[List[str]] = None,
+                                  formatting_prompt: str = '',
+                                  summary_prompt: str = '',
+                                  enable_ai_formatting: bool = False,
+                                  enable_ai_summary: bool = False,
+                                  content_blocks: Optional[List[Dict[str, Any]]] = None,
+                                  image_assets: Optional[List[Dict[str, Any]]] = None):
         """插入或更新文章（异步写入）"""
         current_hash = self.generate_hash(raw_content)
         summary = strip_emoji(summary)
         custom_summary_prompt = strip_emoji(custom_summary_prompt)
+        raw_markdown = strip_emoji(raw_markdown)
+        enhanced_markdown = strip_emoji(enhanced_markdown)
+        ai_summary = strip_emoji(ai_summary)
+        formatting_prompt = strip_emoji(formatting_prompt)
+        summary_prompt = strip_emoji(summary_prompt)
+        ai_tags_json = serialize_tags(ai_tags or [])
+        content_blocks_json = json.dumps(content_blocks or [], ensure_ascii=False)
+        image_assets_json = json.dumps(image_assets or [], ensure_ascii=False)
 
         # 🌟 标准化日期和时间格式
         date = self._normalize_date(date)
@@ -945,9 +1191,16 @@ class DatabaseManager:
         def do_insert(cursor: sqlite3.Cursor):
             cursor.execute('''
                 REPLACE INTO articles
-                (title, url, date, exact_time, category, department, attachments, summary, raw_text, raw_hash, is_read, source_name, rule_id, custom_summary_prompt)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
-            ''', (title, url, date, exact_time, category, department, attachments, summary, raw_content, current_hash, source_name, rule_id, custom_summary_prompt))
+                (title, url, date, exact_time, category, department, attachments, summary, raw_text, raw_markdown, enhanced_markdown, ai_summary, ai_tags, raw_hash, is_read, source_name, source_type, rule_id, custom_summary_prompt, formatting_prompt, summary_prompt, enable_ai_formatting, enable_ai_summary, content_blocks, image_assets)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                title, url, date, exact_time, category, department, attachments,
+                summary, raw_content, raw_markdown, enhanced_markdown, ai_summary,
+                ai_tags_json, current_hash, source_name, source_type, rule_id,
+                custom_summary_prompt, formatting_prompt, summary_prompt,
+                int(enable_ai_formatting), int(enable_ai_summary),
+                content_blocks_json, image_assets_json
+            ))
             return True
 
         # 提交到写队列，不等待结果（异步写入）
@@ -960,11 +1213,28 @@ class DatabaseManager:
     def insert_or_update_article_sync(self, title: str, url: str, date: str, exact_time: str,
                                         category: str, department: str, attachments: str,
                                         summary: str, raw_content: str, source_name: str = '公文通',
-                                        rule_id: str = '', custom_summary_prompt: str = '') -> bool:
+                                        rule_id: str = '', custom_summary_prompt: str = '',
+                                        source_type: str = 'html', raw_markdown: str = '',
+                                        enhanced_markdown: str = '', ai_summary: str = '',
+                                        ai_tags: Optional[List[str]] = None,
+                                        formatting_prompt: str = '',
+                                        summary_prompt: str = '',
+                                        enable_ai_formatting: bool = False,
+                                        enable_ai_summary: bool = False,
+                                        content_blocks: Optional[List[Dict[str, Any]]] = None,
+                                        image_assets: Optional[List[Dict[str, Any]]] = None) -> bool:
         """插入或更新文章（同步版本，等待写入完成）"""
         current_hash = self.generate_hash(raw_content)
         summary = strip_emoji(summary)
         custom_summary_prompt = strip_emoji(custom_summary_prompt)
+        raw_markdown = strip_emoji(raw_markdown)
+        enhanced_markdown = strip_emoji(enhanced_markdown)
+        ai_summary = strip_emoji(ai_summary)
+        formatting_prompt = strip_emoji(formatting_prompt)
+        summary_prompt = strip_emoji(summary_prompt)
+        ai_tags_json = serialize_tags(ai_tags or [])
+        content_blocks_json = json.dumps(content_blocks or [], ensure_ascii=False)
+        image_assets_json = json.dumps(image_assets or [], ensure_ascii=False)
 
         # 🌟 标准化日期和时间格式
         date = self._normalize_date(date)
@@ -973,9 +1243,16 @@ class DatabaseManager:
         def do_insert(cursor: sqlite3.Cursor):
             cursor.execute('''
                 REPLACE INTO articles
-                (title, url, date, exact_time, category, department, attachments, summary, raw_text, raw_hash, is_read, source_name, rule_id, custom_summary_prompt)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
-            ''', (title, url, date, exact_time, category, department, attachments, summary, raw_content, current_hash, source_name, rule_id, custom_summary_prompt))
+                (title, url, date, exact_time, category, department, attachments, summary, raw_text, raw_markdown, enhanced_markdown, ai_summary, ai_tags, raw_hash, is_read, source_name, source_type, rule_id, custom_summary_prompt, formatting_prompt, summary_prompt, enable_ai_formatting, enable_ai_summary, content_blocks, image_assets)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                title, url, date, exact_time, category, department, attachments,
+                summary, raw_content, raw_markdown, enhanced_markdown, ai_summary,
+                ai_tags_json, current_hash, source_name, source_type, rule_id,
+                custom_summary_prompt, formatting_prompt, summary_prompt,
+                int(enable_ai_formatting), int(enable_ai_summary),
+                content_blocks_json, image_assets_json
+            ))
             return True
 
         try:
@@ -1059,11 +1336,13 @@ class DatabaseManager:
     def update_summary(self, article_id: int, new_summary: str) -> bool:
         """更新文章摘要（同步）"""
         new_summary = strip_emoji(new_summary)
+        tags, body = extract_leading_tags(new_summary)
+        compatibility_summary = compose_tagged_markdown(tags, body)
 
         def do_update(cursor: sqlite3.Cursor):
             cursor.execute(
-                "UPDATE articles SET summary = ? WHERE id = ?",
-                (new_summary, article_id)
+                "UPDATE articles SET summary = ?, ai_summary = ?, ai_tags = ? WHERE id = ?",
+                (compatibility_summary, body, serialize_tags(tags), article_id)
             )
             return cursor.rowcount > 0
 
@@ -1072,6 +1351,171 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"更新摘要失败: {e}")
             return False
+
+    def update_rss_ai_content(
+        self,
+        article_id: int,
+        enhanced_markdown: str,
+        ai_summary: str,
+        ai_tags: Optional[List[str]] = None,
+    ) -> bool:
+        """更新 RSS 增强正文、摘要与标签。"""
+        enhanced_markdown = strip_emoji(enhanced_markdown)
+        ai_summary = strip_emoji(ai_summary)
+        compatibility_summary = compose_tagged_markdown(ai_tags or [], ai_summary)
+
+        def do_update(cursor: sqlite3.Cursor):
+            cursor.execute(
+                """
+                UPDATE articles
+                SET enhanced_markdown = ?, ai_summary = ?, ai_tags = ?, summary = ?
+                WHERE id = ?
+                """,
+                (
+                    enhanced_markdown,
+                    ai_summary,
+                    serialize_tags(ai_tags or []),
+                    compatibility_summary,
+                    article_id,
+                ),
+            )
+            return cursor.rowcount > 0
+
+        try:
+            return self._write_worker.submit(do_update, wait=True, timeout=10.0)
+        except Exception as e:
+            logger.error(f"更新 RSS AI 内容失败: {e}")
+            return False
+
+    def update_rss_detail_content(
+        self,
+        article_id: int,
+        *,
+        raw_text: Optional[str] = None,
+        raw_markdown: Optional[str] = None,
+        enhanced_markdown: Optional[str] = None,
+        ai_summary: Optional[str] = None,
+        ai_tags: Optional[List[str]] = None,
+        summary: Optional[str] = None,
+    ) -> bool:
+        """按需更新 RSS 正文/增强正文/摘要相关字段。"""
+        assignments = []
+        values: List[Any] = []
+
+        def push_text(field_name: str, field_value: Optional[str]) -> None:
+            if field_value is None:
+                return
+            assignments.append(f"{field_name} = ?")
+            values.append(strip_emoji(field_value))
+
+        push_text("raw_text", raw_text)
+        push_text("raw_markdown", raw_markdown)
+        push_text("enhanced_markdown", enhanced_markdown)
+        push_text("ai_summary", ai_summary)
+        push_text("summary", summary)
+
+        next_raw_hash_source = None
+        if raw_text is not None:
+            next_raw_hash_source = raw_text
+        elif raw_markdown is not None:
+            next_raw_hash_source = raw_markdown
+        if next_raw_hash_source is not None:
+            assignments.append("raw_hash = ?")
+            values.append(self.generate_hash(next_raw_hash_source))
+
+        if ai_tags is not None:
+            assignments.append("ai_tags = ?")
+            values.append(serialize_tags(ai_tags))
+
+        if not assignments:
+            return True
+
+        def do_update(cursor: sqlite3.Cursor):
+            cursor.execute(
+                f"UPDATE articles SET {', '.join(assignments)} WHERE id = ?",
+                (*values, article_id),
+            )
+            return cursor.rowcount > 0
+
+        try:
+            return self._write_worker.submit(do_update, wait=True, timeout=10.0)
+        except Exception as e:
+            logger.error(f"更新 RSS 正文失败: {e}")
+            return False
+
+    def sync_rss_rule_ai_config(
+        self,
+        rule_id: str,
+        *,
+        formatting_prompt: str = "",
+        summary_prompt: str = "",
+        custom_summary_prompt: str = "",
+        enable_ai_formatting: bool = False,
+        enable_ai_summary: bool = False,
+    ) -> int:
+        """将 RSS 规则的 AI 配置同步到已入库文章。"""
+        clean_rule_id = str(rule_id or "").strip()
+        if not clean_rule_id:
+            return 0
+
+        formatting_prompt = strip_emoji(formatting_prompt)
+        summary_prompt = strip_emoji(summary_prompt)
+        custom_summary_prompt = strip_emoji(custom_summary_prompt)
+
+        def do_update(cursor: sqlite3.Cursor):
+            cursor.execute(
+                """
+                UPDATE articles
+                SET formatting_prompt = ?,
+                    summary_prompt = ?,
+                    custom_summary_prompt = ?,
+                    enable_ai_formatting = ?,
+                    enable_ai_summary = ?
+                WHERE rule_id = ? AND source_type = 'rss'
+                """,
+                (
+                    formatting_prompt,
+                    summary_prompt,
+                    custom_summary_prompt,
+                    int(enable_ai_formatting),
+                    int(enable_ai_summary),
+                    clean_rule_id,
+                ),
+            )
+            return int(cursor.rowcount or 0)
+
+        try:
+            return self._write_worker.submit(do_update, wait=True, timeout=10.0)
+        except Exception as e:
+            logger.error(f"同步 RSS 规则 AI 配置失败: {e}")
+            return 0
+
+    def delete_articles_by_rule_id(
+        self, rule_id: str, hard_delete: bool = True
+    ) -> int:
+        """按规则 ID 删除对应的文章。"""
+        clean_rule_id = str(rule_id or "").strip()
+        if not clean_rule_id:
+            return 0
+
+        def do_delete(cursor: sqlite3.Cursor):
+            if hard_delete:
+                cursor.execute(
+                    "DELETE FROM articles WHERE rule_id = ?",
+                    (clean_rule_id,),
+                )
+            else:
+                cursor.execute(
+                    "UPDATE articles SET is_deleted = 1 WHERE rule_id = ?",
+                    (clean_rule_id,),
+                )
+            return int(cursor.rowcount or 0)
+
+        try:
+            return self._write_worker.submit(do_delete, wait=True, timeout=10.0)
+        except Exception as e:
+            logger.error(f"按规则删除文章失败: {e}")
+            return 0
 
     def delete_article(self, article_id: int, hard_delete: bool = False) -> bool:
         """

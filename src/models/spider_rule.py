@@ -110,7 +110,17 @@ class SpiderRuleOutput(BaseModel):
     # AI 摘要开关
     require_ai_summary: bool = Field(
         default=False,
-        description="是否需要对抓取内容进行 AI 摘要"
+        description="兼容旧字段：是否启用 AI 摘要/增强"
+    )
+
+    enable_ai_formatting: bool = Field(
+        default=False,
+        description="是否启用 AI 排版增强（主要用于 RSS）"
+    )
+
+    enable_ai_summary: bool = Field(
+        default=False,
+        description="是否启用 AI 摘要与标签"
     )
 
     # 🌟 跳过详情页抓取（仅 HTML 爬虫有效）
@@ -128,7 +138,32 @@ class SpiderRuleOutput(BaseModel):
     # 🌟 专属 AI 提示词
     custom_summary_prompt: Optional[str] = Field(
         default="",
-        description="该数据源专属的 AI 摘要提示词，用于定制提取和 Markdown 排版逻辑"
+        description="兼容旧字段：该数据源专属的 AI 提示词"
+    )
+
+    formatting_prompt: Optional[str] = Field(
+        default="",
+        description="AI 排版增强专属提示词（主要用于 RSS）"
+    )
+
+    summary_prompt: Optional[str] = Field(
+        default="",
+        description="AI 摘要与标签专属提示词"
+    )
+
+    source_profile: Optional[str] = Field(
+        default="",
+        description="RSS 源级策略档位，如 news / longform / visual"
+    )
+
+    source_profile_source: Optional[str] = Field(
+        default="",
+        description="RSS 源级策略来源，如 manual / inferred"
+    )
+
+    source_template_id: Optional[str] = Field(
+        default="",
+        description="RSS 策略模板 ID"
     )
 
     # 🌟 单次抓取最大条目数
