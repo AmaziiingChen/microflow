@@ -157,14 +157,36 @@ class GwtSpider(BaseSpider):
         # 提取正文
         body_html = ""
         body_text = ""
+        raw_markdown = ""
+        content_blocks: List[Dict[str, Any]] = []
+        image_assets: List[Dict[str, Any]] = []
+        images: List[str] = []
         content_div = soup.find('div', class_='v_news_content')
 
         if content_div:
-            body_html = str(content_div)
+            normalized_content = self._normalize_detail_fragment(str(content_div), url)
+            body_html = str(normalized_content.get("body_html") or "")
             body_text = content_div.get_text(strip=True, separator='\n')
+            raw_markdown = str(normalized_content.get("raw_markdown") or "").strip()
+            content_blocks = (
+                normalized_content.get("content_blocks")
+                if isinstance(normalized_content.get("content_blocks"), list)
+                else []
+            )
+            image_assets = (
+                normalized_content.get("image_assets")
+                if isinstance(normalized_content.get("image_assets"), list)
+                else []
+            )
+            images = (
+                normalized_content.get("images")
+                if isinstance(normalized_content.get("images"), list)
+                else []
+            )
         elif soup.body:
             body_text = soup.body.get_text(strip=True, separator='\n')[:3000]
             body_html = body_text
+            raw_markdown = body_text
 
         # 提取附件
         attachments = self._extract_attachments(soup, url)
@@ -184,6 +206,10 @@ class GwtSpider(BaseSpider):
             'date': '',
             'body_html': body_html,
             'body_text': body_text,
+            'raw_markdown': raw_markdown,
+            'content_blocks': content_blocks,
+            'image_assets': image_assets,
+            'images': images,
             'attachments': attachments,
             'source_name': self.SOURCE_NAME,
             'exact_time': exact_time

@@ -39,7 +39,7 @@ import hashlib
 import threading
 import queue
 import io
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Callable
 import time
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
@@ -58,6 +58,15 @@ from src.utils.rss_strategy import (
     get_rss_strategy_catalog,
     resolve_rss_rule_strategy,
 )
+from src.utils.browser_render import normalize_fetch_strategy
+from src.utils.html_rule_strategy import normalize_detail_strategy
+from src.utils.http_rule_config import (
+    ensure_body_content_type,
+    normalize_cookie_string,
+    normalize_request_body,
+    normalize_request_headers,
+    normalize_request_method,
+)
 from src.services import SystemService, DownloadService, ConfigService
 from src.services.rule_generator import RuleGeneratorService
 from src.services.custom_spider_rules_manager import get_rules_manager
@@ -69,17 +78,32 @@ from src.version import __version__
 
 logger = logging.getLogger(__name__)
 
-# ============================================================
-# 🌟 全局常量：云端配置 URL（单一真相源）
-# ============================================================
-VERSION_URL = "https://microflow-1412347033.cos.ap-guangzhou.myqcloud.com/version.json"
 
-# 确保数据目录存在
 ensure_data_dir_exists()
 
 
 class Api:
     """V2 多源调度引擎 - 门面层"""
+
+    # ============================================================
+    # 🌟 云端配置 URL 基础路径（不含文件名）
+    # ============================================================
+    _VERSION_BASE_URL = "https://microflow-1412347033.cos.ap-guangzhou.myqcloud.com"
+
+    def _get_version_url(self) -> str:
+        """根据发布渠道动态构建版本文件 URL"""
+        channel = self._config_service.get("channel", "stable")
+        if channel == "stable":
+            return f"{self._VERSION_BASE_URL}/version.json"
+        else:
+            # 对 channel 名称进行基本过滤，防止路径注入
+            safe_channel = re.sub(r"[^a-zA-Z0-9_-]", "", channel)
+            return f"{self._VERSION_BASE_URL}/version_{safe_channel}.json"
+
+    @property
+    def config_service(self):
+        """兼容旧调用入口，统一返回当前配置服务实例。"""
+        return self._config_service
 
     def __init__(self):
         # 当前软件版本号（从 version.py 统一导入）
@@ -167,7 +191,9 @@ class Api:
                 rule.get("task_name") for rule in rules if rule.get("enabled", True)
             ]
             logger.debug(
-                f"[DEBUG] _get_active_dynamic_sources - 规则数: {len(rules)}, 启用的来源: {sources}"
+                "_get_active_dynamic_sources: rules=%s active_sources=%s",
+                len(rules),
+                sources,
             )
             return sources
         except Exception as e:
@@ -186,25 +212,22 @@ class Api:
         Returns:
             有效来源列表，或空列表（表示不显示任何内容）
         """
-        # 🌟 详细调试：追踪配置读取
         try:
             subscribed = self._config_service.get("subscribedSources", [])
             logger.debug(
-                f"[DEBUG] _get_effective_sources - config_service.get('subscribedSources') 返回: {subscribed}, type: {type(subscribed)}"
+                "_get_effective_sources: subscribed=%s type=%s",
+                subscribed,
+                type(subscribed),
             )
         except Exception as e:
-            logger.debug(
-                f"[DEBUG] _get_effective_sources - 读取 subscribedSources 失败: {e}"
-            )
+            logger.debug("_get_effective_sources: read subscribed failed: %s", e)
             subscribed = []
 
         try:
             dynamic = self._get_active_dynamic_sources()
-            logger.debug(
-                f"[DEBUG] _get_effective_sources - _get_active_dynamic_sources() 返回: {dynamic}"
-            )
+            logger.debug("_get_effective_sources: dynamic=%s", dynamic)
         except Exception as e:
-            logger.debug(f"[DEBUG] _get_effective_sources - 获取动态来源失败: {e}")
+            logger.debug("_get_effective_sources: load dynamic failed: %s", e)
             dynamic = []
 
         # 合并两个列表，去重
@@ -216,7 +239,7 @@ class Api:
             if d not in effective:
                 effective.append(d)
 
-        logger.debug(f"[DEBUG] _get_effective_sources - 最终有效来源: {effective}")
+        logger.debug("_get_effective_sources: effective=%s", effective)
         if not effective and self._is_config_effectively_blank():
             logger.warning("配置看起来是空白/损坏状态，临时放开来源过滤以避免首屏空白")
             return None
@@ -368,6 +391,53 @@ class Api:
         except Exception as e:
             logger.warning(f"AI 进度推送失败: {e}")
 
+    def _notify_fetch_failed(self, message: str, title: str = "检查失败") -> None:
+        """通知前端结束当前更新会话，并以失败态收口 toast。"""
+        try:
+            if not webview.windows:
+                logger.debug("更新失败通知跳过: 窗口列表为空")
+                return
+            safe_title = json.dumps(str(title or "检查失败"), ensure_ascii=False)
+            safe_message = json.dumps(
+                str(message or "更新未能完成"), ensure_ascii=False
+            )
+            js_code = f"if(window.onFetchFailed) window.onFetchFailed({safe_message}, {safe_title});"
+            self._enqueue_js(js_code)
+        except Exception as e:
+            logger.debug(f"通知前端更新失败收口失败: {e}")
+
+    def _notify_ai_task_failed(self, payload: Optional[Dict[str, Any]]) -> None:
+        """通知前端单篇 AI 处理失败，显示可见 toast。"""
+        try:
+            if not webview.windows:
+                logger.debug("AI 失败通知跳过: 窗口列表为空")
+                return
+            safe_payload = json.dumps(payload or {}, ensure_ascii=False)
+            js_code = (
+                "if(window.onAiTaskFailed) " f"window.onAiTaskFailed({safe_payload});"
+            )
+            self._enqueue_js(js_code)
+        except Exception as e:
+            logger.debug(f"通知前端 AI 失败失败: {e}")
+
+    def _notify_spider_complete(
+        self, has_new_articles: bool, submitted_count: int
+    ) -> None:
+        """通知前端爬虫阶段已经结束。"""
+        try:
+            if not webview.windows:
+                logger.debug("爬虫完成通知跳过: 窗口列表为空")
+                return
+            safe_has_new = "true" if has_new_articles else "false"
+            safe_submitted_count = max(int(submitted_count or 0), 0)
+            js_code = (
+                "if(window.onSpiderComplete) "
+                f"window.onSpiderComplete({safe_has_new}, {safe_submitted_count});"
+            )
+            self._enqueue_js(js_code)
+        except Exception as e:
+            logger.debug(f"通知前端爬虫完成失败: {e}")
+
     def _on_task_complete(
         self, success: bool, reason: str, article_data: Optional[Dict[str, Any]]
     ):
@@ -390,6 +460,9 @@ class Api:
             logger.info(
                 f"任务完成回调: success={success}, reason={reason}, processed={processed}/{submitted}, ai={ai_completed}/{ai_total}"
             )
+
+            if not success and reason in {"ai_failed", "ai_error"}:
+                self._notify_ai_task_failed(article_data)
 
             # 如果所有任务都处理完了
             if submitted > 0 and processed >= submitted:
@@ -610,6 +683,13 @@ class Api:
 
         # 如果调度器返回错误，直接返回（带冷却时间）
         if result.get("status") == "error" and result.get("message"):
+            logger.warning(
+                "检查更新异常结束: is_manual=%s, message=%s",
+                is_manual,
+                result.get("message"),
+            )
+            if not is_manual:
+                self._notify_fetch_failed(result.get("message") or "后台检查未能完成")
             return {
                 **result,
                 "cooldown_remaining": self._daemon_manager.get_cooldown_remaining(),
@@ -620,17 +700,16 @@ class Api:
         # 有新文章时，由 _on_task_complete 统一处理完成通知
         submitted_count = result.get("submitted_count", 0)
         try:
-            if submitted_count == 0:
-                # 无新文章，直接关闭加载状态
-                js_code = """
-                    if (window.onSpiderComplete) {
-                        window.onSpiderComplete(false);
-                    }
-                """
-                # 🌟 使用队列执行（线程安全）
-                self._enqueue_js(js_code)
+            if not is_manual:
+                self._notify_spider_complete(submitted_count > 0, submitted_count)
+                logger.debug(
+                    "爬虫阶段完成，已通知前端: submitted_count=%s",
+                    submitted_count,
+                )
+            elif submitted_count == 0:
+                # 手动触发且无新文章，直接关闭加载状态
+                self._notify_spider_complete(False, 0)
                 logger.debug("爬虫完成，已通知前端关闭加载状态（无新文章）")
-            # else: 有新文章时，由 _on_task_complete 处理完成通知
         except Exception as e:
             logger.debug(f"通知前端爬虫完成失败: {e}")
 
@@ -643,8 +722,13 @@ class Api:
         if filter_sources == []:
             all_articles = []  # 如果全都取消订阅了，就返回空
         else:
-            all_articles = db.get_articles_paged(
-                limit=20, offset=0, source_names=filter_sources
+            all_articles = self._mark_article_list_records(
+                db.get_articles_paged(
+                    limit=20,
+                    offset=0,
+                    source_names=filter_sources,
+                    include_content=False,
+                )
             )
 
         # 🌟 获取冷却剩余时间
@@ -711,7 +795,13 @@ class Api:
     def get_history(self) -> Dict[str, Any]:
         """前端初始化：读取第一页数据"""
         try:
-            articles = db.get_articles_paged(limit=20, offset=0)
+            articles = self._mark_article_list_records(
+                db.get_articles_paged(
+                    limit=20,
+                    offset=0,
+                    include_content=False,
+                )
+            )
             return {"status": "success", "data": articles}
         except Exception as e:
             logger.error(f"读取历史记录失败: {e}")
@@ -744,12 +834,15 @@ class Api:
             if filter_sources == [] and not source_name:
                 return {"status": "success", "data": []}
 
-            articles = db.get_articles_paged(
-                limit=page_size,
-                offset=offset,
-                source_name=None,
-                source_names=filter_sources,
-                favorites_only=favorites_only,
+            articles = self._mark_article_list_records(
+                db.get_articles_paged(
+                    limit=page_size,
+                    offset=offset,
+                    source_name=None,
+                    source_names=filter_sources,
+                    favorites_only=favorites_only,
+                    include_content=False,
+                )
             )
 
             # 🌟 详细调试：显示返回文章的来源分布
@@ -764,6 +857,327 @@ class Api:
         except Exception as e:
             logger.error(f"分页读取失败: {e}")
             return {"status": "error", "message": "读取本地数据库失败"}
+
+    def get_article_detail(self, article_id: int) -> Dict[str, Any]:
+        """按需加载文章完整详情，供列表轻载模式进入详情页时补全内容。"""
+        try:
+            article = db.get_article_by_id(int(article_id))
+            if not article:
+                return {"status": "error", "message": "文章不存在"}
+            return {
+                "status": "success",
+                "data": self._build_article_detail_response(article),
+            }
+        except Exception as e:
+            logger.error(f"读取文章详情失败: {e}")
+            return {"status": "error", "message": "读取文章详情失败"}
+
+    def _extract_article_ai_tags(
+        self, article: Optional[Dict[str, Any]], fallback_text: str = ""
+    ) -> List[str]:
+        """统一解析文章标签，兼容 list / JSON string / 旧 summary 前缀。"""
+        raw_value = (article or {}).get("ai_tags")
+        if isinstance(raw_value, list):
+            return [
+                str(tag or "").replace("【", "").replace("】", "").strip()
+                for tag in raw_value
+                if str(tag or "").strip()
+            ][:3]
+
+        if isinstance(raw_value, str) and raw_value.strip():
+            try:
+                parsed_tags = json.loads(raw_value)
+                if isinstance(parsed_tags, list):
+                    return [
+                        str(tag or "").replace("【", "").replace("】", "").strip()
+                        for tag in parsed_tags
+                        if str(tag or "").strip()
+                    ][:3]
+            except Exception:
+                parsed_tags, _ = extract_leading_tags(raw_value)
+                if parsed_tags:
+                    return parsed_tags[:3]
+
+        parsed_tags, _ = extract_leading_tags(str(fallback_text or "").strip())
+        return parsed_tags[:3]
+
+    def _build_article_content_payload(
+        self,
+        article: Dict[str, Any],
+        ai_config: Dict[str, Any],
+        **overrides: Any,
+    ) -> Dict[str, Any]:
+        """统一构建文章编辑/重生成后的返回结构。"""
+        merged: Dict[str, Any] = {**(article or {})}
+        for key, value in overrides.items():
+            if value is not None:
+                merged[key] = value
+
+        source_type = (
+            str(merged.get("source_type") or self._resolve_article_source_type(article))
+            .strip()
+            .lower()
+            or "html"
+        )
+        raw_text = str(merged.get("raw_text") or "").strip()
+        raw_markdown = str(merged.get("raw_markdown") or raw_text).strip()
+        enhanced_markdown = str(merged.get("enhanced_markdown") or "").strip()
+        if source_type == "rss":
+            enhanced_markdown = enhanced_markdown or raw_markdown
+
+        summary_text = str(merged.get("summary") or "").strip()
+        ai_summary = str(merged.get("ai_summary") or "").strip()
+        ai_tags = self._extract_article_ai_tags(merged, summary_text)
+
+        if not ai_summary:
+            summary_tags, summary_body = extract_leading_tags(summary_text)
+            ai_summary = str(summary_body or "").strip()
+            if not ai_tags:
+                ai_tags = summary_tags[:3]
+
+        normalized_summary = (
+            compose_tagged_markdown(ai_tags, ai_summary)
+            or summary_text
+            or (enhanced_markdown if source_type == "rss" else raw_markdown)
+        )
+
+        return {
+            "summary": normalized_summary,
+            "ai_summary": ai_summary,
+            "ai_tags": ai_tags,
+            "raw_text": raw_text,
+            "raw_markdown": raw_markdown,
+            "enhanced_markdown": enhanced_markdown,
+            "source_type": source_type,
+            "enable_ai_formatting": bool(ai_config.get("enable_ai_formatting", False)),
+            "enable_ai_summary": bool(ai_config.get("enable_ai_summary", False)),
+            "formatting_prompt": str(ai_config.get("formatting_prompt") or "").strip(),
+            "summary_prompt": str(ai_config.get("summary_prompt") or "").strip(),
+        }
+
+    def _build_article_detail_response(self, article: Dict[str, Any]) -> Dict[str, Any]:
+        """统一构建详情页完整文章载荷。"""
+        payload = self._build_article_content_payload(
+            article,
+            self._resolve_article_ai_config(article),
+        )
+        return {
+            **dict(article or {}),
+            **payload,
+            "has_full_content": True,
+        }
+
+    def _mark_article_list_records(
+        self, articles: Optional[List[Dict[str, Any]]]
+    ) -> List[Dict[str, Any]]:
+        """为轻载列表结果补齐前端可识别的元数据标记。"""
+        normalized: List[Dict[str, Any]] = []
+        for raw_item in articles or []:
+            item = dict(raw_item or {})
+            item["has_full_content"] = bool(item.get("has_full_content", False))
+            normalized.append(item)
+        return normalized
+
+    def _normalize_rule_payload_for_save(
+        self,
+        rule_dict: Dict[str, Any],
+        *,
+        expected_source_type: Optional[str] = None,
+    ) -> tuple[Optional[Dict[str, Any]], str]:
+        """保存前统一清洗/校验 HTML 与 RSS 规则。"""
+        if not isinstance(rule_dict, dict) or not rule_dict:
+            return None, "规则数据不能为空"
+
+        normalized = normalize_rule_ai_config(dict(rule_dict))
+        normalized["rule_id"] = str(normalized.get("rule_id") or "").strip()
+        normalized["task_id"] = str(normalized.get("task_id") or "").strip()
+        normalized["task_name"] = str(normalized.get("task_name") or "").strip()
+        normalized["task_purpose"] = str(normalized.get("task_purpose") or "").strip()
+        normalized["url"] = str(normalized.get("url") or "").strip()
+
+        source_type = str(normalized.get("source_type") or "html").strip().lower()
+        if source_type not in {"html", "rss"}:
+            return None, "数据源类型仅支持 html 或 rss"
+        if expected_source_type and source_type != expected_source_type:
+            return None, f"当前仅支持保存 {expected_source_type.upper()} 规则"
+        normalized["source_type"] = source_type
+
+        missing_fields = [
+            field_name
+            for field_name in ("rule_id", "task_id", "task_name", "url")
+            if not normalized.get(field_name)
+        ]
+        if missing_fields:
+            return None, f"缺少必要字段: {', '.join(missing_fields)}"
+
+        parsed_url = urlparse(normalized["url"])
+        if not parsed_url.scheme or not parsed_url.netloc:
+            return None, "URL 格式不正确，请填写完整地址"
+
+        normalized["enabled"] = bool(normalized.get("enabled", True))
+        normalized["require_ai_summary"] = bool(
+            normalized.get("require_ai_summary", False)
+        )
+        normalized["enable_ai_formatting"] = bool(
+            normalized.get("enable_ai_formatting", False)
+        )
+        normalized["enable_ai_summary"] = bool(
+            normalized.get("enable_ai_summary", False)
+        )
+        normalized["custom_summary_prompt"] = str(
+            normalized.get("custom_summary_prompt") or ""
+        ).strip()
+        normalized["formatting_prompt"] = str(
+            normalized.get("formatting_prompt") or ""
+        ).strip()
+        normalized["summary_prompt"] = str(
+            normalized.get("summary_prompt") or ""
+        ).strip()
+
+        max_items_raw = normalized.get("max_items")
+        if str(max_items_raw or "").strip():
+            try:
+                max_items = int(max_items_raw)
+            except (TypeError, ValueError):
+                return None, "单次抓取最大条目数必须是正整数"
+            if max_items <= 0:
+                return None, "单次抓取最大条目数必须大于 0"
+            normalized["max_items"] = max_items
+        else:
+            normalized["max_items"] = None
+
+        if source_type == "rss":
+            normalized = attach_rss_strategy_metadata(
+                normalized,
+                sample_articles=None,
+            )
+            try:
+                from src.models.spider_rule import SpiderRuleOutput
+
+                SpiderRuleOutput(**normalized)
+            except Exception as exc:
+                return None, f"RSS 规则格式校验失败: {exc}"
+            return normalized, ""
+
+        normalized["list_container"] = str(
+            normalized.get("list_container") or ""
+        ).strip()
+        normalized["item_selector"] = str(normalized.get("item_selector") or "").strip()
+        if not normalized["list_container"] or not normalized["item_selector"]:
+            return None, "HTML 规则缺少列表容器或列表项选择器"
+
+        field_selectors_raw = normalized.get("field_selectors")
+        if not isinstance(field_selectors_raw, dict):
+            return None, "HTML 规则缺少字段选择器"
+        field_selectors = {
+            str(key or "").strip(): str(value or "").strip()
+            for key, value in field_selectors_raw.items()
+            if str(key or "").strip() and str(value or "").strip()
+        }
+        if not field_selectors:
+            return None, "HTML 规则至少需要 1 个有效字段选择器"
+        if "title" not in field_selectors or "url" not in field_selectors:
+            return None, "HTML 规则至少需要提供 title 与 url 字段选择器"
+        normalized["field_selectors"] = field_selectors
+
+        normalized["fetch_strategy"] = normalize_fetch_strategy(
+            normalized.get("fetch_strategy")
+        )
+        normalized["request_method"] = normalize_request_method(
+            normalized.get("request_method")
+        )
+        normalized["request_body"] = normalize_request_body(
+            normalized.get("request_body")
+        )
+        normalized["request_headers"] = ensure_body_content_type(
+            normalize_request_headers(normalized.get("request_headers")),
+            normalized["request_method"],
+            normalized["request_body"],
+        )
+        normalized["cookie_string"] = normalize_cookie_string(
+            normalized.get("cookie_string")
+        )
+
+        if normalized["request_method"] != "post":
+            normalized["request_body"] = ""
+
+        pagination_mode = (
+            str(normalized.get("pagination_mode") or "single").strip().lower()
+        )
+        if pagination_mode not in {"single", "next_link", "url_template", "load_more"}:
+            pagination_mode = "single"
+        normalized["pagination_mode"] = pagination_mode
+        normalized["next_page_selector"] = str(
+            normalized.get("next_page_selector") or ""
+        ).strip()
+        normalized["page_url_template"] = str(
+            normalized.get("page_url_template") or ""
+        ).strip()
+        normalized["load_more_selector"] = str(
+            normalized.get("load_more_selector") or ""
+        ).strip()
+
+        try:
+            normalized["page_start"] = max(1, int(normalized.get("page_start") or 2))
+        except (TypeError, ValueError):
+            normalized["page_start"] = 2
+
+        try:
+            normalized["incremental_max_pages"] = max(
+                1, int(normalized.get("incremental_max_pages") or 1)
+            )
+        except (TypeError, ValueError):
+            normalized["incremental_max_pages"] = 1
+
+        if str(normalized.get("max_pages") or "").strip():
+            try:
+                normalized["max_pages"] = max(1, int(normalized.get("max_pages")))
+            except (TypeError, ValueError):
+                return None, "最大翻页数必须是正整数"
+        else:
+            normalized["max_pages"] = None
+
+        if pagination_mode == "next_link" and not normalized["next_page_selector"]:
+            return None, "已启用下一页模式，请填写下一页选择器"
+        if pagination_mode == "url_template":
+            if not normalized["page_url_template"]:
+                return None, "已启用页码模板模式，请填写分页 URL 模板"
+            if "{page}" not in normalized["page_url_template"]:
+                return None, "分页 URL 模板必须包含 {page} 占位符"
+        if pagination_mode == "load_more" and not normalized["load_more_selector"]:
+            return None, "已启用加载更多模式，请填写加载更多选择器"
+
+        normalized["skip_detail"] = bool(normalized.get("skip_detail", False))
+        normalized["body_field"] = (
+            str(normalized.get("body_field") or "").strip() or None
+        )
+        if normalized["body_field"] and normalized["body_field"] not in field_selectors:
+            return None, "正文来源字段必须是已定义的字段选择器"
+
+        normalized["detail_strategy"] = normalize_detail_strategy(
+            normalized.get("detail_strategy")
+        )
+        normalized["detail_body_selector"] = str(
+            normalized.get("detail_body_selector") or ""
+        ).strip()
+        normalized["detail_time_selector"] = str(
+            normalized.get("detail_time_selector") or ""
+        ).strip()
+        normalized["detail_attachment_selector"] = str(
+            normalized.get("detail_attachment_selector") or ""
+        ).strip()
+        normalized["detail_image_selector"] = str(
+            normalized.get("detail_image_selector") or ""
+        ).strip()
+
+        try:
+            from src.models.spider_rule import SpiderRuleOutput
+
+            SpiderRuleOutput(**normalized)
+        except Exception as exc:
+            return None, f"HTML 规则格式校验失败: {exc}"
+
+        return normalized, ""
 
     def mark_as_read(self, url: str) -> Dict[str, Any]:
         """标记文章为已读"""
@@ -852,6 +1266,42 @@ class Api:
             clean_content = strip_emoji(new_summary)
             ai_config = self._resolve_article_ai_config(article)
 
+            if source_type != "rss" and mode == "raw":
+                current_summary_markdown = str(article.get("summary") or "").strip()
+                current_ai_summary = str(article.get("ai_summary") or "").strip()
+                current_ai_tags, current_summary_body = extract_leading_tags(
+                    current_summary_markdown
+                )
+                if not current_ai_summary:
+                    current_ai_summary = current_summary_body
+
+                success = db.update_rss_detail_content(
+                    article_id,
+                    raw_text=clean_content,
+                    raw_markdown=clean_content,
+                )
+                if success:
+                    logger.info(f"文章 {article_id} 原文已更新")
+                    payload = self._build_article_content_payload(
+                        article,
+                        ai_config,
+                        source_type=source_type,
+                        summary=current_summary_markdown,
+                        ai_summary=current_ai_summary,
+                        ai_tags=current_ai_tags,
+                        raw_text=clean_content,
+                        raw_markdown=clean_content,
+                        enhanced_markdown=str(
+                            article.get("enhanced_markdown") or ""
+                        ).strip(),
+                    )
+                    return {
+                        "status": "success",
+                        "message": "原文已更新",
+                        **payload,
+                    }
+                return {"status": "error", "message": "原文更新失败"}
+
             if source_type != "rss" or mode == "summary":
                 tags, body = extract_leading_tags(clean_content)
                 compatibility_summary = compose_tagged_markdown(tags, body)
@@ -867,29 +1317,18 @@ class Api:
                 )
                 if success:
                     logger.info(f"文章 {article_id} 摘要已更新")
+                    payload = self._build_article_content_payload(
+                        article,
+                        ai_config,
+                        source_type=source_type,
+                        summary=compatibility_summary,
+                        ai_summary=body,
+                        ai_tags=tags,
+                    )
                     return {
                         "status": "success",
                         "message": "摘要已更新",
-                        "summary": compatibility_summary,
-                        "ai_summary": body,
-                        "ai_tags": tags,
-                        "raw_text": str(article.get("raw_text") or ""),
-                        "raw_markdown": str(article.get("raw_markdown") or ""),
-                        "enhanced_markdown": str(
-                            article.get("enhanced_markdown") or article.get("raw_markdown") or ""
-                        ),
-                        "enable_ai_formatting": bool(
-                            ai_config.get("enable_ai_formatting", False)
-                        ),
-                        "enable_ai_summary": bool(
-                            ai_config.get("enable_ai_summary", False)
-                        ),
-                        "formatting_prompt": str(
-                            ai_config.get("formatting_prompt") or ""
-                        ).strip(),
-                        "summary_prompt": str(
-                            ai_config.get("summary_prompt") or ""
-                        ).strip(),
+                        **payload,
                     }
                 return {"status": "error", "message": "文章不存在或更新失败"}
 
@@ -945,23 +1384,21 @@ class Api:
                 )
                 if success:
                     logger.info(f"RSS 原文已更新: {article_id}")
+                    payload = self._build_article_content_payload(
+                        article,
+                        ai_config,
+                        source_type=source_type,
+                        summary=next_summary,
+                        ai_summary=current_ai_summary,
+                        ai_tags=current_ai_tags,
+                        raw_text=clean_content,
+                        raw_markdown=clean_content,
+                        enhanced_markdown=next_enhanced,
+                    )
                     return {
                         "status": "success",
                         "message": "原文已更新",
-                        "summary": next_summary,
-                        "ai_summary": current_ai_summary,
-                        "ai_tags": current_ai_tags,
-                        "raw_text": clean_content,
-                        "raw_markdown": clean_content,
-                        "enhanced_markdown": next_enhanced,
-                        "enable_ai_formatting": formatting_enabled,
-                        "enable_ai_summary": summary_enabled,
-                        "formatting_prompt": str(
-                            ai_config.get("formatting_prompt") or ""
-                        ).strip(),
-                        "summary_prompt": str(
-                            ai_config.get("summary_prompt") or ""
-                        ).strip(),
+                        **payload,
                     }
                 return {"status": "error", "message": "原文更新失败"}
 
@@ -978,29 +1415,247 @@ class Api:
                 )
                 if success:
                     logger.info(f"RSS 增强正文已更新: {article_id}")
+                    payload = self._build_article_content_payload(
+                        article,
+                        ai_config,
+                        source_type=source_type,
+                        summary=next_summary,
+                        ai_summary=current_ai_summary,
+                        ai_tags=current_ai_tags,
+                        raw_markdown=current_raw,
+                        enhanced_markdown=clean_content,
+                    )
                     return {
                         "status": "success",
                         "message": "增强正文已更新",
-                        "summary": next_summary,
-                        "ai_summary": current_ai_summary,
-                        "ai_tags": current_ai_tags,
-                        "raw_text": str(article.get("raw_text") or ""),
-                        "raw_markdown": current_raw,
-                        "enhanced_markdown": clean_content,
-                        "enable_ai_formatting": formatting_enabled,
-                        "enable_ai_summary": summary_enabled,
-                        "formatting_prompt": str(
-                            ai_config.get("formatting_prompt") or ""
-                        ).strip(),
-                        "summary_prompt": str(
-                            ai_config.get("summary_prompt") or ""
-                        ).strip(),
+                        **payload,
                     }
                 return {"status": "error", "message": "增强正文更新失败"}
 
             return {"status": "error", "message": "不支持的编辑模式"}
         except Exception as e:
             logger.error(f"更新文章摘要失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def _normalize_annotation_style_payload(self, style_payload: Any) -> Dict[str, Any]:
+        """标准化正文批注样式，避免前后端字段漂移。"""
+        payload = style_payload
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except Exception:
+                payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+
+        allowed_colors = {"blueviolet", "cherry", "sand", "teal", "dodger"}
+        highlight_color = (
+            str(payload.get("highlight_color") or payload.get("highlightColor") or "")
+            .strip()
+            .lower()
+        )
+        if highlight_color not in allowed_colors:
+            highlight_color = ""
+
+        return {
+            "highlight_color": highlight_color,
+            "underline": bool(payload.get("underline", False)),
+            "strike": bool(
+                payload.get(
+                    "strike",
+                    payload.get("strikethrough", payload.get("lineThrough", False)),
+                )
+            ),
+            "bold": bool(payload.get("bold", False)),
+        }
+
+    def _resolve_annotation_view_mode(
+        self, article: Dict[str, Any], requested_view_mode: str = "summary"
+    ) -> str:
+        """解析批注所归属的阅读模式。"""
+        if self._resolve_article_source_type(article) != "rss":
+            return "summary"
+
+        normalized_mode = str(requested_view_mode or "summary").strip().lower()
+        if normalized_mode in {"raw", "enhanced", "summary"}:
+            return normalized_mode
+        return "summary"
+
+    def _get_annotation_view_modes_to_reset_on_regeneration(
+        self,
+        article: Dict[str, Any],
+        result_kind: str = "default",
+    ) -> List[str]:
+        """根据重生成结果推导需要清空批注的阅读模式。"""
+        if self._resolve_article_source_type(article) != "rss":
+            return ["summary"]
+
+        normalized_kind = str(result_kind or "").strip().lower()
+        if normalized_kind in {"rss_full", "rss_formatting", "rss_reset"}:
+            return ["enhanced", "summary"]
+        if normalized_kind == "rss_summary":
+            return ["summary"]
+        return ["summary"]
+
+    def _serialize_annotation_record(
+        self, record: Optional[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """统一批注返回结构。"""
+        row = dict(record or {})
+        return {
+            "id": int(row.get("id") or 0),
+            "article_id": int(row.get("article_id") or 0),
+            "view_mode": str(row.get("view_mode") or "summary").strip() or "summary",
+            "anchor_text": str(row.get("anchor_text") or ""),
+            "anchor_prefix": str(row.get("anchor_prefix") or ""),
+            "anchor_suffix": str(row.get("anchor_suffix") or ""),
+            "start_offset": max(int(row.get("start_offset") or 0), 0),
+            "end_offset": max(int(row.get("end_offset") or 0), 0),
+            "style_payload": self._normalize_annotation_style_payload(
+                row.get("style_payload")
+            ),
+            "created_at": str(row.get("created_at") or ""),
+            "updated_at": str(row.get("updated_at") or ""),
+        }
+
+    def get_article_annotations(
+        self, article_id: int, view_mode: str = "summary"
+    ) -> Dict[str, Any]:
+        """读取文章批注。"""
+        try:
+            article = db.get_article_by_id(article_id)
+            if not article:
+                return {"status": "error", "message": "文章不存在"}
+
+            resolved_view_mode = self._resolve_annotation_view_mode(article, view_mode)
+            annotations = [
+                self._serialize_annotation_record(item)
+                for item in db.get_article_annotations(article_id, resolved_view_mode)
+            ]
+            return {
+                "status": "success",
+                "article_id": int(article_id),
+                "view_mode": resolved_view_mode,
+                "annotations": annotations,
+            }
+        except Exception as e:
+            logger.error(f"读取文章批注失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def save_article_annotation(
+        self, annotation_payload: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """保存文章批注。"""
+        try:
+            payload = annotation_payload if isinstance(annotation_payload, dict) else {}
+            article_id = int(payload.get("article_id") or 0)
+            if article_id <= 0:
+                return {"status": "error", "message": "缺少有效的文章 ID"}
+
+            article = db.get_article_by_id(article_id)
+            if not article:
+                return {"status": "error", "message": "文章不存在"}
+
+            resolved_view_mode = self._resolve_annotation_view_mode(
+                article,
+                str(payload.get("view_mode") or "summary"),
+            )
+            style_payload = self._normalize_annotation_style_payload(
+                payload.get("style_payload")
+            )
+            if not any(
+                [
+                    style_payload.get("highlight_color"),
+                    style_payload.get("underline"),
+                    style_payload.get("strike"),
+                    style_payload.get("bold"),
+                ]
+            ):
+                return {"status": "error", "message": "批注样式不能为空"}
+
+            start_offset = max(int(payload.get("start_offset") or 0), 0)
+            end_offset = max(int(payload.get("end_offset") or 0), start_offset)
+            anchor_text = str(payload.get("anchor_text") or "")
+            if not anchor_text.strip() or end_offset <= start_offset:
+                return {"status": "error", "message": "选区信息无效"}
+
+            annotation_id_raw = payload.get("annotation_id")
+            annotation_id = None
+            if annotation_id_raw is not None and str(annotation_id_raw).strip():
+                annotation_id = int(annotation_id_raw)
+
+            annotation = db.upsert_article_annotation(
+                article_id=article_id,
+                view_mode=resolved_view_mode,
+                anchor_text=anchor_text,
+                anchor_prefix=str(payload.get("anchor_prefix") or ""),
+                anchor_suffix=str(payload.get("anchor_suffix") or ""),
+                start_offset=start_offset,
+                end_offset=end_offset,
+                style_payload=style_payload,
+                annotation_id=annotation_id,
+            )
+            if not annotation:
+                return {"status": "error", "message": "保存批注失败"}
+
+            return {
+                "status": "success",
+                "article_id": article_id,
+                "view_mode": resolved_view_mode,
+                "annotation": self._serialize_annotation_record(annotation),
+            }
+        except Exception as e:
+            logger.error(f"保存文章批注失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def delete_article_annotation(
+        self, annotation_id: int, article_id: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """删除单条文章批注。"""
+        try:
+            normalized_annotation_id = int(annotation_id or 0)
+            if normalized_annotation_id <= 0:
+                return {"status": "error", "message": "缺少有效的批注 ID"}
+
+            normalized_article_id = int(article_id) if article_id is not None else None
+            success = db.delete_article_annotation(
+                normalized_annotation_id,
+                article_id=normalized_article_id,
+            )
+            if not success:
+                return {"status": "error", "message": "批注不存在或删除失败"}
+            return {
+                "status": "success",
+                "annotation_id": normalized_annotation_id,
+            }
+        except Exception as e:
+            logger.error(f"删除文章批注失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def delete_article_annotations(
+        self, article_id: int, annotation_ids: Optional[List[int]] = None
+    ) -> Dict[str, Any]:
+        """批量删除文章批注。"""
+        try:
+            normalized_article_id = int(article_id or 0)
+            if normalized_article_id <= 0:
+                return {"status": "error", "message": "缺少有效的文章 ID"}
+
+            normalized_ids = [
+                int(annotation_id)
+                for annotation_id in (annotation_ids or [])
+                if str(annotation_id).strip()
+            ]
+            if not normalized_ids:
+                return {"status": "success", "deleted_count": 0}
+
+            deleted_count = db.delete_article_annotations(
+                normalized_article_id,
+                normalized_ids,
+            )
+            return {"status": "success", "deleted_count": int(deleted_count or 0)}
+        except Exception as e:
+            logger.error(f"批量删除文章批注失败: {e}")
             return {"status": "error", "message": str(e)}
 
     def cancel_ai_tasks(self) -> dict:
@@ -1157,27 +1812,28 @@ class Api:
                     count = db.get_unread_count(source_names=effective_sources)
             # 获取当前时间
             sync_time = datetime.now().strftime("%H:%M")
-            # 🔍 调试：打印更新前的状态
             logger.debug(
-                f"📊 [DEBUG] _refresh_tray_status 被调用: count={count}, sync_time={sync_time}"
+                "_refresh_tray_status: count=%s sync_time=%s",
+                count,
+                sync_time,
             )
             logger.debug(
-                f"📊 [DEBUG] 当前 main._unread_count={getattr(main_mod, '_unread_count', 'N/A')}"
+                "_refresh_tray_status: main._unread_count=%s",
+                getattr(main_mod, "_unread_count", "N/A"),
             )
             logger.debug(
-                f"📊 [DEBUG] 当前 main._status_item={getattr(main_mod, '_status_item', 'N/A')}"
+                "_refresh_tray_status: main._status_item=%s",
+                getattr(main_mod, "_status_item", "N/A"),
             )
             logger.debug(
-                f"📊 [DEBUG] 当前 main._base_image={getattr(main_mod, '_base_image', 'N/A')}"
+                "_refresh_tray_status: main._base_image=%s",
+                getattr(main_mod, "_base_image", "N/A"),
             )
             # 更新托盘
             main_mod.update_tray_status(unread=count, sync_time=sync_time)
-            logger.debug(f"📊 [DEBUG] update_tray_status 调用完成")
+            logger.debug("_refresh_tray_status: update_tray_status finished")
         except Exception as e:
-            logger.debug(f"[DEBUG] 刷新托盘状态失败: {e}")
-            import traceback
-
-            traceback.print_exc()
+            logger.exception("_refresh_tray_status failed: %s", e)
 
     def refresh_tray_mute_status(self, mute_mode: bool) -> Dict[str, Any]:
         """
@@ -1200,7 +1856,7 @@ class Api:
                 main_mod = main
 
             # 更新全局勿扰模式状态
-            main_mod._mute_mode = mute_mode
+            setattr(main_mod, "_mute_mode", mute_mode)
 
             # 更新托盘菜单中的勿扰模式勾选状态
             main_mod.update_tray_status()
@@ -1892,11 +2548,14 @@ class Api:
 
             if not keyword or not keyword.strip():
                 # 如果搜索词为空，相当于直接获取分页列表
-                articles = db.get_articles_paged(
-                    limit=20,
-                    offset=0,
-                    source_names=filter_sources,
-                    favorites_only=favorites_only,
+                articles = self._mark_article_list_records(
+                    db.get_articles_paged(
+                        limit=20,
+                        offset=0,
+                        source_names=filter_sources,
+                        favorites_only=favorites_only,
+                        include_content=False,
+                    )
                 )
                 return {"status": "success", "data": articles}
 
@@ -1905,7 +2564,9 @@ class Api:
                 limit=50,
                 source_names=filter_sources,
                 favorites_only=favorites_only,
+                include_content=False,
             )
+            data = self._mark_article_list_records(data)
             logger.debug(f"[DEBUG] search_articles - 返回结果数: {len(data)}")
             return {"status": "success", "data": data}
         except Exception as e:
@@ -2099,7 +2760,9 @@ class Api:
         enable_ai_formatting = (
             bool(article.get("enable_ai_formatting", False))
             if has_explicit_rss_ai_flags
-            else bool(article.get("enable_ai_formatting", False) or article_formatting_prompt)
+            else bool(
+                article.get("enable_ai_formatting", False) or article_formatting_prompt
+            )
         )
         enable_ai_summary = (
             bool(
@@ -2205,12 +2868,22 @@ class Api:
             "enable_ai_formatting": enable_ai_formatting,
             "enable_ai_summary": enable_ai_summary,
             "formatting_prompt": (
-                str(resolve_rss_rule_strategy(article_base).get("effective_formatting_prompt") or "").strip()
+                str(
+                    resolve_rss_rule_strategy(article_base).get(
+                        "effective_formatting_prompt"
+                    )
+                    or ""
+                ).strip()
                 if source_type == "rss"
                 else article_formatting_prompt
             ),
             "summary_prompt": (
-                str(resolve_rss_rule_strategy(article_base).get("effective_summary_prompt") or "").strip()
+                str(
+                    resolve_rss_rule_strategy(article_base).get(
+                        "effective_summary_prompt"
+                    )
+                    or ""
+                ).strip()
                 if source_type == "rss"
                 else article_summary_prompt
             ),
@@ -2405,23 +3078,51 @@ class Api:
             if not success:
                 return {"status": "error", "message": "更新数据库失败"}
 
+            cleared_annotation_view_modes = (
+                self._get_annotation_view_modes_to_reset_on_regeneration(
+                    article,
+                    result_kind,
+                )
+            )
+            cleared_annotation_count = 0
+            if cleared_annotation_view_modes:
+                raw_cleared_annotation_count = (
+                    db.delete_article_annotations_by_view_modes(
+                        article_id,
+                        cleared_annotation_view_modes,
+                    )
+                )
+                if isinstance(raw_cleared_annotation_count, bool):
+                    cleared_annotation_count = int(raw_cleared_annotation_count)
+                elif isinstance(raw_cleared_annotation_count, (int, float)):
+                    cleared_annotation_count = int(raw_cleared_annotation_count)
+                else:
+                    cleared_annotation_count = 0
+
             logger.info(f"文章总结重新生成成功: {title}")
+            payload = self._build_article_content_payload(
+                article,
+                ai_config,
+                source_type=source_type,
+                summary=new_summary,
+                ai_summary=ai_summary,
+                ai_tags=ai_tags,
+                raw_text=str(article.get("raw_text") or raw_text or ""),
+                raw_markdown=str(
+                    article.get("raw_markdown")
+                    or article.get("raw_text")
+                    or raw_text
+                    or ""
+                ),
+                enhanced_markdown=enhanced_markdown,
+            )
             return {
                 "status": "success",
-                "summary": new_summary,
-                "ai_summary": ai_summary,
-                "ai_tags": ai_tags,
-                "ai_tag_items": build_tag_items(ai_tags),
-                "raw_text": str(article.get("raw_text") or raw_text or ""),
-                "raw_markdown": str(
-                    article.get("raw_markdown") or article.get("raw_text") or raw_text or ""
-                ),
-                "enhanced_markdown": enhanced_markdown,
+                **payload,
+                "ai_tag_items": build_tag_items(payload.get("ai_tags") or []),
                 "result_kind": result_kind,
-                "enable_ai_formatting": enable_ai_formatting,
-                "enable_ai_summary": enable_ai_summary,
-                "formatting_prompt": formatting_prompt,
-                "summary_prompt": summary_prompt,
+                "cleared_annotation_view_modes": cleared_annotation_view_modes,
+                "cleared_annotation_count": cleared_annotation_count,
             }
 
         except Exception as e:
@@ -2479,14 +3180,66 @@ class Api:
             logger.error(f"导入字体失败: {e}")
             return {"status": "error", "message": str(e)}
 
+
+
+    def _resolve_platform_download_meta(self, version_data: Dict[str, Any]) -> Dict[str, Any]:
+        """解析并返回当前平台对应的下载元数据。"""
+        downloads = version_data.get("downloads", {})
+        current_platform = platform.system().lower()
+
+        if current_platform == "darwin":
+            return downloads.get("macos", {})
+        elif current_platform == "windows":
+            return downloads.get("windows", {})
+        else:
+            return {}
+
+    def _build_update_payload(self, version_data: Dict[str, Any]) -> Dict[str, Any]:
+        """构建统一的软件更新信息结构。"""
+        latest_version = str(version_data.get("version", "") or "").strip()
+        min_supported_version = str(version_data.get("min_supported_version", "") or "").strip()
+        release_date = str(version_data.get("release_date", "") or "").strip()
+        platform_download = self._resolve_platform_download_meta(version_data)
+
+        # 🌟 强制更新逻辑：
+        # 1. 远程直接指定 force_update
+        # 2. 当前版本低于远程指定的最低支持版本
+        is_forced = bool(version_data.get("force_update", False))
+        if min_supported_version and self.CURRENT_VERSION < min_supported_version:
+            is_forced = True
+
+        # 🌟 更新日志/公告逻辑
+        announcement = version_data.get("announcement", {})
+        note_candidates = [
+            str(announcement.get("content", "") or "").strip(),
+            str(announcement.get("summary", "") or "").strip(),
+            f"发布时间: {release_date}" if release_date else "",
+            "有新版本可用",
+        ]
+        notes = next((item for item in note_candidates if item), "有新版本可用")
+
+        return {
+            "has_update": bool(
+                latest_version and latest_version > self.CURRENT_VERSION
+            ),
+            "current_version": self.CURRENT_VERSION,
+            "version": latest_version,
+            "latest_version": latest_version,
+            "release_date": release_date,
+            "notes": notes,
+            "download_url": str(platform_download.get("url", "") or "").strip(),
+            "download_sha256": str(platform_download.get("sha256", "") or "").strip(),
+            "download_size": platform_download.get("size"),
+            "force_update": is_forced,
+            "announcement": announcement,  # 🌟 传递完整的公告对象给前端
+        }
+
     def check_software_update(self, force_refresh: bool = False) -> Dict[str, Any]:
         """
         检查软件更新（使用缓存的版本信息）
 
         如果缓存为空，则发起网络请求
         """
-        import platform
-
         # 🌟 优先使用缓存
         data = self._version_info
         if not data or force_refresh:
@@ -2496,38 +3249,14 @@ class Api:
             else:
                 return {
                     "has_update": False,
+                    "current_version": self.CURRENT_VERSION,
                     "error": res.get("message", "获取版本失败"),
                 }
 
         if not data:
-            return {"has_update": False}
+            return {"has_update": False, "current_version": self.CURRENT_VERSION}
 
-        latest_version = data.get("version", "")
-
-        # 简单的版本号字符串比对 (例如 "v1.1.0" > "v1.0.0")
-        if latest_version and latest_version > self.CURRENT_VERSION:
-            # 根据当前系统选择对应的下载链接
-            downloads = data.get("downloads", {})
-            current_system = platform.system().lower()
-
-            if current_system == "windows":
-                download_url = downloads.get("windows", "")
-            elif current_system == "darwin":
-                download_url = downloads.get("macos", "")
-            else:
-                download_url = ""
-
-            release_date = data.get("release_date", "")
-            notes = f"发布时间: {release_date}" if release_date else "有新版本可用"
-
-            return {
-                "has_update": True,
-                "version": latest_version,
-                "notes": notes,
-                "download_url": download_url,
-            }
-
-        return {"has_update": False}
+        return self._build_update_payload(data)
 
     # 🔐 离线存活期常量：7 天（单位：秒）
     OFFLINE_TTL_SECONDS = 7 * 24 * 3600
@@ -2557,7 +3286,7 @@ class Api:
 
         # 🌟 步骤 2：请求远程 version.json（云端最高仲裁）
         try:
-            response = requests.get(VERSION_URL, timeout=5)
+            response = requests.get(self._get_version_url(), timeout=5)
 
             # ===== 场景 A：网络请求成功 =====
             if response.status_code != 200:
@@ -2716,35 +3445,15 @@ class Api:
         Returns:
             成功响应字典，字段与 version.json 结构对齐
         """
-        import platform
-
         response: Dict[str, Any] = {
             "status": "success",
             "has_update": False,
             "announcement": version_data.get("announcement", {}),
+            "current_version": self.CURRENT_VERSION,
         }
 
         # 检查版本更新
-        latest_version = version_data.get("version", "")
-
-        if latest_version and latest_version > self.CURRENT_VERSION:
-            downloads = version_data.get("downloads", {})
-            current_system = platform.system().lower()
-
-            if current_system == "windows":
-                download_url = downloads.get("windows", "")
-            elif current_system == "darwin":
-                download_url = downloads.get("macos", "")
-            else:
-                download_url = ""
-
-            release_date = version_data.get("release_date", "")
-            notes = f"发布时间: {release_date}" if release_date else "有新版本可用"
-
-            response["has_update"] = True
-            response["version"] = latest_version
-            response["download_url"] = download_url
-            response["notes"] = notes
+        response.update(self._build_update_payload(version_data))
 
         return response
 
@@ -2760,7 +3469,7 @@ class Api:
             headers["If-None-Match"] = self._version_etag
 
         try:
-            response = requests.get(VERSION_URL, timeout=5, headers=headers)
+            response = requests.get(self._get_version_url(), timeout=5, headers=headers)
 
             # 3. 命中 304 缓存，云端文件未变，直接返回内存数据
             if response.status_code == 304:
@@ -2906,8 +3615,15 @@ class Api:
         task_purpose: str = "",
         custom_summary_prompt: str = "",
         max_items: Optional[int] = None,
+        detail_strategy: str = "detail_preferred",
         body_field: str = "",
         skip_detail: bool = False,
+        fetch_strategy: str = "requests_first",
+        request_method: str = "get",
+        request_body: str = "",
+        request_headers: Optional[Dict[str, str]] = None,
+        cookie_string: str = "",
+        existing_rule_id: str = "",
     ) -> Dict[str, Any]:
         """
         生成自定义爬虫规则
@@ -2923,14 +3639,23 @@ class Api:
             task_purpose: 任务目的/类别（映射到数据库 category 字段）
             custom_summary_prompt: 🌟 专属 AI 提示词（用于定制摘要输出格式）
             max_items: 🌟 单次抓取最大条目数
+            detail_strategy: 🌟 HTML 正文抓取策略（list_only / detail_preferred / hybrid）
             body_field: 🌟 正文来源字段（仅 HTML 爬虫有效）
             skip_detail: 🌟 是否跳过详情页抓取（仅 HTML 爬虫有效）
+            fetch_strategy: 🌟 页面抓取策略（requests_first / browser_first / requests_only / browser_only）
+            request_method: 🌟 HTML 列表页请求方法（get / post）
+            request_body: 🌟 HTML 列表页原始请求体（仅 POST 生效）
+            request_headers: 🌟 可选，自定义请求头
+            cookie_string: 🌟 可选，Cookie 原始字符串
+            existing_rule_id: ♻️ 可选，编辑态下用于加载历史健康快照做恢复生成
 
         Returns:
             {
                 "status": "success/error",
                 "rule": dict,          # 生成的完整规则
                 "sample_data": list    # 沙盒测试提取的前 3 条数据样本
+                "recovery_applied": bool
+                "recovery_message": str
             }
         """
         try:
@@ -2944,6 +3669,34 @@ class Api:
                 return {"status": "error", "message": "target_fields 必须是非空列表"}
 
             # 调用规则生成服务
+            recovery_context = None
+            normalized_existing_rule_id = str(existing_rule_id or "").strip()
+            if normalized_existing_rule_id:
+                try:
+                    existing_rule = self._rules_manager.get_rule_by_id(
+                        normalized_existing_rule_id
+                    )
+                    if isinstance(existing_rule, dict) and existing_rule:
+                        health = (
+                            existing_rule.get("health")
+                            if isinstance(existing_rule.get("health"), dict)
+                            else {}
+                        )
+                        recovery_context = {
+                            "existing_rule_id": normalized_existing_rule_id,
+                            "health": health,
+                            "last_known_good_snapshot": (
+                                health.get("last_known_good_snapshot")
+                                if isinstance(
+                                    health.get("last_known_good_snapshot"), dict
+                                )
+                                else {}
+                            ),
+                            "current_rule_snapshot": existing_rule,
+                        }
+                except Exception as recovery_error:
+                    logger.debug("加载规则恢复上下文失败: %s", recovery_error)
+
             result = self._rule_generator.generate_and_test_rule(
                 task_id=task_id,
                 task_name=task_name,
@@ -2953,15 +3706,50 @@ class Api:
                 task_purpose=task_purpose,
                 custom_summary_prompt=custom_summary_prompt,
                 max_items=max_items,
+                detail_strategy=detail_strategy,
                 body_field=body_field,
                 skip_detail=skip_detail,
+                fetch_strategy=fetch_strategy,
+                request_method=request_method,
+                request_body=request_body,
+                request_headers=request_headers,
+                cookie_string=cookie_string,
+                recovery_context=recovery_context,
             )
 
             if result.success:
+                rule_payload = result.rule.model_dump() if result.rule else None
+                result_page_summary = getattr(result, "page_summary", None)
+                result_test_snapshot = getattr(result, "test_snapshot", None)
+                if isinstance(rule_payload, dict):
+                    if isinstance(result_page_summary, dict):
+                        rule_payload["page_summary"] = result_page_summary
+                    if isinstance(result_test_snapshot, dict):
+                        rule_payload["test_snapshot"] = result_test_snapshot
                 return {
                     "status": "success",
-                    "rule": result.rule.model_dump() if result.rule else None,
+                    "rule": rule_payload,
                     "sample_data": result.sample_data,
+                    "detail_samples": result.detail_samples,
+                    "detail_preview_required": result.detail_preview_required,
+                    "detail_preview_passed": result.detail_preview_passed,
+                    "detail_preview_message": result.detail_preview_message,
+                    "recovery_applied": bool(
+                        getattr(result, "recovery_applied", False)
+                    ),
+                    "recovery_message": str(
+                        getattr(result, "recovery_message", "") or ""
+                    ),
+                    "page_summary": (
+                        result_page_summary
+                        if isinstance(result_page_summary, dict)
+                        else None
+                    ),
+                    "test_snapshot": (
+                        result_test_snapshot
+                        if isinstance(result_test_snapshot, dict)
+                        else None
+                    ),
                 }
             else:
                 return {"status": "error", "message": result.error_message}
@@ -2985,49 +3773,24 @@ class Api:
         try:
             logger.info(f"🕷️ 保存规则: rule_id={rule_dict.get('rule_id')}")
 
-            # 参数验证
-            if not rule_dict:
-                return {"status": "error", "message": "规则数据不能为空"}
-
-            # 🌟 根据 source_type 使用不同的必填字段
-            source_type = rule_dict.get("source_type", "html")
-
-            if source_type == "rss":
-                # RSS 规则只需要基础字段
-                required_fields = [
-                    "rule_id",
-                    "task_id",
-                    "task_name",
-                    "url",
-                ]
-            else:
-                # HTML 规则需要完整的选择器字段
-                required_fields = [
-                    "rule_id",
-                    "task_id",
-                    "task_name",
-                    "url",
-                    "list_container",
-                    "item_selector",
-                    "field_selectors",
-                ]
-
-            missing_fields = [f for f in required_fields if f not in rule_dict]
-            if missing_fields:
+            normalized_rule, error_message = self._normalize_rule_payload_for_save(
+                rule_dict
+            )
+            if error_message or not normalized_rule:
                 return {
                     "status": "error",
-                    "message": f"缺少必要字段: {', '.join(missing_fields)}",
+                    "message": error_message or "规则保存校验失败",
                 }
 
             # 保存规则
-            success = self._rules_manager.save_custom_rule(rule_dict)
+            success = self._rules_manager.save_custom_rule(normalized_rule)
 
             if success:
-                logger.info(f"规则保存成功: {rule_dict.get('rule_id')}")
+                logger.info(f"规则保存成功: {normalized_rule.get('rule_id')}")
                 return {
                     "status": "success",
                     "message": "规则保存成功",
-                    "rule_id": rule_dict.get("rule_id"),
+                    "rule_id": normalized_rule.get("rule_id"),
                 }
             else:
                 return {"status": "error", "message": "规则保存失败"}
@@ -3146,9 +3909,7 @@ class Api:
             formatting_prompt = str(
                 strategy.get("effective_formatting_prompt") or ""
             ).strip()
-            summary_prompt = str(
-                strategy.get("effective_summary_prompt") or ""
-            ).strip()
+            summary_prompt = str(strategy.get("effective_summary_prompt") or "").strip()
             ai_enabled = formatting_enabled or summary_enabled
             ai_preview_ready = False
             ai_preview_error = ""
@@ -3326,23 +4087,22 @@ class Api:
 
         try:
             logger.info(f"📡 追加 RSS 规则: {rule_dict.get('task_name', 'unknown')}")
-            rule_dict = normalize_rule_ai_config(rule_dict)
+            normalized_rule, error_message = self._normalize_rule_payload_for_save(
+                rule_dict,
+                expected_source_type="rss",
+            )
+            if error_message or not normalized_rule:
+                return {
+                    "status": "error",
+                    "message": error_message or "RSS 规则校验失败",
+                }
+            rule_dict = normalized_rule
             if preview_only and request_token:
                 preview_cancel_event = threading.Event()
                 with self._rss_preview_lock:
-                    self._active_rss_preview_events[request_token] = preview_cancel_event
-
-            # 参数验证
-            if not rule_dict:
-                return {"status": "error", "message": "规则数据不能为空"}
-
-            required_fields = ["rule_id", "task_id", "task_name", "url"]
-            missing_fields = [f for f in required_fields if f not in rule_dict]
-            if missing_fields:
-                return {
-                    "status": "error",
-                    "message": f"缺少必要字段: {', '.join(missing_fields)}",
-                }
+                    self._active_rss_preview_events[request_token] = (
+                        preview_cancel_event
+                    )
 
             url = rule_dict.get("url", "")
             if not url:
@@ -3416,9 +4176,7 @@ class Api:
                     enable_ai_formatting=bool(
                         rule_dict.get("enable_ai_formatting", False)
                     ),
-                    enable_ai_summary=bool(
-                        rule_dict.get("enable_ai_summary", False)
-                    ),
+                    enable_ai_summary=bool(rule_dict.get("enable_ai_summary", False)),
                 )
                 logger.info(f"RSS 规则保存成功: {rule_dict.get('rule_id')}")
                 return {
@@ -3469,21 +4227,25 @@ class Api:
                 "rules": rules,
                 "rss_strategy_catalog": get_rss_strategy_catalog(),
                 "rss_health_summary": self._build_rss_health_summary(rules),
+                "html_health_summary": self._build_html_health_summary(rules),
             }
         except Exception as e:
             logger.error(f"获取规则列表失败: {e}")
             return {"status": "error", "message": str(e)}
 
-    def _build_rss_health_summary(self, rules: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """汇总 RSS 规则健康状态，供前端做轻量提示。"""
-        rss_rules = [
+    def _build_rule_health_summary(
+        self, rules: List[Dict[str, Any]], source_type: str
+    ) -> Dict[str, Any]:
+        """按来源类型汇总规则健康状态，供前端做轻量提示。"""
+        filtered_rules = [
             rule
             for rule in (rules or [])
-            if str(rule.get("source_type") or "").strip().lower() == "rss"
+            if str(rule.get("source_type") or "").strip().lower()
+            == str(source_type or "").strip().lower()
         ]
 
         summary = {
-            "total_rules": len(rss_rules),
+            "total_rules": len(filtered_rules),
             "healthy_count": 0,
             "empty_count": 0,
             "error_count": 0,
@@ -3491,11 +4253,11 @@ class Api:
             "attention_rules": [],
         }
 
-        if not rss_rules:
+        if not filtered_rules:
             return summary
 
         attention_rules: List[Dict[str, Any]] = []
-        for rule in rss_rules:
+        for rule in filtered_rules:
             health = rule.get("health") if isinstance(rule.get("health"), dict) else {}
             status = str(health.get("status") or "").strip().lower()
             if status == "healthy":
@@ -3506,19 +4268,33 @@ class Api:
                 summary["error_count"] += 1
 
             consecutive_failures = int(health.get("consecutive_failures") or 0)
-            if status == "error" or consecutive_failures >= 2:
+            is_alerting = bool(health.get("is_alerting"))
+            if status == "error" or consecutive_failures >= 2 or is_alerting:
                 attention_rules.append(
                     {
                         "rule_id": str(rule.get("rule_id") or "").strip(),
                         "task_name": str(rule.get("task_name") or "").strip(),
                         "status": status or "unknown",
+                        "status_detail": str(health.get("status_detail") or "").strip(),
                         "consecutive_failures": consecutive_failures,
                         "last_checked_at": str(
                             health.get("last_checked_at") or ""
                         ).strip(),
+                        "last_success_at": str(
+                            health.get("last_success_at") or ""
+                        ).strip(),
+                        "last_failure_at": str(
+                            health.get("last_failure_at") or ""
+                        ).strip(),
                         "last_error_message": str(
                             health.get("last_error_message") or ""
                         ).strip(),
+                        "is_alerting": is_alerting,
+                        "field_alerts": (
+                            list(health.get("field_alerts") or [])
+                            if isinstance(health.get("field_alerts"), list)
+                            else []
+                        ),
                     }
                 )
 
@@ -3532,31 +4308,13 @@ class Api:
         summary["attention_count"] = len(attention_rules)
         return summary
 
-    def debug_effective_sources(self) -> Dict[str, Any]:
-        """
-        🐛 调试接口：查看有效来源列表的详细信息
+    def _build_rss_health_summary(self, rules: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """汇总 RSS 规则健康状态，供前端做轻量提示。"""
+        return self._build_rule_health_summary(rules, "rss")
 
-        Returns:
-            {"status": "success", "subscribed": list, "dynamic": list, "effective": list}
-        """
-        try:
-            subscribed = self._config_service.get("subscribedSources", [])
-            dynamic = self._get_active_dynamic_sources()
-            effective = self._get_effective_sources()
-
-            logger.debug(f"[DEBUG API] subscribedSources from config: {subscribed}")
-            logger.debug(f"[DEBUG API] dynamic sources: {dynamic}")
-            logger.debug(f"[DEBUG API] effective sources: {effective}")
-
-            return {
-                "status": "success",
-                "subscribed": subscribed,
-                "dynamic": dynamic,
-                "effective": effective,
-            }
-        except Exception as e:
-            logger.error(f"调试接口失败: {e}")
-            return {"status": "error", "message": str(e)}
+    def _build_html_health_summary(self, rules: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """汇总 HTML 规则健康状态，供前端做轻量提示。"""
+        return self._build_rule_health_summary(rules, "html")
 
     def get_custom_spider_rule_by_id(self, rule_id: str) -> Dict[str, Any]:
         """
@@ -3576,6 +4334,173 @@ class Api:
                 return {"status": "error", "message": "规则不存在"}
         except Exception as e:
             logger.error(f"获取规则失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def get_custom_spider_rule_versions(self, rule_id: str) -> Dict[str, Any]:
+        """
+        获取指定规则的历史版本列表。
+
+        Args:
+            rule_id: 规则 ID
+
+        Returns:
+            {"status": "success", "versions": list}
+        """
+        try:
+            normalized_rule_id = str(rule_id or "").strip()
+            if not normalized_rule_id:
+                return {"status": "error", "message": "规则 ID 不能为空"}
+
+            rule = self._rules_manager.get_rule_by_id(normalized_rule_id)
+            if not rule:
+                return {"status": "error", "message": "规则不存在"}
+
+            versions = self._rules_manager.get_rule_versions(normalized_rule_id)
+            return {
+                "status": "success",
+                "rule_id": normalized_rule_id,
+                "task_name": str(rule.get("task_name") or "").strip(),
+                "versions": versions,
+                "current_snapshot": {
+                    "updated_at": str(rule.get("updated_at") or "").strip(),
+                    "source_type": str(rule.get("source_type") or "").strip(),
+                },
+            }
+        except Exception as e:
+            logger.error(f"获取规则历史版本失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def rollback_custom_spider_rule_version(
+        self, rule_id: str, version_id: str
+    ) -> Dict[str, Any]:
+        """
+        将指定规则回滚到某个历史版本。
+
+        Args:
+            rule_id: 规则 ID
+            version_id: 历史版本 ID
+
+        Returns:
+            {"status": "success", "rule": dict}
+        """
+        try:
+            normalized_rule_id = str(rule_id or "").strip()
+            normalized_version_id = str(version_id or "").strip()
+            if not normalized_rule_id:
+                return {"status": "error", "message": "规则 ID 不能为空"}
+            if not normalized_version_id:
+                return {"status": "error", "message": "历史版本 ID 不能为空"}
+
+            rolled_back_rule = self._rules_manager.rollback_rule_to_version(
+                normalized_rule_id,
+                normalized_version_id,
+            )
+            if not rolled_back_rule:
+                return {"status": "error", "message": "回滚失败，未找到对应版本"}
+
+            return {
+                "status": "success",
+                "message": "规则已回滚到指定历史版本",
+                "rule_id": normalized_rule_id,
+                "version_id": normalized_version_id,
+                "rule": rolled_back_rule,
+            }
+        except Exception as e:
+            logger.error(f"回滚规则历史版本失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def export_custom_spider_rules(
+        self, rule_ids: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        导出自定义规则到 JSON 文件。
+
+        Args:
+            rule_ids: 可选，仅导出指定规则
+
+        Returns:
+            {"status": "success/cancelled/error", ...}
+        """
+        try:
+            payload = self._rules_manager.build_rules_export_payload(rule_ids)
+            export_rules = payload.get("rules") or []
+            if not export_rules:
+                return {"status": "error", "message": "暂无可导出的规则"}
+
+            default_filename = (
+                f"MicroFlow_custom_rules_{time.strftime('%Y%m%d_%H%M%S')}.json"
+            )
+            dialog_result = webview.windows[0].create_file_dialog(
+                webview.SAVE_DIALOG,  # type: ignore
+                directory="",
+                save_filename=default_filename,
+                file_types=("JSON 文件 (*.json)", "所有文件 (*.*)"),
+            )
+            if not dialog_result:
+                return {"status": "cancelled"}
+
+            target_path = (
+                dialog_result[0]
+                if isinstance(dialog_result, (list, tuple))
+                else dialog_result
+            )
+            target_path = str(target_path or "").strip()
+            if not target_path or target_path.lower() == "none":
+                return {"status": "cancelled"}
+            if not target_path.lower().endswith(".json"):
+                target_path = f"{target_path}.json"
+
+            with open(target_path, "w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False, indent=2)
+
+            return {
+                "status": "success",
+                "message": f"已导出 {len(export_rules)} 条规则",
+                "path": target_path,
+                "exported_count": len(export_rules),
+            }
+        except Exception as e:
+            logger.error(f"导出规则失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def import_custom_spider_rules(self) -> Dict[str, Any]:
+        """
+        从 JSON 文件导入自定义规则。
+
+        Returns:
+            {"status": "success/partial/cancelled/error", ...}
+        """
+        try:
+            dialog_result = webview.windows[0].create_file_dialog(
+                webview.OPEN_DIALOG,  # type: ignore
+                allow_multiple=False,
+                file_types=("JSON 文件 (*.json)", "所有文件 (*.*)"),
+            )
+            if not dialog_result:
+                return {"status": "cancelled"}
+
+            source_path = (
+                dialog_result[0]
+                if isinstance(dialog_result, (list, tuple))
+                else dialog_result
+            )
+            source_path = str(source_path or "").strip()
+            if not source_path or source_path.lower() == "none":
+                return {"status": "cancelled"}
+
+            with open(source_path, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+
+            result = self._rules_manager.import_rules_payload(payload)
+            return {
+                **result,
+                "path": source_path,
+            }
+        except json.JSONDecodeError:
+            logger.error("导入规则失败: JSON 解析失败")
+            return {"status": "error", "message": "导入文件不是有效的 JSON"}
+        except Exception as e:
+            logger.error(f"导入规则失败: {e}")
             return {"status": "error", "message": str(e)}
 
     def delete_custom_spider_rule(self, rule_id: str) -> Dict[str, Any]:
@@ -3647,14 +4572,140 @@ class Api:
             # 构建规则对象
             rule = SpiderRuleOutput(**rule_dict)
 
-            # 测试规则
-            sample_data = self._rule_generator.test_existing_rule(rule, max_items=5)
+            preview_bundle = self._rule_generator.build_rule_preview_bundle(
+                rule,
+                max_items=5,
+            )
+            sample_data = preview_bundle.get("sample_data") or []
 
             return {
                 "status": "success",
                 "sample_data": sample_data,
                 "count": len(sample_data),
+                "detail_samples": preview_bundle.get("detail_samples") or [],
+                "detail_preview_required": bool(
+                    preview_bundle.get("detail_preview_required", False)
+                ),
+                "detail_preview_passed": bool(
+                    preview_bundle.get("detail_preview_passed", False)
+                ),
+                "detail_preview_message": str(
+                    preview_bundle.get("detail_preview_message") or ""
+                ),
+                "page_summary": (
+                    preview_bundle.get("page_summary")
+                    if isinstance(preview_bundle.get("page_summary"), dict)
+                    else None
+                ),
+                "test_snapshot": (
+                    preview_bundle.get("test_snapshot")
+                    if isinstance(preview_bundle.get("test_snapshot"), dict)
+                    else None
+                ),
             }
         except Exception as e:
             logger.error(f"测试规则失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def manual_retest_custom_spider_rule(self, rule_id: str) -> Dict[str, Any]:
+        """
+        对已保存的自定义规则执行一次真实抓取复测，并回写健康状态。
+
+        说明：
+        - 与编辑态的 `test_custom_spider_rule` 不同，这里使用已保存规则创建运行时爬虫，
+          走与调度器一致的抓取链路。
+        - 当前主要用于 HTML 规则健康监控的一键复测入口。
+        """
+        try:
+            normalized_rule_id = str(rule_id or "").strip()
+            if not normalized_rule_id:
+                return {"status": "error", "message": "规则 ID 不能为空"}
+
+            rule = self._rules_manager.get_rule_by_id(normalized_rule_id)
+            if not rule:
+                return {"status": "error", "message": "规则不存在或已被删除"}
+
+            source_type = str(rule.get("source_type") or "html").strip().lower()
+            if source_type == "rss":
+                from src.spiders.rss_spider import create_rss_spider_from_rule
+
+                spider = create_rss_spider_from_rule(rule)
+            else:
+                from src.spiders.dynamic_spider import create_dynamic_spider_from_rule
+
+                spider = create_dynamic_spider_from_rule(rule)
+
+            if not spider:
+                self._rules_manager.update_rule_health(
+                    normalized_rule_id,
+                    status="error",
+                    error_message="无法根据当前规则创建爬虫实例",
+                    fetched_count=0,
+                    field_hit_stats=None,
+                )
+                return {
+                    "status": "error",
+                    "message": "无法根据当前规则创建爬虫实例",
+                }
+
+            sample_articles = spider.fetch_list(limit=5)
+            fetch_status = (
+                str(getattr(spider, "last_fetch_status", "") or "").strip().lower()
+                or "error"
+            )
+            fetch_error = str(getattr(spider, "last_fetch_error", "") or "").strip()
+            fetched_count = int(getattr(spider, "last_fetched_count", 0) or 0)
+
+            self._rules_manager.update_rule_health(
+                normalized_rule_id,
+                status=fetch_status,
+                error_message=fetch_error,
+                fetched_count=fetched_count,
+                field_hit_stats=(
+                    getattr(spider, "last_field_hit_stats", None)
+                    if isinstance(getattr(spider, "last_field_hit_stats", None), dict)
+                    else None
+                ),
+            )
+            refreshed_rule = (
+                self._rules_manager.get_rule_by_id(normalized_rule_id) or rule
+            )
+
+            if fetch_status == "error":
+                return {
+                    "status": "error",
+                    "message": fetch_error or "规则复测失败",
+                    "rule_id": normalized_rule_id,
+                    "sample_data": sample_articles or [],
+                    "count": len(sample_articles or []),
+                    "health": refreshed_rule.get("health") or {},
+                }
+
+            message = (
+                f"复测成功，提取到 {fetched_count} 条样本数据"
+                if fetch_status == "healthy"
+                else "复测完成，当前暂无新内容"
+            )
+            return {
+                "status": "success",
+                "message": message,
+                "rule_id": normalized_rule_id,
+                "sample_data": sample_articles or [],
+                "count": len(sample_articles or []),
+                "health": refreshed_rule.get("health") or {},
+            }
+        except Exception as e:
+            logger.error(f"手动复测规则失败: {e}")
+            try:
+                normalized_rule_id = str(rule_id or "").strip()
+                if normalized_rule_id:
+                    self._rules_manager.update_rule_health(
+                        normalized_rule_id,
+                        status="error",
+                        error_message=str(e),
+                        fetched_count=0,
+                        field_hit_stats=None,
+                    )
+            except Exception:
+                pass
             return {"status": "error", "message": str(e)}

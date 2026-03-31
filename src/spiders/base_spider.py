@@ -11,6 +11,8 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from bs4 import BeautifulSoup
 
+from src.utils.rss_content import normalize_rss_content
+
 logger = logging.getLogger(__name__)
 
 # 标准化的文章数据结构
@@ -64,6 +66,269 @@ class BaseSpider(ABC):
             limit: 每个板块抓取的文章上限，None 表示不限制
         """
         pass
+
+    def _normalize_detail_fragment(self, fragment_html: str, page_url: str) -> Dict[str, Any]:
+        normalized = normalize_rss_content(fragment_html or "", base_url=page_url)
+        raw_markdown = str(normalized.get("markdown") or "").strip()
+        content_blocks = normalized.get("blocks")
+        image_assets = normalized.get("image_assets")
+        attachments = normalized.get("attachments")
+
+        if not isinstance(content_blocks, list):
+            content_blocks = []
+        if not isinstance(image_assets, list):
+            image_assets = []
+        if not isinstance(attachments, list):
+            attachments = []
+
+        images: List[str] = []
+        for asset in image_assets:
+            if not isinstance(asset, dict):
+                continue
+            image_url = str(asset.get("url") or "").strip()
+            if image_url and image_url not in images:
+                images.append(image_url)
+
+        return {
+            "plain_text": str(normalized.get("plain_text") or "").strip(),
+            "body_html": fragment_html or "",
+            "raw_markdown": raw_markdown,
+            "content_blocks": content_blocks,
+            "image_assets": image_assets,
+            "images": images,
+            "attachments": attachments,
+        }
+
+    def _get_site_domain_key(self, url: str) -> str:
+        hostname = str(urlparse(url).hostname or "").strip().lower()
+        if not hostname:
+            return ""
+        parts = [part for part in hostname.split(".") if part]
+        if len(parts) <= 2:
+            return hostname
+        cn_suffixes = {"com.cn", "edu.cn", "gov.cn", "org.cn", "net.cn"}
+        suffix = ".".join(parts[-2:])
+        if suffix in cn_suffixes and len(parts) >= 3:
+            return ".".join(parts[-3:])
+        return ".".join(parts[-2:])
+
+    def _extract_iframe_urls(
+        self,
+        scope: Any,
+        page_url: str,
+        max_iframes: int = 3,
+    ) -> List[str]:
+        if not scope:
+            return []
+
+        allowed_domain = self._get_site_domain_key(page_url)
+        iframe_urls: List[str] = []
+        seen_urls = set()
+
+        for node in scope.find_all(["iframe", "frame"]):
+            raw_src = (
+                node.get("src")
+                or node.get("data-src")
+                or node.get("data-original")
+                or ""
+            )
+            iframe_url = self.safe_urljoin(page_url, str(raw_src or "").strip())
+            if not iframe_url or iframe_url in seen_urls:
+                continue
+            if iframe_url.startswith(("javascript:", "about:", "data:")):
+                continue
+
+            iframe_domain = self._get_site_domain_key(iframe_url)
+            if allowed_domain and iframe_domain and iframe_domain != allowed_domain:
+                continue
+
+            seen_urls.add(iframe_url)
+            iframe_urls.append(iframe_url)
+            if len(iframe_urls) >= max_iframes:
+                break
+
+        return iframe_urls
+
+    def _merge_detail_payload(
+        self,
+        target: Dict[str, Any],
+        incoming: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        incoming_body = str(incoming.get("body_text") or "").strip()
+        if incoming_body:
+            current_body = str(target.get("body_text") or "").strip()
+            target["body_text"] = (
+                f"{current_body}\n\n{incoming_body}" if current_body else incoming_body
+            )
+
+        for field_name in ("body_html", "raw_markdown"):
+            incoming_value = str(incoming.get(field_name) or "").strip()
+            if not incoming_value:
+                continue
+            current_value = str(target.get(field_name) or "").strip()
+            target[field_name] = (
+                f"{current_value}\n\n{incoming_value}"
+                if current_value
+                else incoming_value
+            )
+
+        for list_field in ("content_blocks", "image_assets"):
+            current_items = (
+                target.get(list_field)
+                if isinstance(target.get(list_field), list)
+                else []
+            )
+            incoming_items = (
+                incoming.get(list_field)
+                if isinstance(incoming.get(list_field), list)
+                else []
+            )
+            target[list_field] = [*current_items, *incoming_items]
+
+        current_images = target.get("images") if isinstance(target.get("images"), list) else []
+        incoming_images = (
+            incoming.get("images") if isinstance(incoming.get("images"), list) else []
+        )
+        seen_images = {
+            str(item or "").strip()
+            for item in current_images
+            if str(item or "").strip()
+        }
+        for image_url in incoming_images:
+            clean_url = str(image_url or "").strip()
+            if not clean_url or clean_url in seen_images:
+                continue
+            seen_images.add(clean_url)
+            current_images.append(clean_url)
+        target["images"] = current_images
+
+        current_attachments = (
+            target.get("attachments")
+            if isinstance(target.get("attachments"), list)
+            else []
+        )
+        incoming_attachments = (
+            incoming.get("attachments")
+            if isinstance(incoming.get("attachments"), list)
+            else []
+        )
+        seen_attachment_urls = {
+            str(item.get("url") or "").strip()
+            for item in current_attachments
+            if isinstance(item, dict) and str(item.get("url") or "").strip()
+        }
+        for item in incoming_attachments:
+            if not isinstance(item, dict):
+                continue
+            attachment_url = str(item.get("url") or "").strip()
+            if not attachment_url or attachment_url in seen_attachment_urls:
+                continue
+            seen_attachment_urls.add(attachment_url)
+            current_attachments.append(dict(item))
+        target["attachments"] = current_attachments
+
+        return target
+
+    def _extract_iframe_detail_payload(
+        self,
+        scope: Any,
+        page_url: str,
+    ) -> Dict[str, Any]:
+        iframe_urls = self._extract_iframe_urls(scope, page_url)
+        if not iframe_urls:
+            return {}
+
+        payload: Dict[str, Any] = {
+            "body_text": "",
+            "body_html": "",
+            "raw_markdown": "",
+            "content_blocks": [],
+            "image_assets": [],
+            "images": [],
+            "attachments": [],
+        }
+        content_selectors = [
+            ".v_news_content",
+            "#vsb_content",
+            ".news_conent_two_text",
+            ".content_m",
+            ".article-content",
+            ".article-body",
+            ".content",
+            "main",
+            "article",
+            "body",
+        ]
+
+        for iframe_url in iframe_urls:
+            response = self._safe_get(iframe_url)
+            if not response:
+                continue
+
+            try:
+                iframe_soup = BeautifulSoup(response.text, "lxml")
+            except Exception:
+                try:
+                    iframe_soup = BeautifulSoup(response.text, "html.parser")
+                except Exception:
+                    continue
+
+            for tag in iframe_soup(["script", "style", "noscript"]):
+                tag.decompose()
+
+            iframe_node = None
+            for selector in content_selectors:
+                iframe_node = iframe_soup.select_one(selector)
+                if iframe_node:
+                    break
+
+            if not iframe_node:
+                continue
+
+            normalized_content = self._normalize_detail_fragment(
+                str(iframe_node),
+                iframe_url,
+            )
+            iframe_payload = {
+                "body_text": (
+                    str(normalized_content.get("plain_text") or "").strip()
+                    or iframe_node.get_text(" ", strip=True)
+                ),
+                "body_html": str(normalized_content.get("body_html") or "").strip(),
+                "raw_markdown": str(
+                    normalized_content.get("raw_markdown") or ""
+                ).strip(),
+                "content_blocks": (
+                    normalized_content.get("content_blocks")
+                    if isinstance(normalized_content.get("content_blocks"), list)
+                    else []
+                ),
+                "image_assets": (
+                    normalized_content.get("image_assets")
+                    if isinstance(normalized_content.get("image_assets"), list)
+                    else []
+                ),
+                "images": (
+                    normalized_content.get("images")
+                    if isinstance(normalized_content.get("images"), list)
+                    else []
+                ),
+                "attachments": self._extract_attachments(iframe_node, iframe_url),
+            }
+            normalized_attachments = (
+                normalized_content.get("attachments")
+                if isinstance(normalized_content.get("attachments"), list)
+                else []
+            )
+            iframe_payload["attachments"] = self._merge_detail_payload(
+                {"attachments": iframe_payload["attachments"]},
+                {"attachments": normalized_attachments},
+            ).get("attachments", [])
+
+            if str(iframe_payload.get("body_text") or "").strip():
+                payload = self._merge_detail_payload(payload, iframe_payload)
+
+        return payload
 
     # --- 核心升级：全自动翻页推演中枢 (修复 NMNE 缺失 p_no 的问题) ---
     def get_all_page_urls(self, entry_url: str) -> List[str]:
@@ -188,11 +453,47 @@ class BaseSpider(ABC):
         
         attachments = self._extract_attachments(article_wrapper if article_wrapper else soup, url)
 
+        fragment_html = str(core_container)
+        normalized_content = self._normalize_detail_fragment(fragment_html, url)
+        normalized_attachments = normalized_content.get("attachments")
+        if isinstance(normalized_attachments, list):
+            seen_attachment_urls = {
+                str(item.get("url") or "").strip()
+                for item in attachments
+                if isinstance(item, dict) and str(item.get("url") or "").strip()
+            }
+            for item in normalized_attachments:
+                if not isinstance(item, dict):
+                    continue
+                attachment_url = str(item.get("url") or "").strip()
+                if not attachment_url or attachment_url in seen_attachment_urls:
+                    continue
+                seen_attachment_urls.add(attachment_url)
+                attachments.append(dict(item))
+
+        detail_payload = {
+            "body_text": core_container.get_text(separator='\n', strip=True),
+            "body_html": normalized_content.get("body_html", ""),
+            "raw_markdown": normalized_content.get("raw_markdown", ""),
+            "content_blocks": normalized_content.get("content_blocks", []),
+            "image_assets": normalized_content.get("image_assets", []),
+            "images": normalized_content.get("images", []),
+            "attachments": attachments,
+        }
+        iframe_payload = self._extract_iframe_detail_payload(core_container, url)
+        if iframe_payload:
+            detail_payload = self._merge_detail_payload(detail_payload, iframe_payload)
+
         return {
             'title': soup.title.get_text(strip=True).split('-')[0].strip() if soup.title else "",
             'url': url,
-            'body_text': core_container.get_text(separator='\n', strip=True),
-            'attachments': attachments,
+            'body_text': detail_payload.get("body_text", ""),
+            'body_html': detail_payload.get("body_html", ""),
+            'raw_markdown': detail_payload.get("raw_markdown", ""),
+            'content_blocks': detail_payload.get("content_blocks", []),
+            'image_assets': detail_payload.get("image_assets", []),
+            'images': detail_payload.get("images", []),
+            'attachments': detail_payload.get("attachments", []),
             'source_name': self.SOURCE_NAME,
             'exact_time': exact_time
         }
@@ -210,21 +511,36 @@ class BaseSpider(ABC):
 
         content_div = soup.find('div', class_='rich_media_content', id='js_content')
         body_text = ""
-        body_html = ""
         images = []  # 🌟 新增：提取图片链接列表
+        body_html = ""
+        raw_markdown = ""
+        content_blocks: List[Dict[str, Any]] = []
+        image_assets: List[Dict[str, Any]] = []
         if content_div:
-            # 保存原始 HTML（用于纯图片检测）
-            body_html = str(content_div)
-            # 提取纯文本
-            for tag in content_div.find_all(['script', 'style']): tag.decompose()
-            body_text = content_div.get_text(separator='\n', strip=True)
+            normalized_content = self._normalize_detail_fragment(str(content_div), url)
+            body_html = str(normalized_content.get("body_html") or "")
+            raw_markdown = str(normalized_content.get("raw_markdown") or "").strip()
+            content_blocks = (
+                normalized_content.get("content_blocks")
+                if isinstance(normalized_content.get("content_blocks"), list)
+                else []
+            )
+            image_assets = (
+                normalized_content.get("image_assets")
+                if isinstance(normalized_content.get("image_assets"), list)
+                else []
+            )
+            images = (
+                normalized_content.get("images")
+                if isinstance(normalized_content.get("images"), list)
+                else []
+            )
 
-            # 🌟 提取所有图片链接
-            for img in content_div.find_all('img'):
-                # 微信图片的真实地址在 data-src 属性中
-                img_url = img.get('data-src') or img.get('src')
-                if img_url and img_url.startswith('http'):
-                    images.append(img_url)
+            content_soup = BeautifulSoup(body_html, 'lxml')
+            # 提取纯文本
+            for tag in content_soup.find_all(['script', 'style']):
+                tag.decompose()
+            body_text = content_soup.get_text(separator='\n', strip=True)
 
         # 🌟 核心升级：直接从 JS 变量中提取精确的 Unix 时间戳
         exact_time = ""
@@ -249,6 +565,9 @@ class BaseSpider(ABC):
 
         return {
             'title': title, 'url': url, 'body_text': body_text, 'body_html': body_html,
+            'raw_markdown': raw_markdown,
+            'content_blocks': content_blocks,
+            'image_assets': image_assets,
             'images': images,  # 🌟 新增：图片链接列表
             'attachments': [], 'source_name': self.SOURCE_NAME, 'exact_time': exact_time
         }

@@ -184,7 +184,6 @@ class DaemonManager:
         def worker():
             # 🌟 首次获取间隔
             current_interval = interval_getter()
-            print(f"🚀 [Debug] 守护线程准备就绪 (当前轮询间隔: {current_interval}秒)")
             logger.info(f"🛡️ 守护线程已启动 (当前轮询间隔: {current_interval}秒)")
 
             # 初始等待（调试模式下缩短，25秒确保前端完成初始化）
@@ -263,9 +262,6 @@ class DaemonManager:
                         logger.info(
                             f"⏳ 检测到近期已抓取（{int(time_since_last_fetch)}秒前），跳过首抓，剩余冷却: {remaining_cooldown}秒"
                         )
-                        print(
-                            f"⏳ [Debug] 跳过首抓（剩余冷却: {remaining_cooldown}秒）"
-                        )
                     else:
                         # 冷却已过，正常执行首抓
                         should_run = True
@@ -342,13 +338,16 @@ class DaemonManager:
                     # 网络正常，执行任务
                     network_desc = get_network_description(current_network_status)
                     reason = "补偿抓取" if should_compensate else "定时检测"
-                    print(f"⏳ [Debug] 触发{reason}... (网络: {network_desc})")
                     logger.info(f"🔍 触发{reason}... (网络: {network_desc})")
 
                     try:
                         result = task_callback()
-                        print(
-                            f"✅ [Debug] 抓取执行完毕！状态: {result.get('status')}, 提交数量: {result.get('submitted_count')}"
+                        logger.debug(
+                            "守护线程本轮执行完成: status=%s submitted_count=%s",
+                            result.get("status") if isinstance(result, dict) else None,
+                            result.get("submitted_count")
+                            if isinstance(result, dict)
+                            else None,
                         )
 
                         if result and isinstance(result, dict):
@@ -375,19 +374,17 @@ class DaemonManager:
                                 )
 
                     except Exception as e:
-                        print(
-                            f"❌ [Debug] 守护线程发生致命错误 (已被拦截，线程继续存活): {e}"
+                        logger.exception(
+                            "守护线程发生致命错误（已拦截，线程继续存活）: %s",
+                            e,
                         )
-                        import traceback
-
-                        traceback.print_exc()
 
                     finally:
                         # 🌟 收尾更新
                         last_run_time = time.time()
                         # 🌟 持久化抓取时间
                         self._save_last_fetch_time()
-                        print(f"💤 [Debug] 本轮结束，等待下一次触发...")
+                        logger.debug("守护线程本轮结束，等待下一次触发")
 
                         # 如果当前在抖动区间，标记为已运行
                         if 8.0 <= hour_float < 8.5:

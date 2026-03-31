@@ -104,7 +104,9 @@ def update_tray_status(unread: int = None, sync_time: str = None):  # type:ignor
         return
 
     # 🔍 调试日志
-    logger.debug("update_tray_status 被调用: unread=%s, sync_time=%s", unread, sync_time)
+    logger.debug(
+        "update_tray_status 被调用: unread=%s, sync_time=%s", unread, sync_time
+    )
 
     if unread is not None:
         main_mod._unread_count = unread
@@ -503,9 +505,11 @@ if HAS_PYOBJC:
 
                 if main_mod._api_instance:
                     try:
-                        config_dict = main_mod._api_instance.config_service.to_dict()
+                        config_dict = (
+                            main_mod._api_instance._config_service.to_dict()
+                        )
                         config_dict["muteMode"] = main_mod._mute_mode
-                        main_mod._api_instance.config_service.save(config_dict)
+                        main_mod._api_instance._config_service.save(config_dict)
                         print(
                             f"免打扰模式: {'开启' if main_mod._mute_mode else '关闭'}"
                         )
@@ -520,7 +524,7 @@ if HAS_PYOBJC:
                     try:
                         if main_mod._window_instance:
                             main_mod._window_instance.evaluate_js(
-                                "if(window.refreshConfigFromBackend) window.refreshConfigFromBackend();"
+                                f"if(window.syncMuteModeFromTray) window.syncMuteModeFromTray({str(main_mod._mute_mode).lower()}); if(window.refreshConfigFromBackend) window.refreshConfigFromBackend();"
                             )
                     except Exception:
                         pass
@@ -713,9 +717,9 @@ if __name__ == "__main__":
         title="Microflow",
         url=html_url,
         js_api=api,
-        width=480,
-        height=750,
-        min_size=(470, 750),
+        width=490,
+        height=800,
+        min_size=(490, 700),
         frameless=False,
         easy_drag=False,
         transparent=False,
@@ -808,9 +812,9 @@ if __name__ == "__main__":
             main_mod._mute_mode = not main_mod._mute_mode
             if main_mod._api_instance:
                 try:
-                    config_dict = main_mod._api_instance.config_service.to_dict()
+                    config_dict = main_mod._api_instance._config_service.to_dict()
                     config_dict["muteMode"] = main_mod._mute_mode
-                    main_mod._api_instance.config_service.save(config_dict)
+                    main_mod._api_instance._config_service.save(config_dict)
                     print(f"勿扰模式: {'开启' if main_mod._mute_mode else '关闭'}")
                 except Exception as e:
                     print(f"❌ 保存勿扰设置失败: {e}")
@@ -820,7 +824,7 @@ if __name__ == "__main__":
                 try:
                     if main_mod._window_instance:
                         main_mod._window_instance.evaluate_js(
-                            "if(window.refreshConfigFromBackend) window.refreshConfigFromBackend();"
+                            f"if(window.syncMuteModeFromTray) window.syncMuteModeFromTray({str(main_mod._mute_mode).lower()}); if(window.refreshConfigFromBackend) window.refreshConfigFromBackend();"
                         )
                 except Exception:
                     pass

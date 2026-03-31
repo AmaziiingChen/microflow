@@ -4,7 +4,7 @@
 用于约束 AI 生成的 CSS 选择器规则，确保输出格式统一且可验证。
 """
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
@@ -107,6 +107,66 @@ class SpiderRuleOutput(BaseModel):
         description="字段选择器映射（RSS 源无需填写）"
     )
 
+    fetch_strategy: Optional[str] = Field(
+        default="requests_first",
+        description="HTML 抓取策略：requests_first、browser_first、requests_only、browser_only"
+    )
+
+    request_method: Optional[str] = Field(
+        default="get",
+        description="HTML 列表页请求方法：get 或 post"
+    )
+
+    request_body: Optional[str] = Field(
+        default="",
+        description="HTML 列表页的原始请求体，仅 request_method=post 时生效"
+    )
+
+    request_headers: Optional[Dict[str, str]] = Field(
+        default_factory=dict,
+        description="HTML 抓取时附带的自定义请求头，键值对形式"
+    )
+
+    cookie_string: Optional[str] = Field(
+        default="",
+        description="HTML 抓取时附带的 Cookie 原始字符串，可用于登录态或特定会话"
+    )
+
+    pagination_mode: Optional[str] = Field(
+        default="single",
+        description="HTML 列表分页模式：single（单页）、next_link（下一页链接）、url_template（页码模板）、load_more（加载更多）"
+    )
+
+    next_page_selector: Optional[str] = Field(
+        default="",
+        description="下一页链接选择器（仅 pagination_mode=next_link 时使用，支持 ::attr(href)）"
+    )
+
+    page_url_template: Optional[str] = Field(
+        default="",
+        description="分页 URL 模板（仅 pagination_mode=url_template 时使用），例如 /list_{page}.htm 或 https://example.com/list?page={page}"
+    )
+
+    page_start: Optional[int] = Field(
+        default=2,
+        description="页码模板的起始页号，默认从第 2 页开始"
+    )
+
+    max_pages: Optional[int] = Field(
+        default=None,
+        description="分页抓取的最大页数（包含目标 URL 首屏），留空时分页模式默认最多抓取 3 页"
+    )
+
+    incremental_max_pages: Optional[int] = Field(
+        default=1,
+        description="持续追踪时的最大翻页数（包含首屏），用于限制常规轮询回溯深度"
+    )
+
+    load_more_selector: Optional[str] = Field(
+        default="",
+        description="加载更多按钮选择器（仅 pagination_mode=load_more 时使用，支持常见 href/data-url/data-next/hx-get）"
+    )
+
     # AI 摘要开关
     require_ai_summary: bool = Field(
         default=False,
@@ -133,6 +193,31 @@ class SpiderRuleOutput(BaseModel):
     body_field: Optional[str] = Field(
         default=None,
         description="指定作为正文的字段名（仅 HTML 爬虫有效）。不设则使用所有字段拼接的文本。适用于列表页已包含摘要/描述的场景"
+    )
+
+    detail_strategy: Optional[str] = Field(
+        default="detail_preferred",
+        description="HTML 正文抓取策略：list_only（仅列表页）、detail_preferred（详情页优先）、hybrid（详情与列表混合）"
+    )
+
+    detail_body_selector: Optional[str] = Field(
+        default="",
+        description="详情页正文容器选择器（仅 HTML 爬虫有效）。填写后优先按该选择器提取正文"
+    )
+
+    detail_time_selector: Optional[str] = Field(
+        default="",
+        description="详情页时间选择器（仅 HTML 爬虫有效）。支持 ::text / ::attr() 语法"
+    )
+
+    detail_attachment_selector: Optional[str] = Field(
+        default="",
+        description="详情页附件区域选择器（仅 HTML 爬虫有效）。可填写附件容器或附件链接选择器"
+    )
+
+    detail_image_selector: Optional[str] = Field(
+        default="",
+        description="详情页图片区选择器（仅 HTML 爬虫有效）。可填写图片容器或 img 选择器"
     )
 
     # 🌟 专属 AI 提示词
@@ -218,6 +303,46 @@ class RuleGenerationResult(BaseModel):
     sample_data: Optional[List[Dict[str, str]]] = Field(
         default=None,
         description="沙盒测试提取的前 3 条数据样本"
+    )
+
+    detail_samples: Optional[List[Dict[str, Any]]] = Field(
+        default=None,
+        description="详情页预览样本（展示正文、时间、附件、图片命中情况）"
+    )
+
+    detail_preview_required: bool = Field(
+        default=False,
+        description="当前规则是否要求通过详情预览"
+    )
+
+    detail_preview_passed: bool = Field(
+        default=False,
+        description="当前规则的详情预览是否通过"
+    )
+
+    detail_preview_message: Optional[str] = Field(
+        default=None,
+        description="详情预览结果提示"
+    )
+
+    recovery_applied: bool = Field(
+        default=False,
+        description="本次生成是否使用了历史健康快照/恢复上下文"
+    )
+
+    recovery_message: Optional[str] = Field(
+        default=None,
+        description="规则恢复提示信息"
+    )
+
+    page_summary: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="页面摘要信息（标题、结构信号、主区域候选等）"
+    )
+
+    test_snapshot: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="最近一次测试快照（样本、详情预览、评分等）"
     )
 
     # 🌟 选择器稳定性评分

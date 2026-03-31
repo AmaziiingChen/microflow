@@ -1,8 +1,31 @@
+const isIgnorableResizeObserverError = (value) =>
+  String(value || "").includes(
+    "ResizeObserver loop completed with undelivered notifications.",
+  );
+
 // 全局错误捕获
 window.onerror = function (msg, url, line, col, error) {
+  if (
+    isIgnorableResizeObserverError(msg) ||
+    isIgnorableResizeObserverError(error?.message)
+  ) {
+    return true;
+  }
   console.error("JS错误:", msg, "行:", line);
   return false;
 };
+
+window.addEventListener(
+  "error",
+  function (event) {
+    const message = event?.message || event?.error?.message || "";
+    if (isIgnorableResizeObserverError(message)) {
+      event.preventDefault();
+      event.stopImmediatePropagation?.();
+    }
+  },
+  true,
+);
 
 window.addEventListener("unhandledrejection", function (event) {
   console.error("Promise错误:", event.reason);
@@ -14,22 +37,57 @@ const stripEmoji = (text = "") =>
   String(text ?? "").replace(EMOJI_STRIP_RE, "");
 const cleanSummaryText = (text = "") => stripEmoji(text || "无总结内容");
 
-const FILTER_CHIP_COLORS = [
-  "rgb(183,42,92)",
-  "rgb(255,56,60)",
-  "rgb(255,141,40)",
-  "rgb(0,136,255)",
-  "rgb(52,199,89)",
-  "rgb(255,204,0)",
-  "rgb(48,176,199)",
-  "rgb(0,199,190)",
-  "rgb(255,141,40)",
-  "rgb(175,82,222)",
-  "rgb(44,44,46)",
-  "rgb(162,132,94)",
-  "rgb(50,173,230)",
-  "rgb(234,83,107)",
+const FILTER_CHIP_TOKENS = [
+  "source-chip-1",
+  "source-chip-2",
+  "source-chip-3",
+  "source-chip-4",
+  "source-chip-5",
+  "source-chip-6",
+  "source-chip-7",
+  "source-chip-8",
+  "source-chip-9",
+  "source-chip-10",
+  "source-chip-11",
+  "source-chip-12",
+  "source-chip-13",
+  "source-chip-14",
 ];
+
+const DEFAULT_SOURCE_CHIP_TOKEN = "color-accent-primary";
+const DEFAULT_SOURCE_CHIP_SOFT_TOKEN = "color-accent-soft";
+
+const asCssVar = (tokenName, fallbackToken = DEFAULT_SOURCE_CHIP_TOKEN) =>
+  `var(--${tokenName || fallbackToken})`;
+
+const readRootCssToken = (tokenName, fallbackValue = "") => {
+  if (
+    typeof window === "undefined" ||
+    typeof document === "undefined" ||
+    !document.documentElement
+  ) {
+    return fallbackValue;
+  }
+
+  const value = window
+    .getComputedStyle(document.documentElement)
+    .getPropertyValue(`--${tokenName}`)
+    .trim();
+  return value || fallbackValue;
+};
+
+const getSourceChipTokenByIndex = (index) =>
+  FILTER_CHIP_TOKENS[index] ||
+  FILTER_CHIP_TOKENS[0] ||
+  DEFAULT_SOURCE_CHIP_TOKEN;
+
+const getSoftSourceChipToken = (tokenName) => {
+  if (!tokenName) return DEFAULT_SOURCE_CHIP_SOFT_TOKEN;
+  if (tokenName.startsWith("source-chip-")) {
+    return `${tokenName}-soft`;
+  }
+  return DEFAULT_SOURCE_CHIP_SOFT_TOKEN;
+};
 
 // 🌟 特殊渐变色配置（用于音乐学院等）
 const SPECIAL_GRADIENT_COLORS = {
@@ -119,42 +177,39 @@ const getDepartmentColor = (departmentName) => {
   const index = SOURCE_ICON_CATALOG.findIndex(
     (item) => item.name === departmentName,
   );
-  // 如果找到了对应的部门，并且有对应的 FILTER_CHIP_COLORS
-  if (index !== -1 && FILTER_CHIP_COLORS[index]) {
-    return FILTER_CHIP_COLORS[index];
+  // 如果找到了对应的部门，并且有对应的主题 token
+  if (index !== -1 && FILTER_CHIP_TOKENS[index]) {
+    return asCssVar(FILTER_CHIP_TOKENS[index]);
   }
   // 默认使用公文通的颜色（第一个）
-  return FILTER_CHIP_COLORS[0] || "rgb(2, 132, 199)";
+  return asCssVar(getSourceChipTokenByIndex(0));
 };
 
-// 🌟 新增：获取 AI 标签背景色（带透明度）
+// 🌟 新增：获取 AI 标签背景色（走 soft token，不再由 JS 计算 rgba）
 const getAITagBgColor = (departmentName) => {
-  const color = getDepartmentColor(departmentName);
-  // 将 rgb(r,g,b) 转换为 rgba(r,g,b,0.7)
-  const match = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
-  if (match) {
-    return `rgba(${match[1]}, ${match[2]}, ${match[3]}, 0.8)`;
-  }
-  return color;
+  const index = SOURCE_ICON_CATALOG.findIndex(
+    (item) => item.name === departmentName,
+  );
+  const tokenName =
+    index !== -1 && FILTER_CHIP_TOKENS[index]
+      ? FILTER_CHIP_TOKENS[index]
+      : getSourceChipTokenByIndex(0);
+  return asCssVar(
+    getSoftSourceChipToken(tokenName),
+    DEFAULT_SOURCE_CHIP_SOFT_TOKEN,
+  );
 };
 
-// 🌟 新增：获取订阅管理中的来源颜色（带 0.8 透明度）
+// 🌟 新增：获取订阅管理中的来源颜色
 const getSubsChipColor = (sourceName) => {
   const index = SOURCE_ICON_CATALOG.findIndex(
     (item) => item.name === sourceName,
   );
-  let color;
-  if (index !== -1 && FILTER_CHIP_COLORS[index]) {
-    color = FILTER_CHIP_COLORS[index];
-  } else {
-    color = FILTER_CHIP_COLORS[0] || "rgb(2, 132, 199)";
-  }
-  // 将 rgb(r,g,b) 转换为 rgba(r,g,b,0.8)
-  const match = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
-  if (match) {
-    return `rgba(${match[1]}, ${match[2]}, ${match[3]}, 0.8)`;
-  }
-  return color;
+  const tokenName =
+    index !== -1 && FILTER_CHIP_TOKENS[index]
+      ? FILTER_CHIP_TOKENS[index]
+      : getSourceChipTokenByIndex(0);
+  return asCssVar(tokenName);
 };
 
 // 🌟 新增：获取订阅管理中的来源图标
@@ -208,6 +263,20 @@ const getSubsIconStyle = (sourceName, isActive) => {
   return {
     backgroundColor: color,
     color: sourceName === "创意设计学院" ? "#ffffff" : undefined,
+  };
+};
+
+const getSettingsSourceBadgeStyle = (sourceName) => {
+  if (SPECIAL_GRADIENT_COLORS[sourceName]) {
+    return {
+      background: SPECIAL_GRADIENT_COLORS[sourceName],
+      color: "var(--white)",
+    };
+  }
+
+  return {
+    background: getSubsChipColor(sourceName),
+    color: "var(--white)",
   };
 };
 
@@ -339,6 +408,8 @@ try {
     props: {
       ruleForm: { type: Object, required: true },
       previewData: { type: Array, default: () => [] },
+      htmlDetailPreviewData: { type: Array, default: () => [] },
+      htmlDetailPreviewState: { type: Object, default: null },
       rssPreviewInfo: { type: Object, default: null },
       generatedRuleCache: { type: Object, default: null },
       rssTemplateOptions: { type: Array, default: () => [] },
@@ -356,6 +427,11 @@ try {
         type: Function,
         required: true,
       },
+      getHtmlAccessConfigValidationMessage: {
+        type: Function,
+        required: true,
+      },
+      sheetMode: { type: Boolean, default: false },
     },
     emits: [
       "close",
@@ -390,33 +466,48 @@ try {
       // 重置动画状态变量
       const isResettingPrompt = ref(false);
 
-      // 打开 Prompt 编辑器（类似公文详情页）
-      const openPromptEditor = () => {
-        tempPromptContent.value = config.value.prompt; // 复制当前内容
-        currentView.value = "prompt_editor"; // 切换到编辑视图
-        previousView.value = "list"; // 记录返回目标
-
-        // 🌟 延迟初始化 EasyMDE（等待 DOM 渲染）
-        nextTick(() => {
-          setTimeout(() => {
-            initPromptEasyMDE();
-          }, 50);
-        });
-      };
-
-      // 🌟 初始化 EasyMDE 编辑器
-      const initPromptEasyMDE = () => {
-        const textarea = document.getElementById("prompt-editor");
-        if (!textarea) {
-          console.warn("找不到 prompt-editor 元素");
-          return;
-        }
-
-        // 如果已存在实例，先销毁
+      const destroyPromptEditor = () => {
         if (promptEasyMDE) {
           promptEasyMDE.toTextArea();
           promptEasyMDE = null;
         }
+      };
+
+      const schedulePromptEditorInit = async (attempt = 0) => {
+        await nextTick();
+        requestAnimationFrame(() => {
+          if (!isPromptEditorOpen.value) return;
+          const textarea = document.getElementById("settings-prompt-editor");
+          if (!textarea) {
+            if (attempt < 8) {
+              window.setTimeout(() => {
+                schedulePromptEditorInit(attempt + 1);
+              }, 40);
+            }
+            return;
+          }
+          initPromptEasyMDE();
+        });
+      };
+
+      // 打开 Prompt 编辑器（Sheet）
+      const openPromptEditor = () => {
+        if (isPromptEditorOpen.value) return;
+        activeSettingsSection.value = "ai";
+        tempPromptContent.value = config.value.prompt; // 复制当前内容
+        isPromptEditorOpen.value = true;
+      };
+
+      // 🌟 初始化 EasyMDE 编辑器
+      const initPromptEasyMDE = () => {
+        const textarea = document.getElementById("settings-prompt-editor");
+        if (!textarea) {
+          console.warn("找不到 settings-prompt-editor 元素");
+          return;
+        }
+
+        // 如果已存在实例，先销毁
+        destroyPromptEditor();
 
         promptEasyMDE = new EasyMDE({
           element: textarea,
@@ -469,7 +560,7 @@ try {
         const res = await saveConfigSafely();
         if (res.status === "success") {
           showNotification("保存成功", "提示词已更新", "success", 1500);
-          backToList(); // 返回列表（回到设置界面）
+          backToSettings();
         } else {
           showNotification(
             "保存失败",
@@ -511,14 +602,17 @@ try {
 
       // 返回设置界面（不保存）
       const backToSettings = () => {
-        // 销毁 EasyMDE 实例
-        if (promptEasyMDE) {
-          promptEasyMDE.toTextArea();
-          promptEasyMDE = null;
-        }
-        currentView.value = "list";
-        activeArticle.value = null;
+        destroyPromptEditor();
+        isPromptEditorOpen.value = false;
       };
+
+      watch(isPromptEditorOpen, async (open) => {
+        if (open) {
+          await schedulePromptEditorInit();
+          return;
+        }
+        destroyPromptEditor();
+      });
 
       // 计算属性：prompt 预览文本（用于卡片展示）
       const promptPreviewText = computed(() => {
@@ -607,7 +701,7 @@ try {
         try {
           const editMode = isRssArticle(activeArticle.value)
             ? resolveRssDetailMode(activeArticle.value)
-            : "summary";
+            : resolveStandardDetailMode(activeArticle.value);
           const res = await safeApiCall(
             "update_article_summary",
             activeArticle.value.id,
@@ -616,47 +710,20 @@ try {
           );
 
           if (res.status === "success") {
-            const updatedArticle = buildArticleViewModel({
-              ...activeArticle.value,
-              summary: res.summary || newSummary,
-              ai_summary: res.ai_summary || "",
-              ai_tags: res.ai_tags || [],
-              raw_markdown:
-                res.raw_markdown ??
-                activeArticle.value.raw_markdown ??
-                activeArticle.value.rawMarkdown ??
-                "",
-              raw_text:
-                res.raw_text ??
-                activeArticle.value.raw_text ??
-                activeArticle.value.rawBody ??
-                "",
-              enhanced_markdown:
-                res.enhanced_markdown ??
-                activeArticle.value.enhanced_markdown ??
-                activeArticle.value.enhancedMarkdown ??
-                "",
-              enable_ai_formatting:
-                res.enable_ai_formatting ??
-                activeArticle.value.enable_ai_formatting ??
-                false,
-              enable_ai_summary:
-                res.enable_ai_summary ??
-                activeArticle.value.enable_ai_summary ??
-                false,
-              formatting_prompt:
-                res.formatting_prompt ??
-                activeArticle.value.formatting_prompt ??
-                "",
-              summary_prompt:
-                res.summary_prompt ??
-                activeArticle.value.summary_prompt ??
-                "",
-            });
+            const updatedArticle = mergeArticleApiPayload(
+              activeArticle.value,
+              res,
+              { fallbackSummary: newSummary },
+            );
             activeArticle.value = updatedArticle;
 
             if (isRssArticle(updatedArticle)) {
               rssDetailMode.value = resolveRssDetailMode(updatedArticle, editMode);
+            } else {
+              standardDetailMode.value = resolveStandardDetailMode(
+                updatedArticle,
+                editMode,
+              );
             }
 
             // 同步更新 articles 数组中的对应项
@@ -669,9 +736,9 @@ try {
 
             showNotification(
               "保存成功",
-              isRssArticle(updatedArticle)
-                ? "当前阅读模式内容已更新"
-                : "摘要已更新",
+              editMode === "summary"
+                ? "摘要已更新"
+                : "当前阅读模式内容已更新",
               "success",
               1500,
             );
@@ -866,21 +933,262 @@ try {
       // 新增：详情页快照生成状态
       const isCapturing = ref(false);
       const currentView = ref("list");
+      const viewportWidth = ref(
+        typeof window !== "undefined" ? window.innerWidth : 0,
+      );
+      const DUAL_PANE_MIN_WIDTH = 950;
+      const SETTINGS_MASTER_DETAIL_MIN_WIDTH = DUAL_PANE_MIN_WIDTH;
       const isSettingsOpen = ref(false); // 🌟 新增：控制设置面板的独立状态
+      const SETTINGS_SECTIONS = Object.freeze([
+        {
+          id: "network",
+          label: "网络与访问",
+          description: "查看当前联网状态与最近一次检测结果。",
+          iconClass: "is-network",
+        },
+        {
+          id: "ai",
+          label: "AI 引擎与提示词",
+          description: "配置主模型、提示词与备选模型。",
+          iconClass: "is-ai",
+        },
+        {
+          id: "reading",
+          label: "阅读与行为偏好",
+          description: "调整字体、追踪方式与系统行为。",
+          iconClass: "is-reading",
+        },
+        {
+          id: "subscriptions",
+          label: "数据订阅管理",
+          description: "管理固定官方源的订阅状态。",
+          iconClass: "is-subscriptions",
+        },
+        {
+          id: "custom",
+          label: "自定义数据源",
+          description: "维护 HTML / RSS 规则与健康状态。",
+          iconClass: "is-custom",
+        },
+        {
+          id: "email",
+          label: "邮件推送",
+          description: "配置 SMTP、诊断链路并触发发送。",
+          iconClass: "is-email",
+        },
+      ]);
+      const settingsSections = SETTINGS_SECTIONS;
+      const activeSettingsSection = ref("network");
+      const isSettingsSplitView = computed(
+        () => viewportWidth.value >= SETTINGS_MASTER_DETAIL_MIN_WIDTH,
+      );
+      const showSettingsSectionList = computed(
+        () => isSettingsSplitView.value || !activeSettingsSection.value,
+      );
+      const showSettingsSectionDetail = computed(() =>
+        isSettingsSplitView.value
+          ? true
+          : Boolean(String(activeSettingsSection.value || "").trim()),
+      );
+      const activeSettingsSubpage = computed(() => {
+        if (showCustomRuleModal.value) {
+          return "custom-rule";
+        }
+        if (isPromptEditorOpen.value) {
+          return "prompt";
+        }
+        if (isSecondaryModelsSheetOpen.value) {
+          return "secondary-models";
+        }
+        if (isFontSheetOpen.value) {
+          return "font";
+        }
+        return "";
+      });
+      const isSettingsSubpageVisible = computed(() =>
+        Boolean(activeSettingsSubpage.value),
+      );
+      const settingsDetailTransitionKey = computed(
+        () =>
+          `${activeSettingsSection.value || "none"}:${
+            activeSettingsSubpage.value || "main"
+          }`,
+      );
+      const isFontSheetOpen = ref(false);
+      const isSecondaryModelsSheetOpen = ref(false);
       const pendingReadUrls = ref([]); // 待更新普通公文队列
       const pendingNoticeVersion = ref(null); // 待更新公告队列
       const activeArticle = ref(null);
+      const activeArticleDetailRequestId = ref(0);
+      const isActiveArticleDetailLoading = ref(false);
       const rssDetailMode = ref("enhanced");
+      const standardDetailMode = ref("summary");
+      const activeKeyboardPane = ref("list");
       const activeArticleIndex = ref(-1); // 🌟 当前查看文章在列表中的索引（用于删除操作）
       const deleteConfirmVisible = ref(false); // 🌟 删除确认弹窗状态
       const lastArticle = ref(null); // 🌟 新增：记录最后一次查看的文章，用于前进键
       const isNavigatingBack = ref(false); // 🌟 新增：控制返回动画状态
       const articles = ref([]);
+      const canUseDualPane = computed(
+        () => viewportWidth.value >= DUAL_PANE_MIN_WIDTH,
+      );
+      const isDualPaneActive = computed(
+        () =>
+          canUseDualPane.value &&
+          currentView.value !== "prompt_editor" &&
+          !isSettingsOpen.value &&
+          !isCapturing.value,
+      );
+      const showListPane = computed(
+        () => currentView.value === "list" || isDualPaneActive.value,
+      );
+      const isDetailPaneVisible = computed(
+        () =>
+          Boolean(activeArticle.value) &&
+          !isSettingsOpen.value &&
+          (currentView.value === "detail" || isDualPaneActive.value),
+      );
+      const showDualPanePlaceholder = computed(
+        () => isDualPaneActive.value && !activeArticle.value,
+      );
+      const activeSettingsSectionMeta = computed(
+        () =>
+          settingsSections.find(
+            (section) => section.id === activeSettingsSection.value,
+          ) || settingsSections[0],
+      );
+      const settingsOfficialSources = computed(() =>
+        allAvailableSources.value.filter((sourceName) => sourceName === "公文通"),
+      );
+      const settingsAcademySources = computed(() =>
+        allAvailableSources.value.filter((sourceName) => sourceName !== "公文通"),
+      );
+
+      watch(isSettingsSplitView, (isWide) => {
+        if (!isSettingsOpen.value) {
+          return;
+        }
+
+        if (isWide) {
+          if (!String(activeSettingsSection.value || "").trim()) {
+            activeSettingsSection.value = "network";
+          }
+          return;
+        }
+
+        if (!String(activeSettingsSection.value || "").trim()) {
+          activeSettingsSection.value = "";
+        }
+      });
+
+      watch(
+        [isSettingsOpen, activeSettingsSection],
+        ([isOpen, section]) => {
+          if (isOpen && section === "custom") {
+            void ensureCustomRulesLoaded();
+          }
+        },
+        { immediate: false },
+      );
+      const ANNOTATION_COLOR_OPTIONS = [
+        { key: "blueviolet", label: "中蓝紫", rgb: "187, 62, 217" },
+        { key: "cherry", label: "樱桃红", rgb: "235, 68, 90" },
+        { key: "sand", label: "沙褐", rgb: "240, 147, 67" },
+        { key: "teal", label: "中碧蓝", rgb: "90, 197, 179" },
+        { key: "dodger", label: "道奇蓝", rgb: "59, 134, 247" },
+      ];
+      const createEmptyAnnotationStyle = () => ({
+        highlight_color: "",
+        underline: false,
+        strike: false,
+        bold: false,
+      });
+      const normalizeAnnotationStyle = (style = {}) => {
+        const payload =
+          style && typeof style === "object" ? { ...style } : {};
+        const allowedColors = new Set(
+          ANNOTATION_COLOR_OPTIONS.map((item) => item.key),
+        );
+        const highlightColor = String(
+          payload.highlight_color || payload.highlightColor || "",
+        )
+          .trim()
+          .toLowerCase();
+        return {
+          highlight_color: allowedColors.has(highlightColor)
+            ? highlightColor
+            : "",
+          underline: Boolean(payload.underline),
+          strike: Boolean(payload.strike || payload.strikethrough),
+          bold: Boolean(payload.bold),
+        };
+      };
+      const isAnnotationStyleEmpty = (style = {}) => {
+        const normalized = normalizeAnnotationStyle(style);
+        return !(
+          normalized.highlight_color ||
+          normalized.underline ||
+          normalized.strike ||
+          normalized.bold
+        );
+      };
+      const articleAnnotations = ref([]);
+      const annotationSelectionSnapshot = ref(null);
+      const annotationToolbarState = ref({
+        visible: false,
+        x: 0,
+        y: 0,
+        annotationId: null,
+        style: createEmptyAnnotationStyle(),
+      });
+      const isAnnotationLoading = ref(false);
+      const isAnnotationSaving = ref(false);
+      let annotationSelectionFrame = 0;
+      let annotationApplyFrame = 0;
+      let annotationLoadToken = 0;
+      let annotationPointerSelecting = false;
 
       const isRssArticle = (article) =>
         String(article?.source_type || "")
           .trim()
           .toLowerCase() === "rss";
+
+      const getDetailTargetView = () =>
+        isDualPaneActive.value ? "list" : "detail";
+
+      const setActiveKeyboardPane = (pane = "list") => {
+        const normalizedPane = pane === "detail" ? "detail" : "list";
+        if (normalizedPane === "detail" && !isDetailPaneVisible.value) {
+          activeKeyboardPane.value = "list";
+          return;
+        }
+        activeKeyboardPane.value = normalizedPane;
+      };
+
+      const getActiveKeyboardPane = () => {
+        if (!isDetailPaneVisible.value) {
+          return "list";
+        }
+        if (!isDualPaneActive.value) {
+          return "detail";
+        }
+        return activeKeyboardPane.value === "detail" ? "detail" : "list";
+      };
+
+      const flushPendingReadState = () => {
+        if (pendingReadUrls.value.length > 0) {
+          pendingReadUrls.value.forEach((url) => {
+            const idx = articles.value.findIndex((a) => a.url === url);
+            if (idx !== -1) articles.value[idx].is_read = 1;
+          });
+          pendingReadUrls.value = [];
+        }
+
+        if (pendingNoticeVersion.value) {
+          readNoticeVersion.value = pendingNoticeVersion.value;
+          pendingNoticeVersion.value = null;
+        }
+      };
 
       const parseLeadingTags = (text = "") => {
         const cleanText = cleanSummaryText(text);
@@ -1397,9 +1705,19 @@ try {
                     : []),
                 ]
               : [];
+        const hasFullContent = Boolean(
+          item?.has_full_content ??
+            item?.hasFullContent ??
+            (rawMarkdown ||
+              item?.raw_text ||
+              item?.rawText ||
+              parsedContentBlocks.length > 0 ||
+              parsedImageAssets.length > 0),
+        );
 
         return {
           ...item,
+          hasFullContent,
           legacySummaryText: summaryText,
           summary: rssArticle
             ? composeTaggedSummary(finalTags, resolvedRssSummaryBody) ||
@@ -1427,6 +1745,155 @@ try {
         };
       };
 
+      const mergeArticleApiPayload = (
+        baseArticle = {},
+        payload = {},
+        { fallbackSummary = "" } = {},
+      ) =>
+        buildArticleViewModel({
+          ...baseArticle,
+          summary:
+            payload.summary ??
+            baseArticle.summary ??
+            baseArticle.legacySummaryText ??
+            fallbackSummary,
+          ai_summary:
+            payload.ai_summary ??
+            baseArticle.ai_summary ??
+            baseArticle.aiSummary ??
+            "",
+          ai_tags:
+            payload.ai_tags ??
+            baseArticle.ai_tags ??
+            baseArticle.aiTags ??
+            [],
+          raw_markdown:
+            payload.raw_markdown ??
+            baseArticle.raw_markdown ??
+            baseArticle.rawMarkdown ??
+            baseArticle.rawBody ??
+            "",
+          raw_text:
+            payload.raw_text ??
+            baseArticle.raw_text ??
+            baseArticle.raw_content ??
+            baseArticle.rawBody ??
+            "",
+          enhanced_markdown:
+            payload.enhanced_markdown ??
+            baseArticle.enhanced_markdown ??
+            baseArticle.enhancedMarkdown ??
+            "",
+          enable_ai_formatting:
+            payload.enable_ai_formatting ??
+            baseArticle.enable_ai_formatting ??
+            baseArticle.enableAiFormatting ??
+            false,
+          enable_ai_summary:
+            payload.enable_ai_summary ??
+            baseArticle.enable_ai_summary ??
+            baseArticle.enableAiSummary ??
+            false,
+          formatting_prompt:
+            payload.formatting_prompt ??
+            baseArticle.formatting_prompt ??
+            baseArticle.formattingPrompt ??
+            "",
+          summary_prompt:
+            payload.summary_prompt ??
+            baseArticle.summary_prompt ??
+            baseArticle.summaryPrompt ??
+            baseArticle.custom_summary_prompt ??
+            baseArticle.customSummaryPrompt ??
+            "",
+          source_type:
+            payload.source_type ??
+            baseArticle.source_type ??
+            baseArticle.sourceType ??
+            (isRssArticle(baseArticle) ? "rss" : "html"),
+        });
+
+      const syncArticleIntoCollection = (article) => {
+        if (!article) return;
+        const articleId = String(article.id || "").trim();
+        const articleUrl = String(article.url || "").trim();
+        const targetIndex = articles.value.findIndex((item) => {
+          const itemId = String(item?.id || "").trim();
+          const itemUrl = String(item?.url || "").trim();
+          return (
+            (articleId && itemId && articleId === itemId) ||
+            (articleUrl && itemUrl && articleUrl === itemUrl)
+          );
+        });
+        if (targetIndex !== -1) {
+          articles.value[targetIndex] = article;
+        }
+      };
+
+      const hydrateArticleDetail = async (
+        seedArticle = activeArticle.value,
+        { silent = true } = {},
+      ) => {
+        if (!seedArticle?.id || seedArticle?.hasFullContent) {
+          return seedArticle;
+        }
+
+        const articleId = Number(seedArticle.id || 0);
+        if (!articleId) return seedArticle;
+
+        const requestId = activeArticleDetailRequestId.value + 1;
+        activeArticleDetailRequestId.value = requestId;
+        isActiveArticleDetailLoading.value = true;
+
+        try {
+          const res = await safeApiCall("get_article_detail", articleId);
+          if (requestId !== activeArticleDetailRequestId.value) {
+            return null;
+          }
+          if (res.status !== "success" || !res.data) {
+            if (!silent) {
+              showNotification(
+                "正文加载失败",
+                res.message || "无法读取完整文章内容",
+                "warning",
+                2200,
+              );
+            }
+            return null;
+          }
+
+          const mergedArticle = buildArticleViewModel({
+            ...seedArticle,
+            ...res.data,
+            has_full_content: true,
+            hasFullContent: true,
+          });
+
+          if (String(activeArticle.value?.id || "") === String(articleId)) {
+            activeArticle.value = mergedArticle;
+          }
+          if (String(lastArticle.value?.id || "") === String(articleId)) {
+            lastArticle.value = mergedArticle;
+          }
+          syncArticleIntoCollection(mergedArticle);
+          return mergedArticle;
+        } catch (error) {
+          if (!silent) {
+            showNotification(
+              "正文加载失败",
+              "完整内容加载异常",
+              "warning",
+              2200,
+            );
+          }
+          return null;
+        } finally {
+          if (requestId === activeArticleDetailRequestId.value) {
+            isActiveArticleDetailLoading.value = false;
+          }
+        }
+      };
+
       const getArticleRawBody = (article) => {
         if (!article) return "";
         const candidates = [
@@ -1442,6 +1909,63 @@ try {
           if (text) return text;
         }
         return String(article.parsedBody || article.summary || "").trim();
+      };
+
+      const getStandardResolvedSummaryBody = (article) => {
+        if (!article || isRssArticle(article)) return "";
+
+        const explicitAiSummary = String(
+          article?.aiSummary || article?.ai_summary || "",
+        ).trim();
+        if (explicitAiSummary) return explicitAiSummary;
+
+        const legacySummaryText = cleanSummaryText(
+          article?.legacySummaryText || article?.summary || "",
+        );
+        if (!legacySummaryText) return "";
+
+        const summaryParts = parseLeadingTags(legacySummaryText);
+        return String(summaryParts.body || legacySummaryText).trim();
+      };
+
+      const hasStandardSummaryBody = (article) =>
+        Boolean(getStandardResolvedSummaryBody(article));
+
+      const isStandardSummaryModeEnabled = (article) =>
+        hasStandardSummaryBody(article);
+
+      const getPreferredStandardDetailMode = (article) => {
+        if (!article || isRssArticle(article)) return "summary";
+        return hasStandardSummaryBody(article) ? "summary" : "raw";
+      };
+
+      const isStandardDetailModeAvailable = (
+        mode,
+        article = activeArticle.value,
+      ) => {
+        if (!article || isRssArticle(article)) return false;
+        if (mode === "raw") return true;
+        if (mode === "summary") return hasStandardSummaryBody(article);
+        return false;
+      };
+
+      const resolveStandardDetailMode = (
+        article = activeArticle.value,
+        requestedMode = standardDetailMode.value,
+      ) => {
+        if (!article || isRssArticle(article)) {
+          return requestedMode || "summary";
+        }
+        return isStandardDetailModeAvailable(requestedMode, article)
+          ? requestedMode
+          : getPreferredStandardDetailMode(article);
+      };
+
+      const setStandardDetailMode = (mode, article = activeArticle.value) => {
+        standardDetailMode.value = resolveStandardDetailMode(article, mode);
+        if (article && !article.hasFullContent) {
+          void hydrateArticleDetail(article, { silent: true });
+        }
       };
 
       const hasRssAiSummary = (article) => {
@@ -1486,14 +2010,20 @@ try {
 
       const setRssDetailMode = (mode, article = activeArticle.value) => {
         rssDetailMode.value = resolveRssDetailMode(article, mode);
+        if (article && !article.hasFullContent) {
+          void hydrateArticleDetail(article, { silent: true });
+        }
       };
 
       const getDetailBodyText = (article) => {
         if (!article) return "";
         if (!isRssArticle(article)) {
+          const resolvedMode = resolveStandardDetailMode(article);
+          if (resolvedMode === "raw") {
+            return String(getArticleRawBody(article) || "").trim();
+          }
           return String(
-            article.parsedBody ||
-              article.summary ||
+            getStandardResolvedSummaryBody(article) ||
               getArticleRawBody(article) ||
               "",
           ).trim();
@@ -1532,7 +2062,9 @@ try {
           : [];
 
         if (!isRssArticle(article)) {
-          return composeTaggedSummary(parsedTags, bodyText) || bodyText;
+          return resolveStandardDetailMode(article) === "summary"
+            ? composeTaggedSummary(parsedTags, bodyText) || bodyText
+            : bodyText;
         }
 
         if (resolveRssDetailMode(article) === "summary") {
@@ -1543,7 +2075,11 @@ try {
       };
 
       const getArticleCopyTooltip = (article = activeArticle.value) => {
-        if (!isRssArticle(article)) return "复制";
+        if (!isRssArticle(article)) {
+          return resolveStandardDetailMode(article) === "raw"
+            ? "复制原文"
+            : "复制摘要";
+        }
         const resolvedMode = resolveRssDetailMode(article);
         if (resolvedMode === "raw") return "复制原文";
         if (resolvedMode === "enhanced") return "复制增强正文";
@@ -1655,11 +2191,38 @@ try {
         return "";
       };
 
+      const getStandardDetailModeTooltip = (
+        mode,
+        article = activeArticle.value,
+      ) => {
+        if (!article || isRssArticle(article)) return "";
+        if (mode === "raw") {
+          return "原文模式";
+        }
+        if (mode === "summary") {
+          return hasStandardSummaryBody(article)
+            ? "摘要模式"
+            : "摘要内容尚未生成";
+        }
+        return "";
+      };
+
       const getEditableArticleText = (article) => {
         if (!article) return "";
 
         if (!isRssArticle(article)) {
-          return String(article?.summary || "").trim();
+          const resolvedMode = resolveStandardDetailMode(article);
+          if (resolvedMode === "raw") {
+            return String(getArticleRawBody(article) || "").trim();
+          }
+          const summaryBody = getStandardResolvedSummaryBody(article);
+          const parsedTags = Array.isArray(article?.parsedTags)
+            ? article.parsedTags
+            : [];
+          return (
+            composeTaggedSummary(parsedTags, summaryBody) ||
+            String(article?.summary || summaryBody || "").trim()
+          );
         }
 
         const resolvedMode = resolveRssDetailMode(article);
@@ -1685,7 +2248,11 @@ try {
       };
 
       const getRssEditTooltip = (article = activeArticle.value) => {
-        if (!isRssArticle(article)) return "编辑摘要";
+        if (!isRssArticle(article)) {
+          return resolveStandardDetailMode(article) === "raw"
+            ? "编辑原文"
+            : "编辑摘要";
+        }
         const resolvedMode = resolveRssDetailMode(article);
         if (resolvedMode === "raw") return "编辑原文";
         if (resolvedMode === "enhanced") return "编辑增强正文";
@@ -1817,9 +2384,1140 @@ try {
       const detailScrollContainerRef = ref(null);
       const rssBodyShellRef = ref(null);
       const rssBodyContentRef = ref(null);
+      const detailBodyContentRef = ref(null);
       const rssTocItems = ref([]);
       const activeRssTocId = ref("");
       let rssTocRefreshFrame = 0;
+
+      const getActiveAnnotationViewMode = (article = activeArticle.value) => {
+        if (!isRssArticle(article)) {
+          const resolvedMode = resolveStandardDetailMode(article);
+          return ["raw", "summary"].includes(resolvedMode)
+            ? resolvedMode
+            : "summary";
+        }
+        const resolvedMode = resolveRssDetailMode(article);
+        return ["raw", "enhanced", "summary"].includes(resolvedMode)
+          ? resolvedMode
+          : "summary";
+      };
+
+      const normalizeAnnotationViewModes = (viewModes = []) => {
+        const source = Array.isArray(viewModes) ? viewModes : [viewModes];
+        return Array.from(
+          new Set(
+            source
+              .map((viewMode) => String(viewMode || "").trim().toLowerCase())
+              .filter((viewMode) =>
+                ["raw", "enhanced", "summary"].includes(viewMode),
+              ),
+          ),
+        );
+      };
+
+      const getAnnotationResetViewModesAfterRegeneration = (
+        article,
+        resultKind = "default",
+      ) => {
+        if (!isRssArticle(article)) {
+          return ["summary"];
+        }
+
+        const normalizedKind = String(resultKind || "").trim().toLowerCase();
+        if (
+          ["rss_full", "rss_formatting", "rss_reset"].includes(normalizedKind)
+        ) {
+          return ["enhanced", "summary"];
+        }
+        if (normalizedKind === "rss_summary") {
+          return ["summary"];
+        }
+        return ["summary"];
+      };
+
+      const normalizeArticleAnnotationRecord = (record = {}) => ({
+        id: Number(record.id || 0),
+        article_id: Number(
+          record.article_id || record.articleId || activeArticle.value?.id || 0,
+        ),
+        view_mode:
+          String(record.view_mode || record.viewMode || "summary").trim() ||
+          "summary",
+        anchor_text: String(record.anchor_text || record.anchorText || ""),
+        anchor_prefix: String(record.anchor_prefix || record.anchorPrefix || ""),
+        anchor_suffix: String(record.anchor_suffix || record.anchorSuffix || ""),
+        start_offset: Math.max(
+          Number(record.start_offset ?? record.startOffset ?? 0) || 0,
+          0,
+        ),
+        end_offset: Math.max(
+          Number(record.end_offset ?? record.endOffset ?? 0) || 0,
+          0,
+        ),
+        style_payload: normalizeAnnotationStyle(
+          record.style_payload || record.stylePayload || {},
+        ),
+        created_at: String(record.created_at || record.createdAt || ""),
+        updated_at: String(record.updated_at || record.updatedAt || ""),
+      });
+
+      const getActiveAnnotationRoot = () =>
+        isRssArticle(activeArticle.value)
+          ? rssBodyContentRef.value
+          : detailBodyContentRef.value;
+
+      const getActiveDetailSearchRoot = () => getActiveAnnotationRoot();
+
+      const focusDetailSearchInput = (delay = 180) => {
+        if (typeof window === "undefined") {
+          detailSearchInputRef.value?.focus?.();
+          detailSearchInputRef.value?.select?.();
+          return;
+        }
+
+        if (detailSearchInputFocusTimer) {
+          window.clearTimeout(detailSearchInputFocusTimer);
+        }
+        detailSearchInputFocusTimer = window.setTimeout(() => {
+          detailSearchInputFocusTimer = 0;
+          detailSearchInputRef.value?.focus?.();
+          detailSearchInputRef.value?.select?.();
+        }, delay);
+      };
+
+      const clearRenderedDetailSearchMarks = (
+        root = getActiveDetailSearchRoot(),
+      ) => {
+        if (!root) return;
+        const renderedMarks = Array.from(root.querySelectorAll(".detail-search-mark"));
+        renderedMarks.forEach((mark) => {
+          const parent = mark.parentNode;
+          if (!parent) return;
+          while (mark.firstChild) {
+            parent.insertBefore(mark.firstChild, mark);
+          }
+          parent.removeChild(mark);
+        });
+        root.normalize();
+      };
+
+      const syncActiveDetailSearchMark = (scrollIntoView = false) => {
+        const root = getActiveDetailSearchRoot();
+        if (!root) {
+          detailSearchMatchCount.value = 0;
+          detailSearchActiveIndex.value = -1;
+          return;
+        }
+
+        const marks = Array.from(root.querySelectorAll(".detail-search-mark"));
+        detailSearchMatchCount.value = marks.length;
+        if (!marks.length) {
+          detailSearchActiveIndex.value = -1;
+          return;
+        }
+
+        const nextIndex = Math.min(
+          Math.max(detailSearchActiveIndex.value, 0),
+          marks.length - 1,
+        );
+        detailSearchActiveIndex.value = nextIndex;
+
+        marks.forEach((mark, index) => {
+          mark.classList.toggle("is-active", index === nextIndex);
+          mark.setAttribute("data-match-index", String(index + 1));
+        });
+
+        if (scrollIntoView) {
+          marks[nextIndex]?.scrollIntoView?.({
+            behavior: "smooth",
+            block: "center",
+            inline: "nearest",
+          });
+        }
+      };
+
+      const wrapDetailSearchSegment = (segment) => {
+        const textNode = segment?.node;
+        if (!textNode?.parentNode || segment.end <= segment.start) {
+          return;
+        }
+
+        let targetNode = textNode;
+        if (segment.end < targetNode.nodeValue.length) {
+          targetNode.splitText(segment.end);
+        }
+        if (segment.start > 0) {
+          targetNode = targetNode.splitText(segment.start);
+        }
+        if (!targetNode?.nodeValue?.length || !targetNode.parentNode) {
+          return;
+        }
+
+        const mark = document.createElement("mark");
+        mark.className = "detail-search-mark";
+        targetNode.parentNode.insertBefore(mark, targetNode);
+        mark.appendChild(targetNode);
+      };
+
+      const applyDetailSearchMarksToRoot = (scrollIntoView = false) => {
+        const root = getActiveDetailSearchRoot();
+        if (
+          !root ||
+          !isDetailPaneVisible.value ||
+          isEditingSummary.value ||
+          typeof document === "undefined" ||
+          typeof NodeFilter === "undefined"
+        ) {
+          detailSearchMatchCount.value = 0;
+          detailSearchActiveIndex.value = -1;
+          return;
+        }
+
+        clearRenderedDetailSearchMarks(root);
+
+        const keyword = String(detailSearchQuery.value || "").trim();
+        if (!keyword) {
+          detailSearchMatchCount.value = 0;
+          detailSearchActiveIndex.value = -1;
+          return;
+        }
+
+        const lowerKeyword = keyword.toLocaleLowerCase();
+        const matchSegments = [];
+        const walker = document.createTreeWalker(
+          root,
+          NodeFilter.SHOW_TEXT,
+          {
+            acceptNode(node) {
+              const text = String(node?.nodeValue || "");
+              if (!text.trim()) {
+                return NodeFilter.FILTER_REJECT;
+              }
+              const parent = node.parentElement;
+              if (!parent) {
+                return NodeFilter.FILTER_REJECT;
+              }
+              if (
+                parent.closest(
+                  ".detail-search-mark, script, style, noscript, textarea",
+                )
+              ) {
+                return NodeFilter.FILTER_REJECT;
+              }
+              return NodeFilter.FILTER_ACCEPT;
+            },
+          },
+        );
+
+        let currentNode = walker.nextNode();
+        while (currentNode) {
+          const rawText = String(currentNode.nodeValue || "");
+          const lowerText = rawText.toLocaleLowerCase();
+          let fromIndex = 0;
+
+          while (fromIndex < lowerText.length) {
+            const foundIndex = lowerText.indexOf(lowerKeyword, fromIndex);
+            if (foundIndex === -1) {
+              break;
+            }
+
+            matchSegments.push({
+              node: currentNode,
+              start: foundIndex,
+              end: foundIndex + keyword.length,
+            });
+            fromIndex = foundIndex + Math.max(keyword.length, 1);
+          }
+
+          currentNode = walker.nextNode();
+        }
+
+        matchSegments
+          .slice()
+          .reverse()
+          .forEach((segment) => wrapDetailSearchSegment(segment));
+
+        if (!matchSegments.length) {
+          detailSearchMatchCount.value = 0;
+          detailSearchActiveIndex.value = -1;
+          return;
+        }
+
+        if (
+          detailSearchActiveIndex.value < 0 ||
+          detailSearchActiveIndex.value >= matchSegments.length
+        ) {
+          detailSearchActiveIndex.value = 0;
+        }
+
+        syncActiveDetailSearchMark(scrollIntoView);
+      };
+
+      const queueApplyDetailSearchMarks = (scrollIntoView = false) => {
+        if (typeof window === "undefined") {
+          applyDetailSearchMarksToRoot(scrollIntoView);
+          return;
+        }
+
+        detailSearchPendingScroll =
+          detailSearchPendingScroll || Boolean(scrollIntoView);
+        if (detailSearchApplyFrame) {
+          window.cancelAnimationFrame(detailSearchApplyFrame);
+        }
+        detailSearchApplyFrame = window.requestAnimationFrame(async () => {
+          detailSearchApplyFrame = 0;
+          await nextTick();
+          const shouldScroll = detailSearchPendingScroll;
+          detailSearchPendingScroll = false;
+          applyDetailSearchMarksToRoot(shouldScroll);
+        });
+      };
+
+      const openDetailSearchUI = (focusInput = true) => {
+        if (!activeArticle.value || isEditingSummary.value) {
+          return;
+        }
+
+        setActiveKeyboardPane("detail");
+        isDetailSearchExpanded.value = true;
+        if (focusInput) {
+          nextTick(() => {
+            focusDetailSearchInput(180);
+          });
+        }
+      };
+
+      const closeDetailSearchUI = () => {
+        isDetailSearchExpanded.value = false;
+        detailSearchQuery.value = "";
+        detailSearchMatchCount.value = 0;
+        detailSearchActiveIndex.value = -1;
+        if (detailSearchInputFocusTimer && typeof window !== "undefined") {
+          window.clearTimeout(detailSearchInputFocusTimer);
+          detailSearchInputFocusTimer = 0;
+        }
+        if (detailSearchQueryTimer && typeof window !== "undefined") {
+          window.clearTimeout(detailSearchQueryTimer);
+          detailSearchQueryTimer = 0;
+        }
+        if (detailSearchApplyFrame && typeof window !== "undefined") {
+          window.cancelAnimationFrame(detailSearchApplyFrame);
+          detailSearchApplyFrame = 0;
+        }
+        detailSearchPendingScroll = false;
+        clearRenderedDetailSearchMarks();
+      };
+
+      const toggleDetailSearchUI = () => {
+        if (isDetailSearchExpanded.value) {
+          if (String(detailSearchQuery.value || "").trim()) {
+            focusDetailSearchInput(0);
+            return;
+          }
+          closeDetailSearchUI();
+          return;
+        }
+        openDetailSearchUI(true);
+      };
+
+      const jumpToDetailSearchMatch = (direction = 1) => {
+        if (detailSearchMatchCount.value <= 0) {
+          return;
+        }
+
+        const total = Math.max(detailSearchMatchCount.value, 1);
+        const nextIndex =
+          (detailSearchActiveIndex.value + direction + total) % total;
+        detailSearchActiveIndex.value = nextIndex;
+        syncActiveDetailSearchMark(true);
+      };
+
+      const handleDetailSearchSubmit = (event = null) => {
+        const keyword = String(detailSearchQuery.value || "").trim();
+        if (!keyword) {
+          return;
+        }
+        if (detailSearchMatchCount.value <= 0) {
+          detailSearchActiveIndex.value = 0;
+          queueApplyDetailSearchMarks(true);
+          return;
+        }
+        jumpToDetailSearchMatch(event?.shiftKey ? -1 : 1);
+      };
+
+      const resetAnnotationToolbarState = () => ({
+        visible: false,
+        x: 0,
+        y: 0,
+        annotationId: null,
+        style: createEmptyAnnotationStyle(),
+      });
+
+      const hideAnnotationToolbar = () => {
+        annotationToolbarState.value = resetAnnotationToolbarState();
+        annotationSelectionSnapshot.value = null;
+      };
+
+      const clearAnnotationSelection = () => {
+        if (typeof window === "undefined" || !window.getSelection) {
+          return;
+        }
+        const selection = window.getSelection();
+        if (selection && selection.rangeCount > 0) {
+          selection.removeAllRanges();
+        }
+      };
+
+      const clearLocalAnnotationsForViewModes = (viewModes = []) => {
+        const normalizedModes = normalizeAnnotationViewModes(viewModes);
+        if (!normalizedModes.length) {
+          return;
+        }
+
+        articleAnnotations.value = articleAnnotations.value.filter((item) => {
+          const normalized = normalizeArticleAnnotationRecord(item);
+          return !normalizedModes.includes(
+            String(normalized.view_mode || "summary").trim().toLowerCase(),
+          );
+        });
+        queueApplyArticleAnnotations();
+      };
+
+      const annotationToolbarStyle = computed(() => {
+        const state = annotationToolbarState.value;
+        return {
+          left: `clamp(92px, ${Math.round(state.x || 0)}px, calc(100vw - 92px))`,
+          top: `${Math.max(20, Math.round(state.y || 0))}px`,
+        };
+      });
+
+      const isAnnotationToolbarVisible = computed(
+        () =>
+          annotationToolbarState.value.visible &&
+          Boolean(annotationSelectionSnapshot.value) &&
+          isDetailPaneVisible.value &&
+          !isEditingSummary.value,
+      );
+
+      const canDeleteActiveAnnotation = computed(
+        () => Number(annotationToolbarState.value.annotationId || 0) > 0,
+      );
+
+      const isAnnotationToolbarColorActive = (colorKey) =>
+        normalizeAnnotationStyle(annotationToolbarState.value.style)
+          .highlight_color === colorKey;
+
+      const isAnnotationToolbarToggleActive = (styleKey) =>
+        Boolean(
+          normalizeAnnotationStyle(annotationToolbarState.value.style)?.[styleKey],
+        );
+
+      const getAnnotationRootText = (root) => String(root?.textContent || "");
+
+      const buildAnnotationAnchors = (rootText = "", startOffset = 0, endOffset = 0) => ({
+        anchorText: String(rootText || "").slice(startOffset, endOffset),
+        anchorPrefix: String(rootText || "").slice(
+          Math.max(0, startOffset - 32),
+          startOffset,
+        ),
+        anchorSuffix: String(rootText || "").slice(
+          endOffset,
+          Math.min(String(rootText || "").length, endOffset + 32),
+        ),
+      });
+
+      const isRangeInsideRoot = (root, range) => {
+        if (!root || !range) return false;
+        const commonAncestor = range.commonAncestorContainer;
+        return commonAncestor === root || root.contains(commonAncestor);
+      };
+
+      const getRangeOffsetsWithinRoot = (root, range) => {
+        if (!root || !range || typeof document === "undefined") {
+          return null;
+        }
+
+        try {
+          const startRange = document.createRange();
+          startRange.selectNodeContents(root);
+          startRange.setEnd(range.startContainer, range.startOffset);
+
+          const endRange = document.createRange();
+          endRange.selectNodeContents(root);
+          endRange.setEnd(range.endContainer, range.endOffset);
+
+          const rootText = getAnnotationRootText(root);
+          const startOffset = String(
+            startRange.cloneContents()?.textContent || "",
+          ).length;
+          const endOffset = String(
+            endRange.cloneContents()?.textContent || "",
+          ).length;
+          if (endOffset <= startOffset) {
+            return null;
+          }
+          return {
+            startOffset,
+            endOffset,
+            text: rootText.slice(startOffset, endOffset),
+          };
+        } catch (error) {
+          console.debug("计算正文批注选区偏移失败:", error);
+          return null;
+        }
+      };
+
+      const findExactAnnotationMatch = (startOffset, endOffset) =>
+        articleAnnotations.value.find(
+          (item) =>
+            Number(item.start_offset || 0) === startOffset &&
+            Number(item.end_offset || 0) === endOffset,
+        ) || null;
+
+      const findArticleAnnotationById = (annotationId) =>
+        articleAnnotations.value.find(
+          (item) => Number(item.id || 0) === Number(annotationId || 0),
+        ) || null;
+
+      const showAnnotationToolbarForRecord = (annotation, activeRect = null) => {
+        const normalized = normalizeArticleAnnotationRecord(annotation);
+        if (!normalized.id) {
+          hideAnnotationToolbar();
+          return;
+        }
+
+        annotationSelectionSnapshot.value = {
+          articleId: Number(
+            normalized.article_id || activeArticle.value?.id || 0,
+          ),
+          viewMode:
+            String(normalized.view_mode || getActiveAnnotationViewMode()).trim() ||
+            "summary",
+          startOffset: normalized.start_offset,
+          endOffset: normalized.end_offset,
+          anchorText: normalized.anchor_text,
+          anchorPrefix: normalized.anchor_prefix,
+          anchorSuffix: normalized.anchor_suffix,
+        };
+
+        annotationToolbarState.value = {
+          visible: true,
+          x: activeRect
+            ? activeRect.left + activeRect.width / 2
+            : typeof window !== "undefined"
+              ? window.innerWidth / 2
+              : 0,
+          y: activeRect ? activeRect.top - 14 : 22,
+          annotationId: normalized.id,
+          style: normalizeAnnotationStyle(normalized.style_payload),
+        };
+      };
+
+      const syncAnnotationSelection = () => {
+        if (
+          typeof window === "undefined" ||
+          !isDetailPaneVisible.value ||
+          isEditingSummary.value ||
+          !activeArticle.value
+        ) {
+          hideAnnotationToolbar();
+          return;
+        }
+
+        const root = getActiveAnnotationRoot();
+        if (!root) {
+          hideAnnotationToolbar();
+          return;
+        }
+
+        const selection = window.getSelection ? window.getSelection() : null;
+        if (!selection || selection.rangeCount <= 0 || selection.isCollapsed) {
+          if (
+            annotationToolbarState.value.visible &&
+            Number(annotationToolbarState.value.annotationId || 0) > 0 &&
+            annotationSelectionSnapshot.value
+          ) {
+            return;
+          }
+          hideAnnotationToolbar();
+          return;
+        }
+
+        const range = selection.getRangeAt(0);
+        if (!isRangeInsideRoot(root, range)) {
+          hideAnnotationToolbar();
+          return;
+        }
+
+        const offsets = getRangeOffsetsWithinRoot(root, range);
+        if (!offsets) {
+          hideAnnotationToolbar();
+          return;
+        }
+
+        const rootText = getAnnotationRootText(root);
+        const anchors = buildAnnotationAnchors(
+          rootText,
+          offsets.startOffset,
+          offsets.endOffset,
+        );
+        if (!anchors.anchorText.trim()) {
+          hideAnnotationToolbar();
+          return;
+        }
+
+        const exactMatch = findExactAnnotationMatch(
+          offsets.startOffset,
+          offsets.endOffset,
+        );
+        const rangeRect =
+          typeof range.getBoundingClientRect === "function"
+            ? range.getBoundingClientRect()
+            : null;
+        const activeRect =
+          (rangeRect && rangeRect.width + rangeRect.height > 0 && rangeRect) ||
+          (range.getClientRects && range.getClientRects()[0]) ||
+          null;
+
+        annotationSelectionSnapshot.value = {
+          articleId: Number(activeArticle.value?.id || 0),
+          viewMode: getActiveAnnotationViewMode(activeArticle.value),
+          startOffset: offsets.startOffset,
+          endOffset: offsets.endOffset,
+          anchorText: anchors.anchorText,
+          anchorPrefix: anchors.anchorPrefix,
+          anchorSuffix: anchors.anchorSuffix,
+        };
+
+        annotationToolbarState.value = {
+          visible: true,
+          x: activeRect
+            ? activeRect.left + activeRect.width / 2
+            : window.innerWidth / 2,
+          y: activeRect ? activeRect.top - 14 : 22,
+          annotationId: exactMatch?.id || null,
+          style: exactMatch
+            ? normalizeAnnotationStyle(exactMatch.style_payload)
+            : createEmptyAnnotationStyle(),
+        };
+      };
+
+      const queueAnnotationSelectionSync = () => {
+        if (typeof window === "undefined") return;
+        if (annotationSelectionFrame) {
+          window.cancelAnimationFrame(annotationSelectionFrame);
+        }
+        annotationSelectionFrame = window.requestAnimationFrame(() => {
+          annotationSelectionFrame = 0;
+          syncAnnotationSelection();
+        });
+      };
+
+      const handleListPanePointerDown = () => {
+        setActiveKeyboardPane("list");
+      };
+
+      const handleDetailPanePointerDown = () => {
+        if (!isDetailPaneVisible.value) {
+          return;
+        }
+        setActiveKeyboardPane("detail");
+      };
+
+      const handleDetailContentPointerDown = (event) => {
+        if (
+          !event ||
+          event.button !== 0 ||
+          !isDetailPaneVisible.value ||
+          isEditingSummary.value
+        ) {
+          return;
+        }
+
+        setActiveKeyboardPane("detail");
+
+        const markTarget = event.target?.closest?.(".article-annotation-mark");
+        if (markTarget) {
+          annotationPointerSelecting = false;
+          return;
+        }
+
+        annotationPointerSelecting = true;
+        hideAnnotationToolbar();
+      };
+
+      const handleDetailContentClick = (event) => {
+        if (
+          !event ||
+          !isDetailPaneVisible.value ||
+          isEditingSummary.value
+        ) {
+          return;
+        }
+
+        setActiveKeyboardPane("detail");
+
+        const markTarget = event.target?.closest?.(".article-annotation-mark");
+        if (!markTarget) {
+          return;
+        }
+
+        const annotationId = Number(markTarget.dataset.annotationId || 0);
+        if (annotationId <= 0) {
+          return;
+        }
+
+        const annotation = findArticleAnnotationById(annotationId);
+        if (!annotation) {
+          return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        clearAnnotationSelection();
+        const rect =
+          typeof markTarget.getBoundingClientRect === "function"
+            ? markTarget.getBoundingClientRect()
+            : null;
+        showAnnotationToolbarForRecord(annotation, rect);
+      };
+
+      const handleDocumentPointerUp = () => {
+        if (!annotationPointerSelecting) {
+          return;
+        }
+        annotationPointerSelecting = false;
+        if (typeof window !== "undefined") {
+          window.setTimeout(() => {
+            queueAnnotationSelectionSync();
+          }, 40);
+        }
+      };
+
+      const unwrapRenderedAnnotations = (root) => {
+        if (!root) return;
+        const renderedMarks = Array.from(
+          root.querySelectorAll(".article-annotation-mark"),
+        );
+        renderedMarks.forEach((mark) => {
+          const parent = mark.parentNode;
+          if (!parent) return;
+          while (mark.firstChild) {
+            parent.insertBefore(mark.firstChild, mark);
+          }
+          parent.removeChild(mark);
+        });
+        root.normalize();
+      };
+
+      const findAnnotationOffsetsByQuote = (rootText, annotation) => {
+        const anchorText = String(annotation?.anchor_text || "");
+        if (!anchorText) return null;
+
+        const prefix = String(annotation?.anchor_prefix || "");
+        const suffix = String(annotation?.anchor_suffix || "");
+        let searchIndex = 0;
+        let fallbackMatch = null;
+
+        while (searchIndex <= rootText.length) {
+          const nextIndex = rootText.indexOf(anchorText, searchIndex);
+          if (nextIndex === -1) {
+            break;
+          }
+          const nextEnd = nextIndex + anchorText.length;
+          const prefixOk =
+            !prefix ||
+            rootText.slice(Math.max(0, nextIndex - prefix.length), nextIndex) ===
+              prefix;
+          const suffixOk =
+            !suffix ||
+            rootText.slice(nextEnd, nextEnd + suffix.length) === suffix;
+          if (prefixOk && suffixOk) {
+            return { startOffset: nextIndex, endOffset: nextEnd };
+          }
+          if (!fallbackMatch) {
+            fallbackMatch = { startOffset: nextIndex, endOffset: nextEnd };
+          }
+          searchIndex = nextIndex + Math.max(anchorText.length, 1);
+        }
+
+        return fallbackMatch;
+      };
+
+      const resolveAnnotationOffsets = (rootText, annotation) => {
+        const startOffset = Math.max(Number(annotation?.start_offset || 0), 0);
+        const endOffset = Math.max(Number(annotation?.end_offset || 0), startOffset);
+        const anchorText = String(annotation?.anchor_text || "");
+        if (
+          anchorText &&
+          endOffset > startOffset &&
+          rootText.slice(startOffset, endOffset) === anchorText
+        ) {
+          return { startOffset, endOffset };
+        }
+        return findAnnotationOffsetsByQuote(rootText, annotation);
+      };
+
+      const collectAnnotationSegments = (root, startOffset, endOffset) => {
+        if (
+          !root ||
+          typeof document === "undefined" ||
+          typeof NodeFilter === "undefined"
+        ) {
+          return [];
+        }
+
+        const segments = [];
+        const walker = document.createTreeWalker(
+          root,
+          NodeFilter.SHOW_TEXT,
+          {
+            acceptNode(node) {
+              if (!node?.nodeValue) {
+                return NodeFilter.FILTER_REJECT;
+              }
+              return NodeFilter.FILTER_ACCEPT;
+            },
+          },
+        );
+
+        let currentOffset = 0;
+        let currentNode = walker.nextNode();
+        while (currentNode) {
+          const nodeLength = currentNode.nodeValue.length;
+          const nodeStart = currentOffset;
+          const nodeEnd = currentOffset + nodeLength;
+          if (nodeEnd > startOffset && nodeStart < endOffset) {
+            segments.push({
+              node: currentNode,
+              localStart: Math.max(0, startOffset - nodeStart),
+              localEnd: Math.min(nodeLength, endOffset - nodeStart),
+            });
+          }
+          currentOffset = nodeEnd;
+          currentNode = walker.nextNode();
+        }
+
+        return segments;
+      };
+
+      const decorateAnnotationMark = (mark, annotation) => {
+        const style = normalizeAnnotationStyle(annotation?.style_payload || {});
+        mark.className = "article-annotation-mark";
+        mark.dataset.annotationId = String(annotation?.id || "");
+        if (style.highlight_color) {
+          mark.classList.add(`is-highlight-${style.highlight_color}`);
+        }
+        if (style.underline) {
+          mark.classList.add("is-underline");
+        }
+        if (style.strike) {
+          mark.classList.add("is-strike");
+        }
+        if (style.bold) {
+          mark.classList.add("is-bold");
+        }
+      };
+
+      const wrapAnnotationSegment = (segment, annotation) => {
+        const textNode = segment?.node;
+        if (!textNode?.parentNode || segment.localEnd <= segment.localStart) {
+          return;
+        }
+
+        let targetNode = textNode;
+        if (segment.localEnd < targetNode.nodeValue.length) {
+          targetNode.splitText(segment.localEnd);
+        }
+        if (segment.localStart > 0) {
+          targetNode = targetNode.splitText(segment.localStart);
+        }
+        if (!targetNode?.nodeValue?.length || !targetNode.parentNode) {
+          return;
+        }
+
+        const mark = document.createElement("span");
+        decorateAnnotationMark(mark, annotation);
+        targetNode.parentNode.insertBefore(mark, targetNode);
+        mark.appendChild(targetNode);
+      };
+
+      const applyArticleAnnotationsToRoot = () => {
+        const root = getActiveAnnotationRoot();
+        if (!root) return;
+
+        clearRenderedDetailSearchMarks(root);
+        unwrapRenderedAnnotations(root);
+
+        const articleId = Number(activeArticle.value?.id || 0);
+        const viewMode = getActiveAnnotationViewMode(activeArticle.value);
+        const rootText = getAnnotationRootText(root);
+        if (!rootText) return;
+
+        const annotations = articleAnnotations.value
+          .map((item) => normalizeArticleAnnotationRecord(item))
+          .filter(
+            (item) =>
+              item.article_id === articleId && item.view_mode === viewMode,
+          )
+          .sort((left, right) => {
+            const startDiff = right.start_offset - left.start_offset;
+            if (startDiff !== 0) return startDiff;
+            const endDiff = right.end_offset - left.end_offset;
+            if (endDiff !== 0) return endDiff;
+            return right.id - left.id;
+          });
+
+        annotations.forEach((annotation) => {
+          const offsets = resolveAnnotationOffsets(rootText, annotation);
+          if (!offsets || offsets.endOffset <= offsets.startOffset) {
+            return;
+          }
+          const segments = collectAnnotationSegments(
+            root,
+            offsets.startOffset,
+            offsets.endOffset,
+          );
+          segments
+            .slice()
+            .reverse()
+            .forEach((segment) => wrapAnnotationSegment(segment, annotation));
+        });
+
+        if (
+          isDetailSearchExpanded.value &&
+          String(detailSearchQuery.value || "").trim()
+        ) {
+          queueApplyDetailSearchMarks(false);
+        }
+      };
+
+      const queueApplyArticleAnnotations = () => {
+        if (typeof window === "undefined") return;
+        if (annotationApplyFrame) {
+          window.cancelAnimationFrame(annotationApplyFrame);
+        }
+        annotationApplyFrame = window.requestAnimationFrame(async () => {
+          annotationApplyFrame = 0;
+          await nextTick();
+          applyArticleAnnotationsToRoot();
+        });
+      };
+
+      const loadArticleAnnotations = async () => {
+        const article = activeArticle.value;
+        if (!article || !isDetailPaneVisible.value || isEditingSummary.value) {
+          articleAnnotations.value = [];
+          hideAnnotationToolbar();
+          queueApplyArticleAnnotations();
+          return;
+        }
+
+        const articleId = Number(article?.id || 0);
+        if (articleId <= 0) {
+          articleAnnotations.value = [];
+          hideAnnotationToolbar();
+          queueApplyArticleAnnotations();
+          return;
+        }
+
+        const requestToken = ++annotationLoadToken;
+        const viewMode = getActiveAnnotationViewMode(article);
+        isAnnotationLoading.value = true;
+        const res = await safeApiCall(
+          "get_article_annotations",
+          articleId,
+          viewMode,
+        );
+        if (requestToken !== annotationLoadToken) {
+          return;
+        }
+
+        isAnnotationLoading.value = false;
+        if (res?.status !== "success") {
+          articleAnnotations.value = [];
+          queueApplyArticleAnnotations();
+          return;
+        }
+
+        articleAnnotations.value = Array.isArray(res.annotations)
+          ? res.annotations.map((item) => normalizeArticleAnnotationRecord(item))
+          : [];
+        queueApplyArticleAnnotations();
+        queueAnnotationSelectionSync();
+      };
+
+      const findOverlappingAnnotations = (snapshot) => {
+        if (!snapshot) return [];
+        return articleAnnotations.value
+          .map((item) => normalizeArticleAnnotationRecord(item))
+          .filter(
+            (item) =>
+              item.article_id === Number(snapshot.articleId || 0) &&
+              item.view_mode === String(snapshot.viewMode || "summary") &&
+              item.start_offset < snapshot.endOffset &&
+              item.end_offset > snapshot.startOffset,
+          );
+      };
+
+      const saveAnnotationForSelection = async (nextStyle = {}) => {
+        const snapshot = annotationSelectionSnapshot.value;
+        if (
+          !snapshot ||
+          isAnnotationSaving.value ||
+          Number(snapshot.articleId || 0) <= 0
+        ) {
+          return;
+        }
+
+        const normalizedStyle = normalizeAnnotationStyle(nextStyle);
+        const articleId = Number(snapshot.articleId || 0);
+        const overlappingAnnotations = findOverlappingAnnotations(snapshot);
+        const exactMatch =
+          overlappingAnnotations.find(
+            (item) =>
+              item.start_offset === snapshot.startOffset &&
+              item.end_offset === snapshot.endOffset,
+          ) || null;
+
+        isAnnotationSaving.value = true;
+        try {
+          const otherOverlapIds = overlappingAnnotations
+            .map((item) => Number(item.id || 0))
+            .filter(Boolean)
+            .filter((id) => id !== Number(exactMatch?.id || 0));
+
+          if (otherOverlapIds.length > 0) {
+            const deleteOverlapRes = await safeApiCall(
+              "delete_article_annotations",
+              articleId,
+              otherOverlapIds,
+            );
+            if (deleteOverlapRes?.status !== "success") {
+              throw new Error(deleteOverlapRes?.message || "旧批注清理失败");
+            }
+          }
+
+          if (isAnnotationStyleEmpty(normalizedStyle)) {
+            if (exactMatch?.id) {
+              const deleteRes = await safeApiCall(
+                "delete_article_annotation",
+                Number(exactMatch.id),
+                articleId,
+              );
+              if (deleteRes?.status !== "success") {
+                throw new Error(deleteRes?.message || "批注删除失败");
+              }
+            }
+            await loadArticleAnnotations();
+            hideAnnotationToolbar();
+            return;
+          }
+
+          const saveRes = await safeApiCall("save_article_annotation", {
+            annotation_id: exactMatch?.id || null,
+            article_id: articleId,
+            view_mode: snapshot.viewMode,
+            anchor_text: snapshot.anchorText,
+            anchor_prefix: snapshot.anchorPrefix,
+            anchor_suffix: snapshot.anchorSuffix,
+            start_offset: snapshot.startOffset,
+            end_offset: snapshot.endOffset,
+            style_payload: normalizedStyle,
+          });
+
+          if (saveRes?.status !== "success") {
+            throw new Error(saveRes?.message || "批注保存失败");
+          }
+
+          const savedAnnotation = normalizeArticleAnnotationRecord(
+            saveRes.annotation || {},
+          );
+          await loadArticleAnnotations();
+          annotationToolbarState.value = {
+            ...annotationToolbarState.value,
+            visible: true,
+            annotationId: savedAnnotation.id || null,
+            style: normalizeAnnotationStyle(savedAnnotation.style_payload),
+          };
+        } catch (error) {
+          console.error("保存正文批注失败:", error);
+          showNotification(
+            "批注保存失败",
+            String(error?.message || error || "未知错误"),
+            "error",
+            2600,
+          );
+        } finally {
+          isAnnotationSaving.value = false;
+          queueAnnotationSelectionSync();
+        }
+      };
+
+      const deleteActiveAnnotation = async () => {
+        const annotationId = Number(annotationToolbarState.value.annotationId || 0);
+        const articleId = Number(
+          annotationSelectionSnapshot.value?.articleId ||
+            activeArticle.value?.id ||
+            0,
+        );
+        if (!annotationId || !articleId || isAnnotationSaving.value) {
+          return;
+        }
+
+        isAnnotationSaving.value = true;
+        try {
+          const deleteRes = await safeApiCall(
+            "delete_article_annotation",
+            annotationId,
+            articleId,
+          );
+          if (deleteRes?.status !== "success") {
+            throw new Error(deleteRes?.message || "批注删除失败");
+          }
+
+          clearAnnotationSelection();
+          await loadArticleAnnotations();
+          hideAnnotationToolbar();
+        } catch (error) {
+          console.error("删除正文批注失败:", error);
+          showNotification(
+            "批注删除失败",
+            String(error?.message || error || "未知错误"),
+            "error",
+            2600,
+          );
+        } finally {
+          isAnnotationSaving.value = false;
+        }
+      };
+
+      const applyAnnotationHighlightColor = (colorKey) => {
+        const baseStyle = normalizeAnnotationStyle(annotationToolbarState.value.style);
+        const nextStyle = {
+          ...baseStyle,
+          highlight_color:
+            baseStyle.highlight_color === colorKey ? "" : String(colorKey || ""),
+        };
+        annotationToolbarState.value = {
+          ...annotationToolbarState.value,
+          style: nextStyle,
+        };
+        void saveAnnotationForSelection(nextStyle);
+      };
+
+      const toggleAnnotationTextStyle = (styleKey) => {
+        const baseStyle = normalizeAnnotationStyle(annotationToolbarState.value.style);
+        const nextStyle = {
+          ...baseStyle,
+          [styleKey]: !Boolean(baseStyle[styleKey]),
+        };
+        annotationToolbarState.value = {
+          ...annotationToolbarState.value,
+          style: nextStyle,
+        };
+        void saveAnnotationForSelection(nextStyle);
+      };
 
       const normalizeRssHeadingText = (value = "") =>
         String(value || "")
@@ -1967,7 +3665,7 @@ try {
       const collectRssTocFromRenderedBody = async () => {
         if (
           typeof document === "undefined" ||
-          currentView.value !== "detail" ||
+          !isDetailPaneVisible.value ||
           isEditingSummary.value ||
           !isRssArticle(activeArticle.value)
         ) {
@@ -2070,18 +3768,25 @@ try {
 
       const handleDetailContentScroll = () => {
         updateActiveRssTocItem();
+        queueAnnotationSelectionSync();
       };
 
       const showRssFloatingToc = computed(
         () =>
-          currentView.value === "detail" &&
+          isDetailPaneVisible.value &&
           !isEditingSummary.value &&
           isRssArticle(activeArticle.value) &&
           rssTocItems.value.length > 0,
       );
 
       watch(
-        [activeArticle, rssDetailMode, isEditingSummary, currentView],
+        [
+          activeArticle,
+          rssDetailMode,
+          standardDetailMode,
+          isEditingSummary,
+          currentView,
+        ],
         () => {
           rssTocItems.value = [];
           activeRssTocId.value = "";
@@ -2090,15 +3795,134 @@ try {
         { flush: "post" },
       );
 
+      watch(
+        [
+          activeArticle,
+          rssDetailMode,
+          standardDetailMode,
+          currentView,
+          isEditingSummary,
+        ],
+        () => {
+          annotationLoadToken += 1;
+          if (
+            !isDetailPaneVisible.value ||
+            isEditingSummary.value ||
+            !activeArticle.value
+          ) {
+            isAnnotationLoading.value = false;
+            articleAnnotations.value = [];
+            hideAnnotationToolbar();
+            queueApplyArticleAnnotations();
+            return;
+          }
+          void loadArticleAnnotations();
+        },
+        { flush: "post", immediate: true },
+      );
+
+      watch(
+        articleAnnotations,
+        () => {
+          queueApplyArticleAnnotations();
+        },
+        { flush: "post", deep: true },
+      );
+
       const handleWindowResize = () => {
+        viewportWidth.value =
+          typeof window !== "undefined" ? window.innerWidth : viewportWidth.value;
         queueRssTocRefresh();
         syncImagePreviewViewport();
+        queueAnnotationSelectionSync();
       };
       window.addEventListener("resize", handleWindowResize);
+
+      const handleDocumentSelectionChange = () => {
+        if (annotationPointerSelecting) {
+          return;
+        }
+        if (typeof window === "undefined" || typeof document === "undefined") {
+          return;
+        }
+        const selection = window.getSelection ? window.getSelection() : null;
+        if (!selection || selection.rangeCount <= 0 || selection.isCollapsed) {
+          if (
+            annotationToolbarState.value.visible &&
+            Number(annotationToolbarState.value.annotationId || 0) > 0
+          ) {
+            return;
+          }
+          hideAnnotationToolbar();
+        }
+      };
+
+      const handleDocumentPointerDown = (event) => {
+        const target = event?.target;
+        if (!target?.closest) {
+          return;
+        }
+
+        if (
+          target.closest(".annotation-toolbar") ||
+          target.closest(".article-annotation-mark")
+        ) {
+          return;
+        }
+
+        if (!annotationPointerSelecting) {
+          hideAnnotationToolbar();
+        }
+      };
+
+      onMounted(() => {
+        if (typeof document !== "undefined") {
+          document.addEventListener(
+            "selectionchange",
+            handleDocumentSelectionChange,
+          );
+          document.addEventListener("pointerdown", handleDocumentPointerDown);
+          document.addEventListener("mouseup", handleDocumentPointerUp);
+        }
+      });
+
+      watch(canUseDualPane, (isWide, wasWide) => {
+        if (isWide === wasWide) return;
+
+        if (isWide) {
+          if (currentView.value === "detail") {
+            currentView.value = "list";
+            isNavigatingBack.value = false;
+          }
+          setActiveKeyboardPane(activeArticle.value ? "detail" : "list");
+          return;
+        }
+
+        if (currentView.value === "list" && activeArticle.value) {
+          currentView.value = "detail";
+        }
+        setActiveKeyboardPane(activeArticle.value ? "detail" : "list");
+      });
 
       onUnmounted(() => {
         clearRssTocRefreshFrame();
         window.removeEventListener("resize", handleWindowResize);
+        if (typeof document !== "undefined") {
+          document.removeEventListener(
+            "selectionchange",
+            handleDocumentSelectionChange,
+          );
+          document.removeEventListener("pointerdown", handleDocumentPointerDown);
+          document.removeEventListener("mouseup", handleDocumentPointerUp);
+        }
+        if (annotationSelectionFrame && typeof window !== "undefined") {
+          window.cancelAnimationFrame(annotationSelectionFrame);
+          annotationSelectionFrame = 0;
+        }
+        if (annotationApplyFrame && typeof window !== "undefined") {
+          window.cancelAnimationFrame(annotationApplyFrame);
+          annotationApplyFrame = 0;
+        }
       });
 
       const getRssCoverMedia = (article) => {
@@ -2315,6 +4139,7 @@ try {
         height: 0,
       });
       let imagePreviewResizeObserver = null;
+      let imagePreviewResizeFrame = 0;
       const getArticleImageAssets = (article = activeArticle.value) =>
         Array.isArray(article?.parsedImageAssets) ? article.parsedImageAssets : [];
 
@@ -2489,18 +4314,42 @@ try {
       const syncImagePreviewViewport = () => {
         const stageEl = imagePreviewStageRef.value;
         if (!stageEl) {
-          imagePreviewViewport.width = 0;
-          imagePreviewViewport.height = 0;
+          if (imagePreviewViewport.width !== 0) {
+            imagePreviewViewport.width = 0;
+          }
+          if (imagePreviewViewport.height !== 0) {
+            imagePreviewViewport.height = 0;
+          }
           return;
         }
-        imagePreviewViewport.width = Math.max(stageEl.clientWidth || 0, 0);
-        imagePreviewViewport.height = Math.max(stageEl.clientHeight || 0, 0);
+        const nextWidth = Math.max(stageEl.clientWidth || 0, 0);
+        const nextHeight = Math.max(stageEl.clientHeight || 0, 0);
+        if (imagePreviewViewport.width !== nextWidth) {
+          imagePreviewViewport.width = nextWidth;
+        }
+        if (imagePreviewViewport.height !== nextHeight) {
+          imagePreviewViewport.height = nextHeight;
+        }
+      };
+
+      const scheduleImagePreviewViewportSync = () => {
+        if (imagePreviewResizeFrame) {
+          return;
+        }
+        imagePreviewResizeFrame = requestAnimationFrame(() => {
+          imagePreviewResizeFrame = 0;
+          syncImagePreviewViewport();
+        });
       };
 
       const disconnectImagePreviewResizeObserver = () => {
         if (imagePreviewResizeObserver) {
           imagePreviewResizeObserver.disconnect();
           imagePreviewResizeObserver = null;
+        }
+        if (imagePreviewResizeFrame) {
+          cancelAnimationFrame(imagePreviewResizeFrame);
+          imagePreviewResizeFrame = 0;
         }
       };
 
@@ -2513,7 +4362,7 @@ try {
           return;
         }
         imagePreviewResizeObserver = new ResizeObserver(() => {
-          syncImagePreviewViewport();
+          scheduleImagePreviewViewportSync();
         });
         imagePreviewResizeObserver.observe(imagePreviewStageRef.value);
       };
@@ -2808,7 +4657,33 @@ try {
       const setDefaultDetailMode = (article) => {
         if (isRssArticle(article)) {
           rssDetailMode.value = getPreferredRssDetailMode(article);
+          return;
         }
+        standardDetailMode.value = getPreferredStandardDetailMode(article);
+      };
+
+      const isSameArticle = (left, right) => {
+        if (!left || !right) return false;
+        const leftId = left.id == null ? "" : String(left.id);
+        const rightId = right.id == null ? "" : String(right.id);
+        if (leftId && rightId) {
+          return leftId === rightId;
+        }
+        const leftUrl = left.url == null ? "" : String(left.url);
+        const rightUrl = right.url == null ? "" : String(right.url);
+        return Boolean(leftUrl && rightUrl && leftUrl === rightUrl);
+      };
+
+      const isArticleSelected = (article) => {
+        if (
+          !isDualPaneActive.value ||
+          !activeArticle.value ||
+          !article ||
+          article.isHeader
+        ) {
+          return false;
+        }
+        return isSameArticle(article, activeArticle.value);
       };
 
       // 监听文章切换，退出编辑态
@@ -2818,9 +4693,15 @@ try {
         if (oldArticle && isEditingSummary.value) {
           cancelEditSummary();
         }
-        if (!newArticle) return;
+        if (!newArticle) {
+          setActiveKeyboardPane("list");
+          return;
+        }
         if (!oldArticle || newArticle.id !== oldArticle.id) {
           setDefaultDetailMode(newArticle);
+        }
+        if (!isDualPaneActive.value) {
+          setActiveKeyboardPane("detail");
         }
       });
       watch(rssDetailMode, () => {
@@ -2947,6 +4828,7 @@ try {
       const hasPendingAiTasks = ref(false);
       // 🌟 新增：任务是否已完成（由 updatePyProgress 设置）
       const taskCompleted = ref(false);
+      const spiderStageSettled = ref(false);
       // 🌟 更新会话 toast：一个流程只保留一条可更新弹窗
       let updateSessionToastId = null;
       const updateSessionToastState = {
@@ -2958,6 +4840,15 @@ try {
         aiTotal: 0,
         currentTitle: "",
         currentSource: "",
+      };
+      const aiTaskFailureState = {
+        count: 0,
+        shownCount: 0,
+      };
+
+      const resetAiTaskFailureState = () => {
+        aiTaskFailureState.count = 0;
+        aiTaskFailureState.shownCount = 0;
       };
 
       const resetUpdateSessionToast = () => {
@@ -2973,6 +4864,25 @@ try {
         updateSessionToastState.aiTotal = 0;
         updateSessionToastState.currentTitle = "";
         updateSessionToastState.currentSource = "";
+        resetAiTaskFailureState();
+      };
+
+      const primeUpdateSessionRunState = () => {
+        taskCompleted.value = false;
+        hasPendingAiTasks.value = false;
+        spiderStageSettled.value = false;
+        updateSessionToastState.phase = "spider";
+        updateSessionToastState.submittedCount = 0;
+        updateSessionToastState.spiderCurrent = 0;
+        updateSessionToastState.spiderTotal = 0;
+        updateSessionToastState.aiCompleted = 0;
+        updateSessionToastState.aiTotal = 0;
+        updateSessionToastState.currentTitle = "";
+        updateSessionToastState.currentSource = "";
+        spiderProgress.value = { total: 0, completed: 0, detail: "" };
+        aiProgress.value = { total: 0, completed: 0, detail: "" };
+        statusMsg.value = "";
+        resetAiTaskFailureState();
       };
 
       const ensureUpdateSessionToast = (
@@ -3103,66 +5013,92 @@ try {
 
       // 🌟 云端版本号（从后端缓存获取）
       const remoteVersion = ref("");
+      const lastShownUpdateVersion = ref(
+        localStorage.getItem("microflow_last_update_notice") || "",
+      );
+
+      const applyRemoteVersionInfo = async (res) => {
+        if (!res || (res.status && res.status !== "success")) {
+          return false;
+        }
+
+        // 🌟 解析云端配置，更新 systemNotice
+        if (res.announcement) {
+          const newPublishTime = res.announcement.publish_time || "";
+          const localReadTime = config.value.readNoticeTime || "";
+
+          // 🌟 检查云端公告发布时间是否比本地已读时间更新
+          // 如果云端发布时间 > 本地已读时间，说明有新公告，清除已读状态
+          if (newPublishTime && localReadTime && newPublishTime > localReadTime) {
+            config.value.readNoticeTime = "";
+            try {
+              await saveConfigSafely();
+            } catch (e) {
+              console.warn("清除公告已读状态失败:", e);
+            }
+          }
+
+          systemNotice.value = {
+            id: res.announcement.id || "sys_notice_1",
+            title: res.announcement.title || systemNotice.value.title,
+            publish_time:
+              res.announcement.publish_time || systemNotice.value.publish_time,
+            department: res.announcement.department || "系统公告",
+            source_name: res.announcement.source_name || "系统通知",
+            category:
+              res.announcement.category ||
+              res.announcement.version ||
+              systemNotice.value.category,
+            tags: res.announcement.tags || systemNotice.value.tags,
+            url: res.announcement.url || systemNotice.value.url,
+            summary: res.announcement.summary || systemNotice.value.summary,
+            content: res.announcement.content || systemNotice.value.content,
+            is_announcement: true,
+            version: res.announcement.version || systemNotice.value.version,
+          };
+        }
+
+        if (res.current_version && !softwareUpdateState.value.currentVersion) {
+          softwareUpdateState.value = {
+            ...softwareUpdateState.value,
+            currentVersion: String(res.current_version || "").trim(),
+          };
+        }
+
+        // 🌟 记录远程版本号（统一使用 version 字段）
+        if (res.version) {
+          remoteVersion.value = res.version;
+          if (!softwareUpdateState.value.latestVersion) {
+            softwareUpdateState.value = {
+              ...softwareUpdateState.value,
+              latestVersion: res.version,
+            };
+          }
+        }
+
+        return true;
+      };
 
       // 🌟 云端配置拉取方法（通过后端统一请求，避免重复）
-      const fetchSystemConfig = async () => {
+      const fetchSystemConfig = async (seedData = null) => {
         try {
+          if (seedData && typeof seedData === "object") {
+            const applied = await applyRemoteVersionInfo(seedData);
+            if (applied) return true;
+          }
+
           // 通过后端 API 获取缓存的版本信息（后端仅在启动时请求一次）
           const res = await safeApiCall("get_version_info");
 
           if (res.status !== "success") {
             console.warn("⚠️ 后端获取版本信息失败，使用本地保底公告");
-            return;
+            return false;
           }
 
-          // 🌟 解析云端配置，更新 systemNotice
-          if (res.announcement) {
-            const newPublishTime = res.announcement.publish_time || "";
-            const localReadTime = config.value.readNoticeTime || "";
-
-            // 🌟 检查云端公告发布时间是否比本地已读时间更新
-            // 如果云端发布时间 > 本地已读时间，说明有新公告，清除已读状态
-            if (
-              newPublishTime &&
-              localReadTime &&
-              newPublishTime > localReadTime
-            ) {
-              // 检测到新公告（发布时间更新），清除已读状态
-              config.value.readNoticeTime = "";
-              try {
-                await saveConfigSafely();
-              } catch (e) {
-                console.warn("清除公告已读状态失败:", e);
-              }
-            }
-
-            systemNotice.value = {
-              id: res.announcement.id || "sys_notice_1",
-              title: res.announcement.title || systemNotice.value.title,
-              publish_time:
-                res.announcement.publish_time ||
-                systemNotice.value.publish_time,
-              department: res.announcement.department || "系统公告",
-              source_name: res.announcement.source_name || "系统通知",
-              category:
-                res.announcement.category ||
-                res.announcement.version ||
-                systemNotice.value.category,
-              tags: res.announcement.tags || systemNotice.value.tags,
-              url: res.announcement.url || systemNotice.value.url,
-              summary: res.announcement.summary || systemNotice.value.summary,
-              content: res.announcement.content || systemNotice.value.content,
-              is_announcement: true,
-              version: res.announcement.version || systemNotice.value.version,
-            };
-          }
-
-          // 🌟 记录远程版本号（统一使用 version 字段）
-          if (res.version) {
-            remoteVersion.value = res.version;
-          }
+          return await applyRemoteVersionInfo(res);
         } catch (error) {
           void error;
+          return false;
         }
       };
       // 🌟 新增：已读公告版本，从 localStorage 初始化
@@ -3349,6 +5285,22 @@ try {
         // 🤖 多模型配置（用于 AI 爬虫多模型投票）
         secondaryModels: [], // 备选模型列表 [{baseUrl, apiKey, modelName}]
       });
+      const isApplyingBackendConfig = ref(false);
+      const currentFontLabel = computed(() => {
+        if (config.value.fontFamily === "serif") return "经典宋体";
+        if (config.value.fontFamily === "custom") {
+          return config.value.customFontName || "外部导入";
+        }
+        return "现代黑体";
+      });
+
+      const applyThemeAppearance = (themeName = "light") => {
+        if (typeof document === "undefined" || !document.documentElement) return;
+        document.documentElement.setAttribute(
+          "data-theme",
+          String(themeName || "light").trim() || "light",
+        );
+      };
 
       const saveConfigSafely = async (payload = null) => {
         if (!configHydrated) {
@@ -3363,7 +5315,20 @@ try {
 
       const mergeConfigFromBackend = (data) => {
         if (!data || typeof data !== "object") return;
+        isApplyingBackendConfig.value = true;
         config.value = { ...config.value, ...data };
+        Promise.resolve().then(() => {
+          isApplyingBackendConfig.value = false;
+        });
+      };
+
+      const syncMuteModeFromTray = (muteMode) => {
+        mergeConfigFromBackend({ muteMode: Boolean(muteMode) });
+        configHydrated = true;
+      };
+
+      const setTrackMode = (mode) => {
+        config.value.trackMode = mode === "today" ? "today" : "continuous";
       };
 
       // 🌟 监听勿扰模式变化，立即同步到状态栏
@@ -3373,6 +5338,7 @@ try {
           // 跳过初始化时的触发
           if (oldVal === undefined) return;
           if (newVal === oldVal) return;
+          if (isApplyingBackendConfig.value) return;
 
           try {
             // 1. 保存配置到后端
@@ -3446,7 +5412,7 @@ try {
         ],
       };
       const rssStrategyCatalog = ref(DEFAULT_RSS_STRATEGY_CATALOG);
-      const rssHealthSummary = ref({
+      const createEmptyHealthSummary = () => ({
         total_rules: 0,
         healthy_count: 0,
         empty_count: 0,
@@ -3454,17 +5420,50 @@ try {
         attention_count: 0,
         attention_rules: [],
       });
+      const rssHealthSummary = ref(createEmptyHealthSummary());
+      const htmlHealthSummary = ref(createEmptyHealthSummary());
+      const combinedCustomHealthSummary = computed(() => {
+        const htmlSummary = htmlHealthSummary.value || createEmptyHealthSummary();
+        const rssSummary = rssHealthSummary.value || createEmptyHealthSummary();
+        return {
+          total_rules:
+            Number(htmlSummary.total_rules || 0) +
+            Number(rssSummary.total_rules || 0),
+          healthy_count:
+            Number(htmlSummary.healthy_count || 0) +
+            Number(rssSummary.healthy_count || 0),
+          empty_count:
+            Number(htmlSummary.empty_count || 0) +
+            Number(rssSummary.empty_count || 0),
+          error_count:
+            Number(htmlSummary.error_count || 0) +
+            Number(rssSummary.error_count || 0),
+          attention_count:
+            Number(htmlSummary.attention_count || 0) +
+            Number(rssSummary.attention_count || 0),
+        };
+      });
       const showCustomRuleModal = ref(false); // 向导弹窗显示状态
       const editingRuleId = ref(null); // 正在编辑的规则ID（null表示新增模式）
       const isGeneratingRule = ref(false); // AI 生成中的 loading 态
+      const isSavingCustomRule = ref(false); // 规则保存中的 loading 态
       const previewData = ref(null); // 沙盒测试样本数据
+      const htmlDetailPreviewData = ref(null); // HTML 详情预览样本
+      const htmlDetailPreviewState = ref(null); // HTML 详情预览状态
       const rssPreviewInfo = ref(null); // RSS 预览元信息
       const generatedRuleCache = ref(null); // 暂存后端生成的规则
       const lastTestedHtmlRuleSnapshot = ref(null); // 最近一次已验证的 HTML 规则快照
       const showSelectorPanel = ref(false); // 选择器微调面板展开状态
       const isRetestingRule = ref(false); // 重新测试中的 loading 态
+      const healthRetestingRuleId = ref(""); // 健康态手动复测中的规则
       let customRuleRequestEpoch = 0;
       let activeRssPreviewRequestToken = 0;
+
+      watch(activeSettingsSubpage, async (subpage) => {
+        if (subpage === "prompt" && isPromptEditorOpen.value) {
+          await schedulePromptEditorInit();
+        }
+      });
 
       const nextCustomRuleRequestEpoch = () => {
         customRuleRequestEpoch += 1;
@@ -3481,6 +5480,27 @@ try {
       const isRuleInlineEditing = (ruleId) =>
         !showCustomRuleModal.value &&
         String(editingRuleId.value || "") === String(ruleId || "");
+
+      const isHealthRetestingRule = (ruleId) =>
+        String(healthRetestingRuleId.value || "") === String(ruleId || "");
+
+      const isCustomRuleBusy = computed(
+        () =>
+          isGeneratingRule.value ||
+          isRetestingRule.value ||
+          isSavingCustomRule.value,
+      );
+
+      const notifyIfCustomRuleBusy = (actionLabel = "当前操作") => {
+        if (!isCustomRuleBusy.value) return false;
+        showNotification(
+          "请稍候",
+          `${actionLabel}前请等待当前规则任务完成`,
+          "info",
+          1800,
+        );
+        return true;
+      };
 
       const cancelActiveRssPreview = () => {
         if (!activeRssPreviewRequestToken) {
@@ -3502,6 +5522,110 @@ try {
         } else {
           activeRssPreviewRequestToken = 0;
         }
+      };
+
+      const normalizeCookieString = (value = "") => {
+        const raw = String(value || "").trim();
+        if (!raw) return "";
+        const trimmed = raw.toLowerCase().startsWith("cookie:")
+          ? raw.split(":").slice(1).join(":").trim()
+          : raw;
+        return trimmed
+          .replace(/\n/g, ";")
+          .split(";")
+          .map((item) => String(item || "").trim())
+          .filter(Boolean)
+          .join("; ");
+      };
+
+      const serializeRequestHeaders = (headers = {}) => {
+        if (!headers || typeof headers !== "object") return "";
+        return Object.entries(headers)
+          .filter(([key, value]) => String(key || "").trim() && String(value || "").trim())
+          .sort(([left], [right]) => String(left).localeCompare(String(right)))
+          .map(([key, value]) => `${String(key).trim()}: ${String(value).trim()}`)
+          .join("\n");
+      };
+
+      const parseRequestHeadersText = (value = "") => {
+        const raw = String(value || "").trim();
+        if (!raw) {
+          return { headers: {}, normalizedText: "", error: "" };
+        }
+
+        if (raw.startsWith("{")) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+              return {
+                headers: {},
+                normalizedText: raw,
+                error: "请求头 JSON 必须是对象格式。",
+              };
+            }
+            const headers = Object.entries(parsed).reduce((acc, [key, item]) => {
+              const cleanKey = String(key || "").trim();
+              const cleanValue = String(item || "").trim();
+              if (cleanKey && cleanValue) {
+                acc[cleanKey] = cleanValue;
+              }
+              return acc;
+            }, {});
+            return {
+              headers,
+              normalizedText: serializeRequestHeaders(headers),
+              error: "",
+            };
+          } catch (_error) {
+            return {
+              headers: {},
+              normalizedText: raw,
+              error: "请求头 JSON 解析失败，请检查逗号和引号。",
+            };
+          }
+        }
+
+        const headers = {};
+        for (const rawLine of raw.replace(/\r/g, "\n").split("\n")) {
+          const line = String(rawLine || "").trim();
+          if (!line || line.startsWith("#")) continue;
+          const separatorIndex = line.indexOf(":");
+          if (separatorIndex <= 0) {
+            return {
+              headers: {},
+              normalizedText: raw,
+              error: `请求头格式无效：${line}`,
+            };
+          }
+          const key = line.slice(0, separatorIndex).trim();
+          const headerValue = line.slice(separatorIndex + 1).trim();
+          if (!key || !headerValue) {
+            return {
+              headers: {},
+              normalizedText: raw,
+              error: `请求头格式无效：${line}`,
+            };
+          }
+          headers[key] = headerValue;
+        }
+        return {
+          headers,
+          normalizedText: serializeRequestHeaders(headers),
+          error: "",
+        };
+      };
+
+      const normalizeHtmlRequestMethod = (value) => {
+        const normalized = String(value || "get")
+          .trim()
+          .toLowerCase();
+        return normalized === "post" ? "post" : "get";
+      };
+
+      const normalizeHtmlRequestBody = (value) => {
+        const text = String(value ?? "");
+        const normalized = text.trim();
+        return normalized || "";
       };
 
       const normalizeRuleAiConfig = (rule = {}) => {
@@ -3568,6 +5692,10 @@ try {
             custom_summary_prompt:
               summaryPrompt ||
               (!hasSplitFields && enableAiSummary ? legacyPrompt : ""),
+            request_method: "get",
+            request_body: "",
+            request_headers_text: "",
+            cookie_string: "",
           };
         }
 
@@ -3589,6 +5717,10 @@ try {
           summary_prompt: summaryPrompt,
           require_ai_summary: enableAiSummary,
           custom_summary_prompt: summaryPrompt,
+          request_method: normalizeHtmlRequestMethod(rule?.request_method),
+          request_body: normalizeHtmlRequestBody(rule?.request_body),
+          request_headers_text: serializeRequestHeaders(rule?.request_headers || {}),
+          cookie_string: normalizeCookieString(rule?.cookie_string || ""),
         };
       };
 
@@ -3602,6 +5734,14 @@ try {
           source_profile_source: "",
           source_template_id: "",
           target_fields: [""],
+          fetch_strategy: "requests_first",
+          pagination_mode: "single",
+          next_page_selector: "",
+          page_url_template: "",
+          page_start: 2,
+          max_pages: null,
+          incremental_max_pages: 1,
+          load_more_selector: "",
           enable_ai_formatting: false,
           enable_ai_summary: false,
           formatting_prompt: "",
@@ -3609,7 +5749,16 @@ try {
           require_ai_summary: false,
           custom_summary_prompt: "",
           max_items: null,
+          detail_strategy: "detail_preferred",
           body_field: "",
+          detail_body_selector: "",
+          detail_time_selector: "",
+          detail_attachment_selector: "",
+          detail_image_selector: "",
+          request_method: "get",
+          request_body: "",
+          request_headers_text: "",
+          cookie_string: "",
           skip_detail: false,
         }),
       });
@@ -3662,6 +5811,20 @@ try {
 
       const ruleForm = ref(createDefaultRuleForm());
 
+      const normalizeHtmlDetailStrategy = (value, fallbackSkipDetail = false) => {
+        const normalized = String(value || "")
+          .trim()
+          .toLowerCase();
+        if (
+          normalized === "list_only" ||
+          normalized === "detail_preferred" ||
+          normalized === "hybrid"
+        ) {
+          return normalized;
+        }
+        return fallbackSkipDetail ? "list_only" : "detail_preferred";
+      };
+
       const applyNormalizedRuleAiState = (normalizedRule = null) => {
         const normalized = normalizeRuleAiConfig(
           normalizedRule || ruleForm.value,
@@ -3680,10 +5843,19 @@ try {
         return normalized;
       };
 
-      const getNormalizedRuleForm = () => ({
-        ...ruleForm.value,
-        ...applyNormalizedRuleAiState(ruleForm.value),
-      });
+      const getNormalizedRuleForm = () => {
+        const normalizedAiState = applyNormalizedRuleAiState(ruleForm.value);
+        const detailStrategy = normalizeHtmlDetailStrategy(
+          ruleForm.value.detail_strategy,
+          ruleForm.value.skip_detail,
+        );
+        return {
+          ...ruleForm.value,
+          ...normalizedAiState,
+          detail_strategy: detailStrategy,
+          skip_detail: detailStrategy === "list_only",
+        };
+      };
 
       const buildRssRulePayload = (seedRule = null) => {
         const normalizedForm = getNormalizedRuleForm();
@@ -3722,6 +5894,11 @@ try {
           .map((field) => String(field || "").trim())
           .filter(Boolean);
 
+      const normalizePositiveInteger = (value, fallback = null) => {
+        const parsed = Number.parseInt(String(value ?? "").trim(), 10);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+      };
+
       const getGeneratedRuleFieldNames = (rule = null) => {
         const targetFields = normalizeRuleFieldNames(rule?.target_fields);
         if (targetFields.length > 0) {
@@ -3751,9 +5928,43 @@ try {
           acc[field] = String(rule.field_selectors?.[field] || "").trim();
           return acc;
         }, {});
+        const headerState = parseRequestHeadersText(
+          rule.request_headers_text || serializeRequestHeaders(rule.request_headers || {}),
+        );
         return {
           url: String(rule.url || "").trim(),
+          detail_strategy: normalizeHtmlDetailStrategy(
+            rule.detail_strategy,
+            rule.skip_detail,
+          ),
           body_field: String(rule.body_field || "").trim(),
+          fetch_strategy:
+            String(rule.fetch_strategy || "").trim().toLowerCase() ||
+            "requests_first",
+          request_method: normalizeHtmlRequestMethod(rule.request_method),
+          request_body:
+            normalizeHtmlRequestMethod(rule.request_method) === "post"
+              ? normalizeHtmlRequestBody(rule.request_body)
+              : "",
+          pagination_mode:
+            String(rule.pagination_mode || "").trim().toLowerCase() || "single",
+          next_page_selector: String(rule.next_page_selector || "").trim(),
+          page_url_template: String(rule.page_url_template || "").trim(),
+          page_start: normalizePositiveInteger(rule.page_start, 2),
+          max_pages: normalizePositiveInteger(rule.max_pages, null),
+          incremental_max_pages: normalizePositiveInteger(
+            rule.incremental_max_pages,
+            1,
+          ),
+          load_more_selector: String(rule.load_more_selector || "").trim(),
+          detail_body_selector: String(rule.detail_body_selector || "").trim(),
+          detail_time_selector: String(rule.detail_time_selector || "").trim(),
+          detail_attachment_selector: String(
+            rule.detail_attachment_selector || "",
+          ).trim(),
+          detail_image_selector: String(rule.detail_image_selector || "").trim(),
+          request_headers_text: headerState.normalizedText || "",
+          cookie_string: normalizeCookieString(rule.cookie_string || ""),
           skip_detail: Boolean(rule.skip_detail),
           list_container: String(rule.list_container || "").trim(),
           item_selector: String(rule.item_selector || "").trim(),
@@ -3789,8 +6000,59 @@ try {
         const retestDrift =
           String(normalizedForm.url || "").trim() !==
             String(cachedRule.url || "").trim() ||
+          normalizeHtmlDetailStrategy(
+            normalizedForm.detail_strategy,
+            normalizedForm.skip_detail,
+          ) !==
+            normalizeHtmlDetailStrategy(
+              cachedRule.detail_strategy,
+              cachedRule.skip_detail,
+            ) ||
           String(normalizedForm.body_field || "").trim() !==
             String(cachedRule.body_field || "").trim() ||
+          String(normalizedForm.fetch_strategy || "").trim().toLowerCase() !==
+            String(cachedRule.fetch_strategy || "requests_first")
+              .trim()
+              .toLowerCase() ||
+          normalizeHtmlRequestMethod(normalizedForm.request_method) !==
+            normalizeHtmlRequestMethod(cachedRule.request_method) ||
+          (normalizeHtmlRequestMethod(normalizedForm.request_method) === "post"
+            ? normalizeHtmlRequestBody(normalizedForm.request_body)
+            : "") !==
+            (normalizeHtmlRequestMethod(cachedRule.request_method) === "post"
+              ? normalizeHtmlRequestBody(cachedRule.request_body)
+              : "") ||
+          String(normalizedForm.pagination_mode || "").trim().toLowerCase() !==
+            String(cachedRule.pagination_mode || "single").trim().toLowerCase() ||
+          String(normalizedForm.next_page_selector || "").trim() !==
+            String(cachedRule.next_page_selector || "").trim() ||
+          String(normalizedForm.page_url_template || "").trim() !==
+            String(cachedRule.page_url_template || "").trim() ||
+          normalizePositiveInteger(normalizedForm.page_start, 2) !==
+            normalizePositiveInteger(cachedRule.page_start, 2) ||
+          normalizePositiveInteger(normalizedForm.max_pages, null) !==
+            normalizePositiveInteger(cachedRule.max_pages, null) ||
+          normalizePositiveInteger(normalizedForm.incremental_max_pages, 1) !==
+            normalizePositiveInteger(cachedRule.incremental_max_pages, 1) ||
+          String(normalizedForm.load_more_selector || "").trim() !==
+            String(cachedRule.load_more_selector || "").trim() ||
+          String(normalizedForm.detail_body_selector || "").trim() !==
+            String(cachedRule.detail_body_selector || "").trim() ||
+          String(normalizedForm.detail_time_selector || "").trim() !==
+            String(cachedRule.detail_time_selector || "").trim() ||
+          String(normalizedForm.detail_attachment_selector || "").trim() !==
+            String(cachedRule.detail_attachment_selector || "").trim() ||
+          String(normalizedForm.detail_image_selector || "").trim() !==
+            String(cachedRule.detail_image_selector || "").trim() ||
+          parseRequestHeadersText(
+            normalizedForm.request_headers_text || "",
+          ).normalizedText !==
+            parseRequestHeadersText(
+              cachedRule.request_headers_text ||
+                serializeRequestHeaders(cachedRule.request_headers || {}),
+            ).normalizedText ||
+          normalizeCookieString(normalizedForm.cookie_string || "") !==
+            normalizeCookieString(cachedRule.cookie_string || "") ||
           Boolean(normalizedForm.skip_detail) !==
             Boolean(cachedRule.skip_detail);
 
@@ -3803,6 +6065,24 @@ try {
           testedState &&
           (currentState.list_container !== testedState.list_container ||
             currentState.item_selector !== testedState.item_selector ||
+            currentState.fetch_strategy !== testedState.fetch_strategy ||
+            currentState.pagination_mode !== testedState.pagination_mode ||
+            currentState.next_page_selector !==
+              testedState.next_page_selector ||
+            currentState.page_url_template !== testedState.page_url_template ||
+            currentState.page_start !== testedState.page_start ||
+            currentState.max_pages !== testedState.max_pages ||
+            currentState.incremental_max_pages !==
+              testedState.incremental_max_pages ||
+            currentState.load_more_selector !== testedState.load_more_selector ||
+            currentState.detail_body_selector !==
+              testedState.detail_body_selector ||
+            currentState.detail_time_selector !==
+              testedState.detail_time_selector ||
+            currentState.detail_attachment_selector !==
+              testedState.detail_attachment_selector ||
+            currentState.detail_image_selector !==
+              testedState.detail_image_selector ||
             currentState.target_fields.some(
               (field) =>
                 currentState.field_selectors[field] !==
@@ -3817,18 +6097,120 @@ try {
         };
       };
 
+      const getNormalizedHtmlAccessConfig = () => {
+        const headerState = parseRequestHeadersText(
+          ruleForm.value.request_headers_text || "",
+        );
+        const cookieString = normalizeCookieString(
+          ruleForm.value.cookie_string || "",
+        );
+        return {
+          isValid: !headerState.error,
+          message: headerState.error || "",
+          headers: headerState.headers,
+          requestHeadersText: headerState.normalizedText || "",
+          cookieString,
+          requestMethod: normalizeHtmlRequestMethod(ruleForm.value.request_method),
+          requestBody:
+            normalizeHtmlRequestMethod(ruleForm.value.request_method) === "post"
+              ? normalizeHtmlRequestBody(ruleForm.value.request_body)
+              : "",
+        };
+      };
+
+      const getHtmlAccessConfigValidationMessage = () =>
+        getNormalizedHtmlAccessConfig().message || "";
+
+      const validateHtmlAccessConfigOrNotify = (
+        actionLabel = "继续操作",
+      ) => {
+        const sourceType = String(
+          getNormalizedRuleForm().source_type || "html",
+        ).toLowerCase();
+        if (sourceType !== "html") {
+          return true;
+        }
+
+        const accessConfig = getNormalizedHtmlAccessConfig();
+        if (!accessConfig.isValid) {
+          showNotification(
+            "表单校验",
+            `${actionLabel}前请先修正高级访问配置：${accessConfig.message}`,
+            "warning",
+          );
+          return false;
+        }
+
+        if (
+          String(ruleForm.value.request_headers_text || "") !==
+          accessConfig.requestHeadersText
+        ) {
+          ruleForm.value.request_headers_text = accessConfig.requestHeadersText;
+        }
+        if (
+          normalizeCookieString(ruleForm.value.cookie_string || "") !==
+          accessConfig.cookieString
+        ) {
+          ruleForm.value.cookie_string = accessConfig.cookieString;
+        }
+        if (
+          normalizeHtmlRequestMethod(ruleForm.value.request_method) !==
+          accessConfig.requestMethod
+        ) {
+          ruleForm.value.request_method = accessConfig.requestMethod;
+        }
+        if (
+          (
+            normalizeHtmlRequestMethod(ruleForm.value.request_method) === "post"
+              ? normalizeHtmlRequestBody(ruleForm.value.request_body)
+              : ""
+          ) !== accessConfig.requestBody
+        ) {
+          ruleForm.value.request_body = accessConfig.requestBody;
+        }
+        return true;
+      };
+
       const getHtmlRulePendingRetestMessage = (seedRule = null) => {
         const driftState = getHtmlRuleDriftState(seedRule);
         if (driftState.fieldDrift) {
           return "提取字段已变化，请重新生成规则后再保存。";
         }
         if (driftState.retestDrift) {
-          return "目标 URL 或正文抓取策略已变化，请先重新测试后再保存。";
+          return "目标 URL、请求方式或正文抓取策略已变化，请先重新测试后再保存。";
         }
         if (driftState.selectorDrift) {
           return "选择器已修改，当前样本预览已过期，请先重新测试后再保存。";
         }
+        const detailPreviewMessage =
+          getHtmlDetailPreviewBlockingMessage(seedRule);
+        if (detailPreviewMessage) {
+          return detailPreviewMessage;
+        }
         return "";
+      };
+
+      const getHtmlRuleSaveBlockingMessage = (seedRule = null) => {
+        if (!generatedRuleCache.value && !seedRule) {
+          return "没有可保存的规则，请先完成规则生成或测试。";
+        }
+        return getHtmlRulePendingRetestMessage(seedRule);
+      };
+
+      const validateRuleIdentityFields = (normalizedForm) => {
+        const sourceType = String(normalizedForm?.source_type || "html")
+          .trim()
+          .toLowerCase();
+        const urlLabel = sourceType === "rss" ? "RSS 订阅地址" : "目标网页 URL";
+        if (!String(normalizedForm?.url || "").trim()) {
+          showNotification("表单校验", `请输入${urlLabel}`, "warning");
+          return false;
+        }
+        if (!String(normalizedForm?.task_name || "").trim()) {
+          showNotification("表单校验", "请输入任务名称", "warning");
+          return false;
+        }
+        return true;
       };
 
       const buildHtmlRulePayload = (seedRule = null) => {
@@ -3839,6 +6221,9 @@ try {
           acc[field] = cachedRule.field_selectors?.[field] || field;
           return acc;
         }, {});
+        const headerState = parseRequestHeadersText(
+          normalizedForm.request_headers_text || "",
+        );
 
         return {
           ...cachedRule,
@@ -3853,8 +6238,47 @@ try {
           require_ai_summary: normalizedForm.require_ai_summary,
           custom_summary_prompt: normalizedForm.summary_prompt.trim(),
           max_items: normalizedForm.max_items || null,
+          fetch_strategy:
+            String(normalizedForm.fetch_strategy || "requests_first")
+              .trim()
+              .toLowerCase() || "requests_first",
+          request_method: normalizeHtmlRequestMethod(
+            normalizedForm.request_method,
+          ),
+          request_body:
+            normalizeHtmlRequestMethod(normalizedForm.request_method) === "post"
+              ? normalizeHtmlRequestBody(normalizedForm.request_body)
+              : "",
+          pagination_mode:
+            String(normalizedForm.pagination_mode || "single")
+              .trim()
+              .toLowerCase() || "single",
+          next_page_selector: normalizedForm.next_page_selector || "",
+          page_url_template: normalizedForm.page_url_template || "",
+          page_start: normalizePositiveInteger(normalizedForm.page_start, 2),
+          max_pages: normalizePositiveInteger(normalizedForm.max_pages, null),
+          incremental_max_pages: normalizePositiveInteger(
+            normalizedForm.incremental_max_pages,
+            1,
+          ),
+          load_more_selector: normalizedForm.load_more_selector || "",
+          detail_strategy: normalizeHtmlDetailStrategy(
+            normalizedForm.detail_strategy,
+            normalizedForm.skip_detail,
+          ),
           body_field: normalizedForm.body_field || "",
-          skip_detail: normalizedForm.skip_detail,
+          detail_body_selector: normalizedForm.detail_body_selector || "",
+          detail_time_selector: normalizedForm.detail_time_selector || "",
+          detail_attachment_selector:
+            normalizedForm.detail_attachment_selector || "",
+          detail_image_selector: normalizedForm.detail_image_selector || "",
+          request_headers: headerState.headers,
+          cookie_string: normalizeCookieString(normalizedForm.cookie_string || ""),
+          skip_detail:
+            normalizeHtmlDetailStrategy(
+              normalizedForm.detail_strategy,
+              normalizedForm.skip_detail,
+            ) === "list_only",
         };
       };
 
@@ -3884,7 +6308,12 @@ try {
           return false;
         }
 
+        if (!validateHtmlAccessConfigOrNotify("重新测试")) {
+          return false;
+        }
+
         isRetestingRule.value = true;
+        clearHtmlDetailPreviewState();
 
         try {
           const retestRule = buildHtmlRulePayload(activeRule);
@@ -3892,9 +6321,18 @@ try {
 
           if (res.status === "success") {
             previewData.value = res.sample_data || [];
+            applyHtmlDetailPreviewResult(res);
             generatedRuleCache.value = normalizeRuleAiConfig({
               ...(generatedRuleCache.value || {}),
               ...retestRule,
+              page_summary:
+                res?.page_summary ||
+                generatedRuleCache.value?.page_summary ||
+                null,
+              test_snapshot:
+                res?.test_snapshot ||
+                generatedRuleCache.value?.test_snapshot ||
+                null,
             });
             lastTestedHtmlRuleSnapshot.value = cloneRuleSnapshot(
               generatedRuleCache.value,
@@ -3936,23 +6374,146 @@ try {
         }
       };
 
-      const RSS_LABEL_BACKGROUND = "rgba(255, 105, 0, 0.75)";
+      const scrollCustomRulePreviewIntoView = (target = "list") => {
+        if (typeof document === "undefined") {
+          return;
+        }
+        const selector =
+          target === "detail"
+            ? ".settings-sheet-rule .detail-preview-block"
+            : ".settings-sheet-rule .custom-rule-inline-preview";
+        const fallbackSelector =
+          ".settings-sheet-rule .custom-rule-inline-preview";
+
+        requestAnimationFrame(() => {
+          const node =
+            document.querySelector(selector) ||
+            document.querySelector(fallbackSelector);
+          if (!node || typeof node.scrollIntoView !== "function") {
+            return;
+          }
+          node.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+            inline: "nearest",
+          });
+        });
+      };
+
+      const handleRuleListExtractionAction = async () => {
+        const sourceType = String(ruleForm.value.source_type || "html")
+          .trim()
+          .toLowerCase();
+
+        if (sourceType !== "html") {
+          await validateAndSaveRssRule();
+          scrollCustomRulePreviewIntoView("list");
+          return;
+        }
+
+        if (!generatedRuleCache.value) {
+          await generateAndTestRule();
+          scrollCustomRulePreviewIntoView("list");
+          return;
+        }
+
+        const ok = await runHtmlRuleRetest({
+          notifySuccess: true,
+          notifyError: true,
+          collapsePanelOnSuccess: true,
+        });
+        if (ok) {
+          scrollCustomRulePreviewIntoView("list");
+        }
+      };
+
+      const handleRuleDetailPreviewAction = async () => {
+        const sourceType = String(ruleForm.value.source_type || "html")
+          .trim()
+          .toLowerCase();
+        if (sourceType !== "html") {
+          await validateAndSaveRssRule();
+          scrollCustomRulePreviewIntoView("list");
+          return;
+        }
+
+        const normalizedForm = getNormalizedRuleForm();
+        const detailStrategy = normalizeHtmlDetailStrategy(
+          normalizedForm.detail_strategy,
+          normalizedForm.skip_detail,
+        );
+
+        if (detailStrategy === "list_only") {
+          showNotification(
+            "无需详情预览",
+            "当前正文抓取策略为“列表页足够”，无需额外详情预览。",
+            "info",
+            2200,
+          );
+          scrollCustomRulePreviewIntoView("list");
+          return;
+        }
+
+        if (!generatedRuleCache.value) {
+          await generateAndTestRule();
+          scrollCustomRulePreviewIntoView("detail");
+          return;
+        }
+
+        const ok = await runHtmlRuleRetest({
+          notifySuccess: true,
+          notifyError: true,
+          collapsePanelOnSuccess: false,
+        });
+        if (ok) {
+          scrollCustomRulePreviewIntoView("detail");
+        }
+      };
+
+      const RSS_LABEL_BACKGROUND = "var(--rss-source-label-bg)";
+      const RSS_LABEL_FOREGROUND = "var(--rss-source-label-fg)";
 
       const getRssSourceLabelStyle = () => ({
         backgroundColor: RSS_LABEL_BACKGROUND,
-        color: "#ffffff",
+        color: RSS_LABEL_FOREGROUND,
         "--rss-label-bg": RSS_LABEL_BACKGROUND,
-        "--rss-label-fg": "#ffffff",
+        "--rss-label-fg": RSS_LABEL_FOREGROUND,
       });
 
       const getRuleHealthLabel = (rule = {}) => {
         const status = String(rule?.health?.status || "")
           .trim()
           .toLowerCase();
-        if (status === "healthy") return "运行正常";
-        if (status === "empty") return "暂无新内容";
+        const detail = String(rule?.health?.status_detail || "")
+          .trim()
+          .toLowerCase();
+        if (status === "healthy") {
+          if (detail === "field_drift") return "字段异常";
+          return "运行正常";
+        }
+        if (status === "empty") {
+          if (detail === "stale_empty") return "持续空抓";
+          return "暂无新内容";
+        }
         if (status === "error") {
           const failures = Number(rule?.health?.consecutive_failures || 0);
+          if (detail === "list_container_drift") {
+            return failures > 1
+              ? `列表容器失效 ${failures} 次`
+              : "列表容器失效";
+          }
+          if (detail === "item_selector_drift") {
+            return failures > 1 ? `列表项失效 ${failures} 次` : "列表项失效";
+          }
+          if (detail === "selector_error") {
+            return failures > 1 ? `选择器失效 ${failures} 次` : "选择器失效";
+          }
+          if (detail === "network_error") {
+            return failures > 1 ? `网络异常 ${failures} 次` : "网络异常";
+          }
+          if (detail === "cancelled") {
+            return "已取消";
+          }
           return failures > 1 ? `连续失败 ${failures} 次` : "抓取异常";
         }
         return "待检查";
@@ -3969,17 +6530,133 @@ try {
         if (rule?.health?.last_checked_at) {
           parts.push(`最近检查：${rule.health.last_checked_at}`);
         }
+        if (rule?.health?.last_success_at) {
+          parts.push(`最近成功：${rule.health.last_success_at}`);
+        }
+        if (rule?.health?.last_known_good_at) {
+          parts.push(`最近健康快照：${rule.health.last_known_good_at}`);
+        }
+        if (rule?.health?.last_failure_at) {
+          parts.push(`最近失败：${rule.health.last_failure_at}`);
+        }
         if (rule?.health?.last_error_message) {
           parts.push(`最近错误：${rule.health.last_error_message}`);
+        }
+        const fieldAlerts = Array.isArray(rule?.health?.field_alerts)
+          ? rule.health.field_alerts
+          : [];
+        if (fieldAlerts.length) {
+          const compact = fieldAlerts
+            .slice(0, 2)
+            .map((item) => {
+              const field = String(item?.field || "").trim();
+              const currentRate = Number(item?.current_rate || 0);
+              const baselineRate = Number(item?.baseline_rate || 0);
+              return `${field} ${Math.round(currentRate * 100)}% / ${Math.round(
+                baselineRate * 100,
+              )}%`;
+            })
+            .join("；");
+          if (compact) {
+            parts.push(`字段预警：${compact}`);
+          }
         }
         return parts.join("\n");
       };
 
-      const getRssHealthAttentionText = (item = {}) => {
+      const getRuleHealthAttentionText = (item = {}) => {
         const failures = Number(item?.consecutive_failures || 0);
-        const base = failures > 1 ? `连续失败 ${failures} 次` : "最近抓取异常";
+        const detailStatus = String(item?.status_detail || "")
+          .trim()
+          .toLowerCase();
+        let base = failures > 1 ? `连续失败 ${failures} 次` : "最近抓取异常";
+        if (detailStatus === "selector_error") {
+          base = failures > 1 ? `选择器失效 ${failures} 次` : "选择器失效";
+        } else if (detailStatus === "list_container_drift") {
+          base =
+            failures > 1 ? `列表容器失效 ${failures} 次` : "列表容器失效";
+        } else if (detailStatus === "item_selector_drift") {
+          base = failures > 1 ? `列表项失效 ${failures} 次` : "列表项失效";
+        } else if (detailStatus === "network_error") {
+          base = failures > 1 ? `网络异常 ${failures} 次` : "网络异常";
+        } else if (detailStatus === "cancelled") {
+          base = "抓取已取消";
+        } else if (detailStatus === "field_drift") {
+          const firstField = Array.isArray(item?.field_alerts)
+            ? item.field_alerts[0]
+            : null;
+          const fieldName = String(firstField?.field || "").trim();
+          base = fieldName ? `字段命中率异常 · ${fieldName}` : "字段命中率异常";
+        } else if (detailStatus === "stale_empty") {
+          base = "持续空抓，请检查站点是否改版";
+        }
         const detail = String(item?.last_error_message || "").trim();
         return detail ? `${base} · ${detail}` : base;
+      };
+
+      const clearHtmlDetailPreviewState = () => {
+        htmlDetailPreviewData.value = null;
+        htmlDetailPreviewState.value = null;
+      };
+
+      const applyHtmlDetailPreviewResult = (payload = null) => {
+        const hasPreviewFields =
+          payload &&
+          typeof payload === "object" &&
+          [
+            "detail_samples",
+            "detail_preview_required",
+            "detail_preview_passed",
+            "detail_preview_message",
+          ].some((key) => Object.prototype.hasOwnProperty.call(payload, key));
+
+        if (!hasPreviewFields) {
+          clearHtmlDetailPreviewState();
+          return;
+        }
+
+        htmlDetailPreviewData.value = Array.isArray(payload.detail_samples)
+          ? payload.detail_samples
+          : [];
+        htmlDetailPreviewState.value = {
+          required: Boolean(payload.detail_preview_required),
+          passed: Boolean(payload.detail_preview_passed),
+          message: String(payload.detail_preview_message || "").trim(),
+        };
+      };
+
+      const getHtmlDetailPreviewBlockingMessage = (seedRule = null) => {
+        const activeRule = seedRule || generatedRuleCache.value;
+        if (!activeRule || ruleForm.value.source_type === "rss") {
+          return "";
+        }
+
+        const normalizedRule = buildHtmlRulePayload(activeRule);
+        const detailStrategy = normalizeHtmlDetailStrategy(
+          normalizedRule.detail_strategy,
+          normalizedRule.skip_detail,
+        );
+
+        if (detailStrategy === "list_only") {
+          return "";
+        }
+
+        if (!htmlDetailPreviewState.value) {
+          return "详情预览尚未生成，请先重新测试当前规则。";
+        }
+
+        if (!htmlDetailPreviewState.value.required) {
+          return "";
+        }
+
+        if (!htmlDetailPreviewState.value.passed) {
+          return (
+            htmlDetailPreviewState.value.message ||
+            "详情预览未通过，请调整详情规则后重新测试。"
+          );
+        }
+
+        return "";
       };
 
       const clearRssPreviewState = () => {
@@ -3987,6 +6664,7 @@ try {
         rssPreviewInfo.value = null;
         generatedRuleCache.value = null;
         lastTestedHtmlRuleSnapshot.value = null;
+        clearHtmlDetailPreviewState();
       };
 
       watch(
@@ -4190,6 +6868,21 @@ try {
         checkedAt: 0,
       });
       const isCheckingNetworkAccess = ref(false);
+      const softwareUpdateState = ref({
+        status: "idle", // idle | testing | success | error
+        label: "尚未检查",
+        detail: "启动后会在后台检查新版本。",
+        checkedAt: 0,
+        currentVersion: "",
+        latestVersion: "",
+        releaseDate: "",
+        notes: "",
+        downloadUrl: "",
+        downloadSha256: "",
+        forceUpdate: false,
+        hasUpdate: false,
+      });
+      const isCheckingSoftwareUpdate = ref(false);
 
       const formatNetworkCheckedAt = (timestamp) => {
         if (!timestamp) return "最近一次检测：未记录";
@@ -4197,6 +6890,16 @@ try {
         if (Number.isNaN(date.getTime())) return "最近一次检测：未记录";
         const pad = (n) => String(n).padStart(2, "0");
         return `最近一次检测：${pad(date.getHours())}:${pad(
+          date.getMinutes(),
+        )}:${pad(date.getSeconds())}`;
+      };
+
+      const formatSoftwareUpdateCheckedAt = (timestamp) => {
+        if (!timestamp) return "最近一次检查更新：未记录";
+        const date = new Date(timestamp);
+        if (Number.isNaN(date.getTime())) return "最近一次检查更新：未记录";
+        const pad = (n) => String(n).padStart(2, "0");
+        return `最近一次检查更新：${pad(date.getHours())}:${pad(
           date.getMinutes(),
         )}:${pad(date.getSeconds())}`;
       };
@@ -4287,6 +6990,170 @@ try {
         }
       };
 
+      const markUpdateNoticeShown = (version) => {
+        const nextVersion = String(version || "").trim();
+        if (!nextVersion) return;
+        lastShownUpdateVersion.value = nextVersion;
+        localStorage.setItem("microflow_last_update_notice", nextVersion);
+      };
+
+      const applySoftwareUpdateSnapshot = (snapshot = {}, options = {}) => {
+        const checkedAt = Date.now();
+        const currentVersion = String(
+          snapshot?.current_version ||
+            softwareUpdateState.value.currentVersion ||
+            "",
+        ).trim();
+        const latestVersion = String(
+          snapshot?.latest_version ||
+            snapshot?.version ||
+            softwareUpdateState.value.latestVersion ||
+            remoteVersion.value ||
+            "",
+        ).trim();
+        const releaseDate = String(snapshot?.release_date || "").trim();
+        const announcement = snapshot?.announcement || {};
+        const notes = String(announcement?.content || announcement?.summary || snapshot?.notes || "").trim();
+        const downloadUrl =
+          typeof snapshot?.download_url === "string"
+            ? snapshot.download_url.trim()
+            : "";
+        const downloadSha256 =
+          typeof snapshot?.download_sha256 === "string"
+            ? snapshot.download_sha256.trim()
+            : "";
+        const errorMessage = String(
+          snapshot?.error ||
+            (snapshot?.status === "error" ? snapshot?.message || "检查失败" : ""),
+        ).trim();
+
+        if (errorMessage) {
+          softwareUpdateState.value = {
+            ...softwareUpdateState.value,
+            status: "error",
+            label: "检查失败",
+            detail: errorMessage,
+            checkedAt,
+            currentVersion,
+            latestVersion,
+            releaseDate,
+            notes,
+            downloadUrl,
+            downloadSha256,
+            forceUpdate: Boolean(snapshot?.force_update),
+            hasUpdate: false,
+          };
+          return softwareUpdateState.value;
+        }
+
+        if (snapshot?.has_update) {
+          softwareUpdateState.value = {
+            status: "success",
+            label: latestVersion
+              ? `发现新版本 ${latestVersion}`
+              : "发现新版本",
+            detail: notes || "已有可下载的新版本。",
+            checkedAt,
+            currentVersion,
+            latestVersion,
+            releaseDate,
+            notes,
+            downloadUrl,
+            downloadSha256,
+            forceUpdate: Boolean(snapshot?.force_update),
+            hasUpdate: true,
+          };
+          return softwareUpdateState.value;
+        }
+
+        softwareUpdateState.value = {
+          status: "idle",
+          label: latestVersion ? "已是最新版本" : "尚未检查",
+          detail: latestVersion
+            ? "当前设备已运行最新版本。"
+            : "启动后会在后台检查新版本。",
+          checkedAt,
+          currentVersion,
+          latestVersion,
+          releaseDate,
+          notes,
+          downloadUrl,
+          downloadSha256,
+          forceUpdate: Boolean(snapshot?.force_update),
+          hasUpdate: false,
+        };
+        return softwareUpdateState.value;
+      };
+
+      const notifySoftwareUpdateIfNeeded = (snapshot, source = "startup") => {
+        const normalized = applySoftwareUpdateSnapshot(snapshot);
+        if (!normalized.hasUpdate || !normalized.latestVersion) {
+          return normalized;
+        }
+
+        const noticeMessage = normalized.forceUpdate
+          ? `检测到强制更新版本 ${normalized.latestVersion}，请尽快下载新版。`
+          : `发现 ${normalized.latestVersion}，可在设置页下载更新。`;
+
+        if (source === "manual") {
+          showNotification("发现新版本", noticeMessage, "success", 4500);
+          return normalized;
+        }
+
+        if (lastShownUpdateVersion.value !== normalized.latestVersion) {
+          showNotification("发现新版本", noticeMessage, "success", 4500);
+          markUpdateNoticeShown(normalized.latestVersion);
+        }
+
+        return normalized;
+      };
+
+      const checkSoftwareUpdate = async (
+        forceRefresh = true,
+        userInitiated = false,
+      ) => {
+        if (isCheckingSoftwareUpdate.value) return;
+
+        isCheckingSoftwareUpdate.value = true;
+        softwareUpdateState.value = {
+          ...softwareUpdateState.value,
+          status: "testing",
+          label: "检查中",
+          detail: "正在检查远程版本信息...",
+        };
+
+        try {
+          const res = await safeApiCall("check_software_update", forceRefresh);
+          const normalized = userInitiated
+            ? notifySoftwareUpdateIfNeeded(res, "manual")
+            : applySoftwareUpdateSnapshot(res);
+
+          if (userInitiated && !normalized.hasUpdate) {
+            const title =
+              normalized.status === "error" ? "检查失败" : "已是最新版本";
+            showNotification(title, normalized.detail, normalized.status === "error" ? "error" : "success", 2500);
+          }
+        } catch (e) {
+          const message = String(e || "检查更新失败");
+          applySoftwareUpdateSnapshot({ status: "error", message });
+          if (userInitiated) {
+            showNotification("检查失败", message, "error", 2500);
+          }
+        } finally {
+          isCheckingSoftwareUpdate.value = false;
+        }
+      };
+
+      const openSoftwareUpdateDownload = (event = null) => {
+        const url = String(softwareUpdateState.value.downloadUrl || "").trim();
+        if (!url) {
+          showNotification("暂无下载链接", "当前版本没有可用的下载地址", "warning", 2500);
+          return false;
+        }
+        void openBrowser(url, event);
+        return false;
+      };
+
       // 🌟 新增：处理导入自定义字体
       const importCustomFont = async () => {
         const res = await safeApiCall("import_custom_font");
@@ -4357,6 +7224,101 @@ try {
       // 🌟 灵动 Header 状态与方法
       const isSearchUIExpanded = ref(false); // 独立控制形变动画的状态
       const searchInputRef = ref(null);
+      const detailSearchQuery = ref("");
+      const isDetailSearchExpanded = ref(false);
+      const detailSearchInputRef = ref(null);
+      const detailSearchMatchCount = ref(0);
+      const detailSearchActiveIndex = ref(-1);
+      const detailSearchCounterText = computed(() => {
+        const keyword = String(detailSearchQuery.value || "").trim();
+        if (!keyword) return "";
+        if (detailSearchMatchCount.value <= 0) return "0";
+        return `${Math.max(detailSearchActiveIndex.value + 1, 1)}/${detailSearchMatchCount.value}`;
+      });
+      let detailSearchInputFocusTimer = 0;
+      let detailSearchApplyFrame = 0;
+      let detailSearchQueryTimer = 0;
+      let detailSearchPendingScroll = false;
+
+      watch(
+        detailSearchQuery,
+        (nextQuery, previousQuery) => {
+          if (!isDetailSearchExpanded.value) {
+            return;
+          }
+
+          if (detailSearchQueryTimer && typeof window !== "undefined") {
+            window.clearTimeout(detailSearchQueryTimer);
+            detailSearchQueryTimer = 0;
+          }
+
+          const keyword = String(nextQuery || "").trim();
+          if (nextQuery !== previousQuery) {
+            detailSearchActiveIndex.value = 0;
+          }
+
+          if (!keyword) {
+            clearRenderedDetailSearchMarks();
+            detailSearchMatchCount.value = 0;
+            detailSearchActiveIndex.value = -1;
+            return;
+          }
+
+          if (typeof window === "undefined") {
+            queueApplyDetailSearchMarks(false);
+            return;
+          }
+
+          detailSearchQueryTimer = window.setTimeout(() => {
+            detailSearchQueryTimer = 0;
+            queueApplyDetailSearchMarks(false);
+          }, 110);
+        },
+        { flush: "post" },
+      );
+
+      watch(
+        [
+          activeArticle,
+          rssDetailMode,
+          standardDetailMode,
+          currentView,
+          isEditingSummary,
+        ],
+        () => {
+          const keyword = String(detailSearchQuery.value || "").trim();
+          if (
+            !isDetailPaneVisible.value ||
+            isEditingSummary.value ||
+            !activeArticle.value
+          ) {
+            if (isDetailSearchExpanded.value || keyword) {
+              closeDetailSearchUI();
+            } else {
+              clearRenderedDetailSearchMarks();
+            }
+            return;
+          }
+
+          if (!isDetailSearchExpanded.value) {
+            clearRenderedDetailSearchMarks();
+            detailSearchMatchCount.value = 0;
+            detailSearchActiveIndex.value = -1;
+            return;
+          }
+
+          if (!keyword) {
+            clearRenderedDetailSearchMarks();
+            detailSearchMatchCount.value = 0;
+            detailSearchActiveIndex.value = -1;
+            return;
+          }
+
+          detailSearchActiveIndex.value = 0;
+          queueApplyDetailSearchMarks(false);
+        },
+        { flush: "post" },
+      );
 
       // 点击搜索放大镜的智能交互
       const handleSearchClick = () => {
@@ -4364,6 +7326,8 @@ try {
         if (isSettingsOpen.value) {
           return;
         }
+
+        setActiveKeyboardPane("list");
 
         if (!isSearchUIExpanded.value) {
           // 1. 未展开时：触发物理形变，并聚焦
@@ -4391,6 +7355,7 @@ try {
 
       // 🌟 点击列表区域时，如果搜索框展开且点击不在搜索框内，则关闭
       const handleListClick = (e) => {
+        setActiveKeyboardPane("list");
         if (!isSearchUIExpanded.value) return;
 
         // 检查点击是否在搜索相关元素内
@@ -4496,7 +7461,7 @@ try {
 
           // 添加高亮效果
           targetElement.style.transition = "box-shadow 0.3s ease";
-          targetElement.style.boxShadow = "0 0 0 3px rgba(0, 122, 255, 0.5)";
+          targetElement.style.boxShadow = `0 0 0 3px ${readRootCssToken("theme-highlight-ring", "rgba(0, 122, 255, 0.5)")}`;
           setTimeout(() => {
             targetElement.style.boxShadow = "";
           }, 2000);
@@ -4560,7 +7525,7 @@ try {
       const allSourceOption = {
         key: "source-all",
         name: "全部",
-        color: "#007aff",
+        color: "var(--color-accent-primary)",
         svg: `<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                 <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="1.8"></circle>
                 <circle cx="10" cy="10" r="2.4" fill="currentColor"></circle>
@@ -4571,7 +7536,7 @@ try {
         key: `source-${index}`,
         index,
         name: source.name,
-        color: FILTER_CHIP_COLORS[index],
+        color: asCssVar(getSourceChipTokenByIndex(index)),
         svg: normalizeSourceSvg(source.svg),
       }));
 
@@ -4582,7 +7547,7 @@ try {
       };
 
       const getSourceStyle = (source) => ({
-        "--chip-active-bg": source.color || "#007aff",
+        "--chip-active-bg": source.color || "var(--color-accent-primary)",
       });
 
       const getSourceIcon = (source) => source.svg;
@@ -4624,8 +7589,8 @@ try {
           name: rule.task_name,
           color:
             String(rule?.source_type || "").toLowerCase() === "rss"
-              ? "#ff6900"
-              : "#34c759",
+              ? "var(--custom-source-rss-color)"
+              : "var(--custom-source-web-color)",
           svg:
             String(rule?.source_type || "").toLowerCase() === "rss"
               ? customRssSourceIcon
@@ -4834,28 +7799,113 @@ try {
       // ==================== 🕷️ 自定义爬虫规则相关方法 ====================
 
       // 获取所有自定义规则
-      const fetchCustomRules = async () => {
-        const res = await safeApiCall("get_custom_spider_rules");
-        if (res && res.status === "success") {
-          customRules.value = (res.rules || []).map((rule) =>
-            normalizeRuleAiConfig(rule),
-          );
-          rssStrategyCatalog.value =
-            res.rss_strategy_catalog || DEFAULT_RSS_STRATEGY_CATALOG;
-          rssHealthSummary.value = {
-            total_rules: Number(res.rss_health_summary?.total_rules || 0),
-            healthy_count: Number(res.rss_health_summary?.healthy_count || 0),
-            empty_count: Number(res.rss_health_summary?.empty_count || 0),
-            error_count: Number(res.rss_health_summary?.error_count || 0),
-            attention_count: Number(
-              res.rss_health_summary?.attention_count || 0,
-            ),
-            attention_rules: Array.isArray(
-              res.rss_health_summary?.attention_rules,
-            )
-              ? res.rss_health_summary.attention_rules
-              : [],
-          };
+      const customRulesLoaded = ref(false);
+      let ensureCustomRulesPromise = null;
+
+      const applyCustomRulesResponse = (res) => {
+        customRules.value = (res.rules || []).map((rule) =>
+          normalizeRuleAiConfig(rule),
+        );
+        rssStrategyCatalog.value =
+          res.rss_strategy_catalog || DEFAULT_RSS_STRATEGY_CATALOG;
+        const mapHealthSummary = (rawSummary = null) => ({
+          total_rules: Number(rawSummary?.total_rules || 0),
+          healthy_count: Number(rawSummary?.healthy_count || 0),
+          empty_count: Number(rawSummary?.empty_count || 0),
+          error_count: Number(rawSummary?.error_count || 0),
+          attention_count: Number(rawSummary?.attention_count || 0),
+          attention_rules: Array.isArray(rawSummary?.attention_rules)
+            ? rawSummary.attention_rules
+            : [],
+        });
+        rssHealthSummary.value = mapHealthSummary(res.rss_health_summary);
+        htmlHealthSummary.value = mapHealthSummary(res.html_health_summary);
+        customRulesLoaded.value = true;
+      };
+
+      const fetchCustomRules = async ({ silent = false } = {}) => {
+        try {
+          const res = await safeApiCall("get_custom_spider_rules");
+          if (res && res.status === "success") {
+            applyCustomRulesResponse(res);
+            return true;
+          }
+          if (!silent) {
+            showNotification(
+              "读取失败",
+              res?.message || "自定义规则读取失败",
+              "error",
+            );
+          }
+          return false;
+        } catch (e) {
+          console.error("读取自定义规则失败:", e);
+          if (!silent) {
+            showNotification("读取失败", "自定义规则读取失败", "error");
+          }
+          return false;
+        }
+      };
+
+      const ensureCustomRulesLoaded = async () => {
+        if (customRulesLoaded.value) {
+          return true;
+        }
+        if (ensureCustomRulesPromise) {
+          return ensureCustomRulesPromise;
+        }
+        ensureCustomRulesPromise = fetchCustomRules({ silent: true }).finally(
+          () => {
+            ensureCustomRulesPromise = null;
+          },
+        );
+        return ensureCustomRulesPromise;
+      };
+
+      const exportCustomRules = async () => {
+        if (!customRules.value.length) {
+          showNotification("暂无规则", "当前没有可导出的自定义规则", "warning");
+          return;
+        }
+
+        try {
+          const res = await safeApiCall("export_custom_spider_rules");
+          if (res?.status === "success") {
+            showNotification(
+              "导出成功",
+              res.message || `已导出 ${Number(res.exported_count || 0)} 条规则`,
+              "success",
+            );
+            return;
+          }
+          if (res?.status !== "cancelled") {
+            showNotification("导出失败", res?.message || "规则导出失败", "error");
+          }
+        } catch (error) {
+          console.error("导出规则失败:", error);
+          showNotification("导出失败", "网络请求失败", "error");
+        }
+      };
+
+      const importCustomRules = async () => {
+        try {
+          const res = await safeApiCall("import_custom_spider_rules");
+          if (res?.status === "success" || res?.status === "partial") {
+            await fetchCustomRules();
+            showNotification(
+              res.status === "partial" ? "部分导入完成" : "导入成功",
+              res.message ||
+                `已导入 ${Number(res.imported_count || 0)} 条规则`,
+              res.status === "partial" ? "warning" : "success",
+            );
+            return;
+          }
+          if (res?.status !== "cancelled") {
+            showNotification("导入失败", res?.message || "规则导入失败", "error");
+          }
+        } catch (error) {
+          console.error("导入规则失败:", error);
+          showNotification("导入失败", "网络请求失败", "error");
         }
       };
 
@@ -4885,6 +7935,7 @@ try {
 
       // 打开新增规则向导
       const openCustomRuleModal = () => {
+        activeSettingsSection.value = "custom";
         resetRuleForm();
         showCustomRuleModal.value = true;
       };
@@ -4898,14 +7949,11 @@ try {
 
       // 🌟 验证并预览 RSS 规则（先看效果，再确认保存）
       const validateAndSaveRssRule = async () => {
-        const normalizedForm = getNormalizedRuleForm();
-        // 表单校验
-        if (!normalizedForm.url.trim()) {
-          showNotification("表单校验", "请输入 RSS 订阅地址", "warning");
+        if (notifyIfCustomRuleBusy("预览 RSS 规则")) {
           return;
         }
-        if (!normalizedForm.task_name.trim()) {
-          showNotification("表单校验", "请输入任务名称", "warning");
+        const normalizedForm = getNormalizedRuleForm();
+        if (!validateRuleIdentityFields(normalizedForm)) {
           return;
         }
 
@@ -4935,6 +7983,7 @@ try {
           }
           if (res.status === "success") {
             previewData.value = res.sample_data || [];
+            clearHtmlDetailPreviewState();
             rssPreviewInfo.value = res.feed_info || null;
             generatedRuleCache.value = normalizeRuleAiConfig(
               res.rule || ruleDict,
@@ -4974,20 +8023,18 @@ try {
       };
 
       const confirmAndSaveRssRule = async () => {
-        const normalizedForm = getNormalizedRuleForm();
-        if (!normalizedForm.url.trim()) {
-          showNotification("表单校验", "请输入 RSS 订阅地址", "warning");
+        if (notifyIfCustomRuleBusy("保存 RSS 规则")) {
           return;
         }
-        if (!normalizedForm.task_name.trim()) {
-          showNotification("表单校验", "请输入任务名称", "warning");
+        const normalizedForm = getNormalizedRuleForm();
+        if (!validateRuleIdentityFields(normalizedForm)) {
           return;
         }
 
         const ruleDict = buildRssRulePayload(generatedRuleCache.value);
         const requestEpoch = nextCustomRuleRequestEpoch();
         activeRssPreviewRequestToken = 0;
-        isGeneratingRule.value = true;
+        isSavingCustomRule.value = true;
         try {
           const res = await safeApiCall(
             "validate_and_save_rss_rule",
@@ -5006,7 +8053,7 @@ try {
               "success",
             );
             closeCustomRuleModal();
-            await fetchCustomRules();
+            await fetchCustomRules({ silent: true });
           } else {
             showNotification(
               "保存失败",
@@ -5021,27 +8068,18 @@ try {
           }
         } finally {
           if (isCurrentCustomRuleRequest(requestEpoch)) {
-            isGeneratingRule.value = false;
+            isSavingCustomRule.value = false;
           }
         }
       };
 
       // AI 智能分析并测试
       const generateAndTestRule = async () => {
-        const normalizedForm = getNormalizedRuleForm();
-        // 表单校验
-        if (!normalizedForm.url.trim()) {
-          showNotification(
-            "表单校验",
-            normalizedForm.source_type === "rss"
-              ? "请输入 RSS 订阅地址"
-              : "请输入目标网页 URL",
-            "warning",
-          );
+        if (notifyIfCustomRuleBusy("生成规则")) {
           return;
         }
-        if (!normalizedForm.task_name.trim()) {
-          showNotification("表单校验", "请输入任务名称", "warning");
+        const normalizedForm = getNormalizedRuleForm();
+        if (!validateRuleIdentityFields(normalizedForm)) {
           return;
         }
 
@@ -5060,6 +8098,12 @@ try {
           return;
         }
 
+        if (!validateHtmlAccessConfigOrNotify("生成规则")) {
+          return;
+        }
+
+        const accessConfig = getNormalizedHtmlAccessConfig();
+
         const aiReady = await validateAiPrerequisites("AI 规则生成");
         if (!aiReady) {
           return;
@@ -5068,6 +8112,7 @@ try {
         const requestEpoch = nextCustomRuleRequestEpoch();
         activeRssPreviewRequestToken = 0;
         isGeneratingRule.value = true;
+        clearHtmlDetailPreviewState();
         try {
           const editingHtmlIdentity =
             editingRuleId.value && normalizedForm.source_type !== "rss"
@@ -5083,8 +8128,15 @@ try {
             normalizedForm.task_purpose.trim(), // 任务目的/类别
             normalizedForm.summary_prompt.trim(), // 🌟 专属 AI 提示词
             normalizedForm.max_items || null, // 🌟 最大抓取条数
+            normalizedForm.detail_strategy || "detail_preferred", // 🌟 正文抓取策略
             normalizedForm.body_field || "", // 🌟 正文来源字段
             normalizedForm.skip_detail, // 🌟 跳过详情页抓取
+            normalizedForm.fetch_strategy || "requests_first", // 🌟 页面抓取策略
+            accessConfig.requestMethod, // 🌟 HTML 列表页请求方法
+            accessConfig.requestBody, // 🌟 HTML 列表页原始请求体
+            accessConfig.headers, // 🌟 自定义请求头
+            accessConfig.cookieString, // 🌟 Cookie / 登录态
+            editingHtmlIdentity?.rule_id || editingRuleId.value || "", // ♻️ 旧规则恢复上下文
           );
 
           if (!isCurrentCustomRuleRequest(requestEpoch)) {
@@ -5111,9 +8163,12 @@ try {
             );
             // 显示样本数据
             previewData.value = res.sample_data || [];
+            applyHtmlDetailPreviewResult(res);
             showNotification(
               "生成成功",
-              `已成功生成规则并提取 ${previewData.value.length} 条样本数据`,
+              res.recovery_applied && res.recovery_message
+                ? `${res.recovery_message} 当前提取到 ${previewData.value.length} 条样本数据`
+                : `已成功生成规则并提取 ${previewData.value.length} 条样本数据`,
               "success",
             );
           } else {
@@ -5144,6 +8199,7 @@ try {
 
         // 1. 清空当前不满意的预览数据
         previewData.value = null;
+        clearHtmlDetailPreviewState();
         generatedRuleCache.value = editingHtmlRuleSnapshot;
         lastTestedHtmlRuleSnapshot.value = editingHtmlRuleSnapshot;
 
@@ -5153,12 +8209,139 @@ try {
 
       // 🌟 手动微调选择器后重新测试
       const handleManualRetest = async () => {
+        if (notifyIfCustomRuleBusy("重新测试")) {
+          return;
+        }
         await runHtmlRuleRetest();
+      };
+
+      const handleSavedRuleHealthRetest = async (ruleOrId, options = {}) => {
+        const silent = Boolean(options?.silent);
+        const normalizedRuleId =
+          typeof ruleOrId === "string"
+            ? String(ruleOrId || "").trim()
+            : String(ruleOrId?.rule_id || "").trim();
+        if (!normalizedRuleId) {
+          if (!silent) {
+            showNotification("复测失败", "缺少规则 ID", "error");
+          }
+          return false;
+        }
+
+        const targetRule =
+          typeof ruleOrId === "object" && ruleOrId
+            ? ruleOrId
+            : customRules.value.find(
+                (item) => String(item?.rule_id || "") === normalizedRuleId,
+              ) || null;
+
+        if (!targetRule) {
+          if (!silent) {
+            showNotification("复测失败", "未找到对应规则", "error");
+          }
+          return false;
+        }
+
+        if (String(targetRule.source_type || "html").toLowerCase() !== "html") {
+          if (!silent) {
+            showNotification(
+              "暂不支持",
+              "当前仅支持 HTML 规则一键复测",
+              "warning",
+            );
+          }
+          return false;
+        }
+
+        if (healthRetestingRuleId.value) {
+          return false;
+        }
+
+        healthRetestingRuleId.value = normalizedRuleId;
+        try {
+          const res = await safeApiCall(
+            "manual_retest_custom_spider_rule",
+            normalizedRuleId,
+          );
+
+          await fetchCustomRules();
+
+          if (res?.status === "success") {
+            const count = Number(res?.count || 0);
+            if (!silent) {
+              showNotification(
+                "复测完成",
+                count > 0 ? `已重新抓取到 ${count} 条样本数据` : "当前规则暂无新内容",
+                "success",
+              );
+            }
+            return true;
+          }
+
+          if (!silent) {
+            showNotification(
+              "复测失败",
+              res?.message || "规则复测失败，请检查配置",
+              "error",
+            );
+          }
+          return false;
+        } catch (error) {
+          console.error("规则复测异常:", error);
+          if (!silent) {
+            showNotification("复测失败", "网络请求失败", "error");
+          }
+          return false;
+        } finally {
+          healthRetestingRuleId.value = "";
+        }
+      };
+
+      const retestAllCustomRules = async () => {
+        const priorityRules =
+          (htmlHealthSummary.value?.attention_rules || [])
+            .map((item) => {
+              const matched = customRules.value.find(
+                (rule) => String(rule?.rule_id || "") === String(item?.rule_id || ""),
+              );
+              return matched || item;
+            })
+            .filter(Boolean);
+
+        const fallbackRules = customRules.value.filter(
+          (rule) => String(rule?.source_type || "").toLowerCase() === "html",
+        );
+
+        const queue = priorityRules.length > 0 ? priorityRules : fallbackRules;
+        if (queue.length === 0) {
+          showNotification("无需复测", "当前没有可复测的 HTML 规则", "warning");
+          return;
+        }
+
+        let successCount = 0;
+        for (const rule of queue) {
+          const ok = await handleSavedRuleHealthRetest(rule, { silent: true });
+          if (ok) successCount += 1;
+        }
+
+        showNotification(
+          "复测完成",
+          `已完成 ${successCount}/${queue.length} 条规则复测`,
+          "success",
+          2200,
+        );
       };
 
       // 确认并保存规则
       const confirmAndSaveRule = async () => {
+        if (notifyIfCustomRuleBusy("保存规则")) {
+          return;
+        }
         const normalizedForm = getNormalizedRuleForm();
+        if (!editingRuleId.value && normalizedForm.source_type === "rss") {
+          await confirmAndSaveRssRule();
+          return;
+        }
         // 编辑模式
         if (editingRuleId.value) {
           try {
@@ -5166,6 +8349,7 @@ try {
               const updatedRssRule = buildRssRulePayload(
                 generatedRuleCache.value,
               );
+              isSavingCustomRule.value = true;
               const rssRes = await safeApiCall(
                 "validate_and_save_rss_rule",
                 updatedRssRule,
@@ -5191,34 +8375,20 @@ try {
               return;
             }
 
-            const driftState = getHtmlRuleDriftState(generatedRuleCache.value);
-            if (driftState.fieldDrift) {
-              showNotification(
-                "请重新生成",
-                "提取字段已变化，请重新生成规则后再保存。",
-                "warning",
-              );
+            if (!validateHtmlAccessConfigOrNotify("保存规则")) {
               return;
             }
-            if (driftState.retestDrift) {
-              showNotification(
-                "请先重新测试",
-                "目标 URL 或正文抓取策略已变化，请先重新测试后再保存。",
-                "warning",
-              );
-              return;
-            }
-            if (driftState.selectorDrift) {
-              showNotification(
-                "请先重新测试",
-                "选择器已修改，当前样本预览已过期，请先重新测试后再保存。",
-                "warning",
-              );
+
+            const saveBlockingMessage = getHtmlRuleSaveBlockingMessage(
+              generatedRuleCache.value,
+            );
+            if (saveBlockingMessage) {
+              showNotification("请先完成校验", saveBlockingMessage, "warning");
               return;
             }
 
             const updatedRule = buildHtmlRulePayload(generatedRuleCache.value);
-
+            isSavingCustomRule.value = true;
             const res = await safeApiCall("confirm_and_save_rule", updatedRule);
             if (res.status === "success") {
               showNotification(
@@ -5228,13 +8398,15 @@ try {
               );
               closeCustomRuleModal();
               // 刷新规则列表
-              await fetchCustomRules();
+              await fetchCustomRules({ silent: true });
             } else {
               showNotification("保存失败", res.message || "保存失败", "error");
             }
           } catch (e) {
             showNotification("保存失败", "网络请求失败", "error");
             console.error("保存规则失败:", e);
+          } finally {
+            isSavingCustomRule.value = false;
           }
           return;
         }
@@ -5246,33 +8418,20 @@ try {
         }
 
         try {
-          const driftState = getHtmlRuleDriftState(generatedRuleCache.value);
-          if (driftState.fieldDrift) {
-            showNotification(
-              "请重新生成",
-              "提取字段已变化，请重新生成规则后再保存。",
-              "warning",
-            );
+          if (!validateHtmlAccessConfigOrNotify("保存规则")) {
             return;
           }
-          if (driftState.retestDrift) {
-            showNotification(
-              "请先重新测试",
-              "目标 URL 或正文抓取策略已变化，请先重新测试后再保存。",
-              "warning",
-            );
-            return;
-          }
-          if (driftState.selectorDrift) {
-            showNotification(
-              "请先重新测试",
-              "选择器已修改，当前样本预览已过期，请先重新测试后再保存。",
-              "warning",
-            );
+
+          const saveBlockingMessage = getHtmlRuleSaveBlockingMessage(
+            generatedRuleCache.value,
+          );
+          if (saveBlockingMessage) {
+            showNotification("请先完成校验", saveBlockingMessage, "warning");
             return;
           }
 
           const ruleToSave = buildHtmlRulePayload(generatedRuleCache.value);
+          isSavingCustomRule.value = true;
           const res = await safeApiCall("confirm_and_save_rule", ruleToSave);
           if (res.status === "success") {
             showNotification(
@@ -5282,28 +8441,21 @@ try {
             );
             closeCustomRuleModal();
             // 刷新规则列表
-            await fetchCustomRules();
+            await fetchCustomRules({ silent: true });
           } else {
             showNotification("保存失败", res.message || "保存失败", "error");
           }
         } catch (e) {
           showNotification("保存失败", "网络请求失败", "error");
           console.error("保存规则失败:", e);
+        } finally {
+          isSavingCustomRule.value = false;
         }
       };
 
       // 编辑规则 - 在当前规则卡片下方切换展开编辑器
-      const editRule = async (rule) => {
+      const editRule = (rule) => {
         const normalizedRule = normalizeRuleAiConfig(rule);
-
-        if (
-          !showCustomRuleModal.value &&
-          String(editingRuleId.value || "") ===
-            String(normalizedRule.rule_id || "")
-        ) {
-          closeCustomRuleModal();
-          return;
-        }
 
         invalidateCustomRuleRequests({ cancelRssPreview: true });
         // 设置编辑状态
@@ -5338,7 +8490,30 @@ try {
           require_ai_summary: normalizedRule.require_ai_summary ?? false,
           custom_summary_prompt: normalizedRule.custom_summary_prompt || "",
           max_items: normalizedRule.max_items ?? null,
+          detail_strategy: normalizeHtmlDetailStrategy(
+            normalizedRule.detail_strategy,
+            normalizedRule.skip_detail,
+          ),
+          fetch_strategy: normalizedRule.fetch_strategy || "requests_first",
+          pagination_mode: normalizedRule.pagination_mode || "single",
+          next_page_selector: normalizedRule.next_page_selector || "",
+          page_url_template: normalizedRule.page_url_template || "",
+          page_start: normalizedRule.page_start ?? 2,
+          max_pages: normalizedRule.max_pages ?? null,
+          incremental_max_pages: normalizedRule.incremental_max_pages ?? 1,
+          load_more_selector: normalizedRule.load_more_selector || "",
           body_field: normalizedRule.body_field || "",
+          detail_body_selector: normalizedRule.detail_body_selector || "",
+          detail_time_selector: normalizedRule.detail_time_selector || "",
+          detail_attachment_selector:
+            normalizedRule.detail_attachment_selector || "",
+          detail_image_selector: normalizedRule.detail_image_selector || "",
+          request_method: normalizeHtmlRequestMethod(
+            normalizedRule.request_method,
+          ),
+          request_body: normalizeHtmlRequestBody(normalizedRule.request_body),
+          request_headers_text: normalizedRule.request_headers_text || "",
+          cookie_string: normalizedRule.cookie_string || "",
           skip_detail: normalizedRule.skip_detail ?? false,
         };
         // 直接使用已有规则作为缓存，跳过AI生成步骤
@@ -5352,18 +8527,11 @@ try {
             : null;
         rssPreviewInfo.value = null;
         previewData.value = null;
+        clearHtmlDetailPreviewState();
         showSelectorPanel.value = normalizedRule.source_type !== "rss";
-        // 编辑态改为原地展开，不再弹出独立模态框
-        showCustomRuleModal.value = false;
-
-        if (normalizedRule.source_type !== "rss") {
-          await runHtmlRuleRetest({
-            seedRule: generatedRuleCache.value,
-            notifySuccess: false,
-            notifyError: false,
-            collapsePanelOnSuccess: false,
-          });
-        }
+        // 编辑态改为独立 Sheet
+        activeSettingsSection.value = "custom";
+        showCustomRuleModal.value = true;
       };
 
       // 切换规则启用状态
@@ -5477,8 +8645,9 @@ try {
       const handleSecondaryModelRemove = (index) => {
         const model = config.value.secondaryModels[index];
         if (!model) return;
+        const modelName = String(model.modelName || `模型 ${index + 1}`).trim();
         secondaryModelDeleteIndex.value = index;
-        secondaryModelDeleteName.value = model.modelName || `模型 ${index + 1}`;
+        secondaryModelDeleteName.value = modelName;
         secondaryModelDeleteConfirmVisible.value = true;
       };
 
@@ -5731,27 +8900,103 @@ try {
 
         // 触发缩放生长动画
         isSettingsOpen.value = true;
+        activeSettingsSection.value = isSettingsSplitView.value ? "network" : "";
+
+        // 同步托盘可能改过的配置，避免设置页显示旧状态
+        void refreshConfigFromBackend();
 
         // 🌟 同步校园网状态，但不阻塞设置面板打开
         void refreshNetworkAccessStatus(false);
+        void checkSoftwareUpdate(false, false);
+      };
 
-        // 🕷️ 加载自定义爬虫规则
-        await fetchCustomRules();
+      const selectSettingsSection = (sectionId) => {
+        if (
+          !settingsSections.some((section) => section.id === sectionId) ||
+          activeSettingsSection.value === sectionId
+        ) {
+          return;
+        }
+        if (isSettingsSubpageVisible.value) {
+          backFromSettingsSubpage();
+        }
+        activeSettingsSection.value = sectionId;
+      };
+
+      const backToSettingsSectionList = () => {
+        if (isSettingsSplitView.value) {
+          return;
+        }
+        activeSettingsSection.value = "";
+      };
+
+      const shouldReturnToSettingsMainOnEscape = () =>
+        isSettingsOpen.value &&
+        !isSettingsSplitView.value &&
+        Boolean(String(activeSettingsSection.value || "").trim());
+
+      const openFontSheet = () => {
+        activeSettingsSection.value = "reading";
+        isFontSheetOpen.value = true;
+      };
+
+      const closeFontSheet = () => {
+        isFontSheetOpen.value = false;
+      };
+
+      const openSecondaryModelsSheet = () => {
+        activeSettingsSection.value = "ai";
+        cancelSecondaryModelRemove();
+        isSecondaryModelsSheetOpen.value = true;
+      };
+
+      const closeSecondaryModelsSheet = () => {
+        cancelSecondaryModelRemove();
+        isSecondaryModelsSheetOpen.value = false;
+      };
+
+      const backFromSettingsSubpage = () => {
+        if (showCustomRuleModal.value || editingRuleId.value) {
+          closeCustomRuleModal();
+          return;
+        }
+        if (isPromptEditorOpen.value) {
+          backToSettings();
+          return;
+        }
+        if (isSecondaryModelsSheetOpen.value) {
+          closeSecondaryModelsSheet();
+          return;
+        }
+        if (isFontSheetOpen.value) {
+          closeFontSheet();
+        }
+      };
+
+      const closeAllSettingsSheets = () => {
+        backToSettings();
+        closeFontSheet();
+        closeSecondaryModelsSheet();
+        if (showCustomRuleModal.value || editingRuleId.value) {
+          closeCustomRuleModal();
+        }
       };
 
       // 🌟 新增：关闭设置面板
       const closeSettings = () => {
-        if (showCustomRuleModal.value || editingRuleId.value) {
-          closeCustomRuleModal();
-        }
+        closeAllSettingsSheets();
         isSettingsOpen.value = false;
       };
 
       // 🌟 新增：带自动保存的闭环退出逻辑
       const closeSettingsWithAutoSave = async () => {
-        if (showCustomRuleModal.value || editingRuleId.value) {
-          closeCustomRuleModal();
+        if (isPromptEditorOpen.value) {
+          if (promptEasyMDE) {
+            tempPromptContent.value = promptEasyMDE.value();
+          }
+          config.value.prompt = tempPromptContent.value;
         }
+        closeAllSettingsSheets();
         try {
           // 1. 先呼叫后端保存（使用 safeApiCall）
           const res = await saveConfigSafely();
@@ -6081,7 +9326,7 @@ try {
         if (item.is_announcement) {
           activeArticle.value = item;
           lastArticle.value = item;
-          currentView.value = "detail";
+          currentView.value = getDetailTargetView();
 
           // 🌟 检查是否已读（通过发布时间比较，使用 Date 对象避免格式问题）
           const compareTimeStrings = (time1, time2) => {
@@ -6369,6 +9614,8 @@ try {
       };
 
       onMounted(async () => {
+        applyThemeAppearance("light");
+
         // 🎯 冷却时间恢复：检查 localStorage 中是否有未完成的冷却（不依赖 API）
         const lastTime = localStorage.getItem("lastManualUpdateTime");
         if (lastTime) {
@@ -6395,8 +9642,27 @@ try {
           // 🌟 Cmd+F / Ctrl+F：打开搜索（macOS 用 metaKey，Windows 用 ctrlKey）
           if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
             e.preventDefault(); // 阻止浏览器默认的查找功能
+            const activePane = getActiveKeyboardPane();
+            if (
+              activePane === "detail" &&
+              isDetailPaneVisible.value &&
+              activeArticle.value &&
+              !isEditingSummary.value
+            ) {
+              if (!isDetailSearchExpanded.value) {
+                openDetailSearchUI(true);
+              } else {
+                focusDetailSearchInput(0);
+              }
+              return;
+            }
+
             // 只有在列表视图且不在设置页面时才响应
-            if (currentView.value === "list" && !isSettingsOpen.value) {
+            if (
+              activePane === "list" &&
+              showListPane.value &&
+              !isSettingsOpen.value
+            ) {
               handleSearchClick();
             }
           }
@@ -6404,7 +9670,7 @@ try {
           // 🌟 Cmd+S / Ctrl+S：保存长图快照（详情页时）
           if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
             e.preventDefault();
-            if (currentView.value === "detail" && activeArticle.value) {
+            if (isDetailPaneVisible.value && activeArticle.value) {
               triggerSnapshotAction(activeArticle.value, null);
             }
           }
@@ -6416,7 +9682,7 @@ try {
             e.key.toLowerCase() === "c"
           ) {
             e.preventDefault();
-            if (currentView.value === "detail" && activeArticle.value) {
+            if (isDetailPaneVisible.value && activeArticle.value) {
               // 手动触发复制按钮的动画
               const copyBtn = document.querySelector(".btn-copy");
               if (copyBtn) {
@@ -6430,7 +9696,7 @@ try {
           // 🌟 Cmd+O / Ctrl+O：在系统浏览器中查看原文（详情页时）
           if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "o") {
             e.preventDefault();
-            if (currentView.value === "detail" && activeArticle.value) {
+            if (isDetailPaneVisible.value && activeArticle.value) {
               // 手动触发查看原文按钮的飞箭动画
               const viewBtn = document.querySelector(".btn-view");
               if (viewBtn) {
@@ -6458,16 +9724,67 @@ try {
               return;
             }
 
+            if (showCustomRuleModal.value) {
+              e.preventDefault();
+              closeCustomRuleModal();
+              return;
+            }
+
+            if (isPromptEditorOpen.value) {
+              e.preventDefault();
+              backToSettings();
+              return;
+            }
+
+            if (isSecondaryModelsSheetOpen.value) {
+              e.preventDefault();
+              closeSecondaryModelsSheet();
+              return;
+            }
+
+            if (isFontSheetOpen.value) {
+              e.preventDefault();
+              closeFontSheet();
+              return;
+            }
+
+            if (isSettingsOpen.value) {
+              e.preventDefault();
+              if (shouldReturnToSettingsMainOnEscape()) {
+                backToSettingsSectionList();
+              } else {
+                void closeSettingsWithAutoSave();
+              }
+              return;
+            }
+
             if (currentView.value === "prompt_editor") {
               // Prompt 编辑器：保存并返回
               backToList();
-            } else if (currentView.value === "detail") {
-              // 优先退出详情页（保留搜索状态，方便用户查看其他搜索结果）
-              backToList();
-            } else if (isSearchUIExpanded.value) {
-              // 不在详情页时才关闭搜索
+              return;
+            }
+
+            const activePane = getActiveKeyboardPane();
+            if (activePane === "detail") {
+              if (isDetailSearchExpanded.value) {
+                e.preventDefault();
+                closeDetailSearchUI();
+                return;
+              }
+              if (isDetailPaneVisible.value) {
+                e.preventDefault();
+                backToList();
+                return;
+              }
+            }
+
+            if (activePane === "list" && isSearchUIExpanded.value) {
+              e.preventDefault();
               closeSearchUI();
-            } else if (isSettingsOpen.value || activeSource.value === "收藏") {
+              return;
+            }
+
+            if (isSettingsOpen.value || activeSource.value === "收藏") {
               // 🌟 关闭设置界面（自动保存）或收藏界面
               handleTodayClick();
             }
@@ -6538,44 +9855,53 @@ try {
           }
         };
 
+        let startupCheckPromise = null;
+        const handleStartupCheckResult = async (checkResult) => {
+          if (checkResult && checkResult.current_version) {
+            notifySoftwareUpdateIfNeeded(checkResult, "startup");
+            await fetchSystemConfig(checkResult);
+          }
+          if (
+            checkResult &&
+            (checkResult.status === "locked" ||
+              checkResult.status === "network_error")
+          ) {
+            const overlay = document.getElementById("kill-switch-overlay");
+            const reasonText = document.getElementById("kill-switch-reason");
+            if (overlay) overlay.style.display = "flex";
+            if (reasonText) reasonText.innerText = checkResult.reason;
+            const mainContent = document.getElementById("app");
+            if (mainContent) mainContent.innerHTML = "";
+          }
+          if (checkResult && checkResult.mode === "read_only") {
+            isReadOnlyMode.value = true;
+            readOnlyReason.value = checkResult.reason || "服务已暂停";
+          }
+          return checkResult;
+        };
+
+        const runStartupCheck = () => {
+          if (startupCheckPromise) {
+            return startupCheckPromise;
+          }
+          startupCheckPromise = safeApiCall("perform_startup_check")
+            .then(handleStartupCheckResult)
+            .finally(() => {
+              startupCheckPromise = null;
+            });
+          return startupCheckPromise;
+        };
+
         // 🚀 非关键任务（使用 Promise.allSettled，失败不影响核心功能）
         const runBackgroundTasks = () => {
           Promise.allSettled([
-            fetchCustomRules(),
             safeApiCall("get_cooldown_config").then((res) => {
               if (res && res.status === "success" && res.cooldown_seconds) {
                 COOLDOWN_SECONDS = res.cooldown_seconds;
               }
             }),
-            safeApiCall("perform_startup_check").then((checkResult) => {
-              if (
-                checkResult &&
-                (checkResult.status === "locked" ||
-                  checkResult.status === "network_error")
-              ) {
-                const overlay = document.getElementById("kill-switch-overlay");
-                const reasonText =
-                  document.getElementById("kill-switch-reason");
-                if (overlay) overlay.style.display = "flex";
-                if (reasonText) reasonText.innerText = checkResult.reason;
-                const mainContent = document.getElementById("app");
-                if (mainContent) mainContent.innerHTML = "";
-              }
-              if (checkResult && checkResult.mode === "read_only") {
-                isReadOnlyMode.value = true;
-                readOnlyReason.value = checkResult.reason || "服务已暂停";
-              }
-            }),
+            runStartupCheck(),
             warmAiPrereqCache(),
-            Promise.race([
-              fetchSystemConfig(),
-              new Promise((_, reject) =>
-                setTimeout(
-                  () => reject(new Error("fetchSystemConfig 超时")),
-                  5000,
-                ),
-              ),
-            ]).catch(() => {}),
             checkApiBalance().catch(() => {}),
           ]);
         };
@@ -6730,22 +10056,45 @@ try {
           (total === 0 && completed === 0 && !currentTitle) ||
           (completed >= total && total > 0)
         ) {
+          taskCompleted.value = true;
+          if (
+            !spiderStageSettled.value &&
+            updateSessionToastState.submittedCount <= 0
+          ) {
+            hasPendingAiTasks.value = false;
+            aiProgress.value = { total: 0, completed: 0, detail: "" };
+            return;
+          }
           isLoading.value = false;
           hasPendingAiTasks.value = false;
           updatePhase.value = "idle";
           statusMsg.value = "";
           aiProgress.value = { total: 0, completed: 0, detail: "" };
           if (updateSessionToastState.submittedCount > 0) {
-            finishUpdateSessionToast(
-              "检查完成",
-              `本次检查到 ${updateSessionToastState.submittedCount} 篇内容`,
-              "success",
-              1800,
-            );
+            if (aiTaskFailureState.count > 0) {
+              const failedCount = aiTaskFailureState.count;
+              const submittedCount = updateSessionToastState.submittedCount;
+              const warningMessage =
+                failedCount >= submittedCount
+                  ? `本次发现的 ${submittedCount} 篇内容均未完成 AI 处理`
+                  : `本次检查到 ${submittedCount} 篇内容，其中 ${failedCount} 篇 AI 处理失败`;
+              finishUpdateSessionToast(
+                "检查完成",
+                warningMessage,
+                "warning",
+                2600,
+              );
+            } else {
+              finishUpdateSessionToast(
+                "检查完成",
+                `本次检查到 ${updateSessionToastState.submittedCount} 篇内容`,
+                "success",
+                1800,
+              );
+            }
           } else {
             resetUpdateSessionToast();
           }
-          taskCompleted.value = true;
           return;
         }
 
@@ -6816,15 +10165,74 @@ try {
 
       // 🌟 开始执行爬虫时调用
       window.onStartFetching = () => {
+        primeUpdateSessionRunState();
         isLoading.value = true;
         updatePhase.value = "spider";
-        updateSessionToastState.phase = "spider";
-        updateSessionToastState.currentSource = "";
         updateSessionToast("检查中", "正在获取最新内容", "info");
         // 立即进入冷却倒计时
         if (typeof startCooldown === "function") {
           startCooldown(COOLDOWN_SECONDS);
         }
+      };
+
+      window.onFetchFailed = (message, title = "检查失败") => {
+        const safeTitle = String(title || "检查失败").trim() || "检查失败";
+        const safeMessage =
+          String(message || "更新未能完成").trim() || "更新未能完成";
+        spiderStageSettled.value = true;
+        isLoading.value = false;
+        hasPendingAiTasks.value = false;
+        updatePhase.value = "idle";
+        statusMsg.value = "";
+        spiderProgress.value = { total: 0, completed: 0, detail: "" };
+        aiProgress.value = { total: 0, completed: 0, detail: "" };
+        taskCompleted.value = true;
+        failUpdateSessionToast(safeTitle, safeMessage, "error", 2200);
+      };
+
+      window.onAiTaskFailed = (payload = {}) => {
+        const normalizedPayload =
+          payload && typeof payload === "object" ? payload : {};
+        const articleTitle =
+          String(normalizedPayload.title || "当前内容").trim() || "当前内容";
+        const sourceName = String(normalizedPayload.source_name || "").trim();
+        const rawMessage = String(
+          normalizedPayload.message ||
+            normalizedPayload.raw_message ||
+            "AI 服务暂时不可用，请稍后重试。",
+        ).trim();
+        const failureReason = String(
+          normalizedPayload.reason || "ai_failed",
+        ).trim();
+
+        aiTaskFailureState.count += 1;
+
+        if (aiTaskFailureState.shownCount >= 2) {
+          return;
+        }
+
+        aiTaskFailureState.shownCount += 1;
+
+        const toastType =
+          /余额不足|api key|认证失败|访问权限|无效|请求参数无效/i.test(
+            rawMessage,
+          ) || failureReason === "ai_error"
+            ? "error"
+            : "warning";
+        const toastTitle =
+          /429|频繁|限流|rate limit/i.test(rawMessage)
+            ? "AI 请求过于频繁"
+            : "AI 处理失败";
+        const scopedTitle = sourceName
+          ? `【${sourceName}】${articleTitle}`
+          : articleTitle;
+
+        showNotification(
+          toastTitle,
+          `${scopedTitle}：${rawMessage}`,
+          toastType,
+          4200,
+        );
       };
 
       // 🌟 后台自动执行时额外显示提示消息
@@ -6843,23 +10251,55 @@ try {
       };
 
       // 🌟 简化版：爬虫阶段完成回调
-      window.onSpiderComplete = (hasNewArticles) => {
+      window.onSpiderComplete = (hasNewArticles, submittedCount = null) => {
+        spiderStageSettled.value = true;
+        const normalizedSubmittedCount = Math.max(
+          Number(
+            submittedCount !== null &&
+              submittedCount !== undefined &&
+              String(submittedCount).trim() !== ""
+              ? submittedCount
+              : updateSessionToastState.submittedCount,
+          ) || 0,
+          0,
+        );
+        updateSessionToastState.submittedCount = normalizedSubmittedCount;
+
         // 如果任务已完成，跳过
-        if (!isLoading.value && !hasPendingAiTasks.value) {
+        if (
+          !isLoading.value &&
+          !hasPendingAiTasks.value &&
+          !taskCompleted.value
+        ) {
           return;
         }
         if (hasNewArticles) {
+          if (taskCompleted.value) {
+            isLoading.value = false;
+            updatePhase.value = "idle";
+            hasPendingAiTasks.value = false;
+            finishUpdateSessionToast(
+              "检查完成",
+              normalizedSubmittedCount > 0
+                ? `本次检查到 ${normalizedSubmittedCount} 篇内容`
+                : "本次检查已完成",
+              "success",
+              1800,
+            );
+            return;
+          }
+
           // 有新文章，切换到 AI 阶段
           updatePhase.value = "ai";
           updateSessionToastState.phase = "ai";
           hasPendingAiTasks.value = true;
-          if (updateSessionToastState.submittedCount > 0) {
+          if (normalizedSubmittedCount > 0) {
             const currentTitle = updateSessionToastState.currentTitle;
             updateSessionToast(
               "检查完毕",
               currentTitle
-                ? `已检查到 ${updateSessionToastState.submittedCount} 篇内容，正在总结：${currentTitle}`
-                : `已检查到 ${updateSessionToastState.submittedCount} 篇内容，正在总结中`,
+                ? `已检查到 ${normalizedSubmittedCount} 篇内容，正在总结：${currentTitle}`
+                : `已检查到 ${normalizedSubmittedCount} 篇内容，正在总结中`,
               "info",
             );
           } else {
@@ -6972,17 +10412,7 @@ try {
         }
 
         isCancelledFlag.value = false; // 🌟 2. 每次重新开始更新时，重置拦截标记
-        taskCompleted.value = false; // 🌟 重置任务完成标志
-
-        // 创建本次更新会话 toast
-        updateSessionToastState.phase = "spider";
-        updateSessionToastState.submittedCount = 0;
-        updateSessionToastState.spiderCurrent = 0;
-        updateSessionToastState.spiderTotal = 0;
-        updateSessionToastState.aiCompleted = 0;
-        updateSessionToastState.aiTotal = 0;
-        updateSessionToastState.currentTitle = "";
-        updateSessionToastState.currentSource = "";
+        primeUpdateSessionRunState();
         updateSessionToast("检查中", "正在获取最新内容", "info");
 
         // 🌟 清除之前的取消标志，为新任务做准备
@@ -7011,6 +10441,7 @@ try {
           }
 
           if (res.status === "success") {
+            spiderStageSettled.value = true;
             // 🌟 云端恢复正常后，解除只读模式
             if (isReadOnlyMode.value) {
               isReadOnlyMode.value = false;
@@ -7025,6 +10456,9 @@ try {
             fetchUnreadCount();
 
             const count = res.submitted_count || 0;
+            const updateWarnings = Array.isArray(res.warnings)
+              ? res.warnings.filter(Boolean)
+              : [];
             updateSessionToastState.submittedCount = count;
             if (count > 0) {
               const currentTitle = updateSessionToastState.currentTitle;
@@ -7044,11 +10478,21 @@ try {
               isLoading.value = false;
             }
 
+            if (updateWarnings.length > 0) {
+              showNotification(
+                "部分来源异常",
+                updateWarnings[0],
+                "warning",
+                4200,
+              );
+            }
+
             cooldownRemaining =
               res.cooldown_remaining !== undefined
                 ? res.cooldown_remaining
                 : COOLDOWN_SECONDS;
           } else if (res.status === "cooldown") {
+            spiderStageSettled.value = true;
             failUpdateSessionToast(
               "检查失败",
               res.message || "更新太快了",
@@ -7059,6 +10503,7 @@ try {
             cooldownRemaining = res.remaining || COOLDOWN_SECONDS;
             isLoading.value = false;
           } else if (res.status === "read_only") {
+            spiderStageSettled.value = true;
             failUpdateSessionToast(
               "检查失败",
               "当前为只读模式",
@@ -7069,6 +10514,7 @@ try {
             cooldownRemaining = 0;
             isLoading.value = false;
           } else if (res.status === "api_balance_error") {
+            spiderStageSettled.value = true;
             // API 余额不足，显示欠费卡片
             balanceWarningVisible.value = true;
             failUpdateSessionToast("检查失败", "API 余额不足", "error", 2200);
@@ -7076,6 +10522,7 @@ try {
             cooldownRemaining = 0;
             isLoading.value = false;
           } else if (res.status === "api_precheck_error") {
+            spiderStageSettled.value = true;
             if (res.stage === "balance_error") {
               balanceWarningVisible.value = true;
             } else {
@@ -7105,6 +10552,7 @@ try {
             cooldownRemaining = 0;
             isLoading.value = false;
           } else {
+            spiderStageSettled.value = true;
             failUpdateSessionToast(
               "检查失败",
               res.message || "更新失败",
@@ -7121,6 +10569,7 @@ try {
             isLoading.value = false;
           }
         } catch (e) {
+          spiderStageSettled.value = true;
           failUpdateSessionToast("检查失败", "连接异常或超时", "error", 2200);
           showNotification("连接异常", "连接异常或超时", "error", 3000);
           cooldownRemaining = 60;
@@ -7140,10 +10589,12 @@ try {
         activeArticleIndex.value = idx;
         activeArticle.value = enrichedItem;
         lastArticle.value = enrichedItem;
-        currentView.value = "detail";
+        currentView.value = getDetailTargetView();
+        setActiveKeyboardPane(isDualPaneActive.value ? "list" : "detail");
 
         // 🌟 手动点击同样受"真实阅读追踪器"保护
         setupReadingTracker(enrichedItem);
+        void hydrateArticleDetail(enrichedItem, { silent: true });
       };
 
       // 🗑️ 打开删除确认弹窗
@@ -7239,10 +10690,11 @@ try {
         activeArticleIndex.value = finalIdx;
 
         // 强制切换到详情视图
-        currentView.value = "detail";
+        currentView.value = getDetailTargetView();
         activeArticle.value = enrichedItem; // 👈 这里喂给页面的就是包含 parsedTags 的安全数据了
         lastArticle.value = enrichedItem; // 🌟 更新最后查看的文章
         previousView.value = "list";
+        setActiveKeyboardPane("detail");
 
         // 🌟 启用高智能双重锁定阅读追踪（替代旧的 3 秒暴力定时器）
         setupReadingTracker(enrichedItem);
@@ -7458,28 +10910,30 @@ try {
           activeArticle.value = null;
           return;
         }
+
+        if (isDualPaneActive.value) {
+          teardownReadingTracker();
+          disconnectAllAttachmentObservers();
+          activeArticle.value = null;
+          activeArticleIndex.value = -1;
+          currentView.value = "list";
+          isNavigatingBack.value = false;
+          setActiveKeyboardPane("list");
+          flushPendingReadState();
+          return;
+        }
+
         teardownReadingTracker();
         disconnectAllAttachmentObservers();
         isNavigatingBack.value = true;
         currentView.value = "list";
         activeArticle.value = null;
+        setActiveKeyboardPane("list");
 
         // 🚀 修复点 3：在列表重新变为可见 (display: block) 之后，再更新卡片 UI。
         // 这彻底避开了 v-show="false" 时执行 Vue transition 的恐怖底层 Bug。
         setTimeout(() => {
-          // 结算普通公文
-          if (pendingReadUrls.value.length > 0) {
-            pendingReadUrls.value.forEach((url) => {
-              const idx = articles.value.findIndex((a) => a.url === url);
-              if (idx !== -1) articles.value[idx].is_read = 1;
-            });
-            pendingReadUrls.value = [];
-          }
-          // 结算系统公告
-          if (pendingNoticeVersion.value) {
-            readNoticeVersion.value = pendingNoticeVersion.value;
-            pendingNoticeVersion.value = null;
-          }
+          flushPendingReadState();
         }, 50); // 50ms 足以让浏览器完成 display: block 的渲染上下文切换
 
         setTimeout(() => {
@@ -7490,7 +10944,8 @@ try {
       const goToLastArticle = () => {
         if (lastArticle.value && currentView.value === "list") {
           activeArticle.value = lastArticle.value;
-          currentView.value = "detail";
+          currentView.value = getDetailTargetView();
+          setActiveKeyboardPane("detail");
         }
       };
 
@@ -7544,6 +10999,22 @@ try {
         return true;
       };
 
+      const shouldShowDetailHeadingLabels = (article) => {
+        if (!article || typeof article !== "object") {
+          return true;
+        }
+
+        const sourceType = String(article.source_type || "")
+          .trim()
+          .toLowerCase();
+        if (sourceType === "rss") {
+          return true;
+        }
+
+        const sourceName = String(article.source_name || "").trim();
+        return !(sourceName === "公文通" || sourceName.includes("学院"));
+      };
+
       const createMarkdownImageFallbackNode = (altText = "") => {
         const fallback = document.createElement("span");
         fallback.className = "md-image-fallback";
@@ -7583,14 +11054,21 @@ try {
 
         const container = document.createElement("div");
         container.innerHTML = html;
-        const detailArticle =
-          currentView.value === "detail" ? activeArticle.value : null;
+        const detailArticle = isDetailPaneVisible.value
+          ? activeArticle.value
+          : null;
+        const shouldApplyHeadingLabels =
+          shouldShowDetailHeadingLabels(detailArticle);
 
         container.querySelectorAll("h1, h2, h3, h4, h5, h6").forEach((heading) => {
           const tagName = String(heading.tagName || "").toUpperCase();
           const level = tagName.replace(/[^0-9]/g, "");
           if (!level) return;
-          heading.setAttribute("data-heading-label", `H${level}`);
+          if (shouldApplyHeadingLabels) {
+            heading.setAttribute("data-heading-label", `H${level}`);
+          } else {
+            heading.removeAttribute("data-heading-label");
+          }
         });
 
         container.querySelectorAll("img").forEach((img) => {
@@ -7845,11 +11323,8 @@ try {
       const renderMarkdown = (text) => {
         if (!text) return "无总结内容";
 
-        // 🌟 新增：检测纯图片内容（包含 <img 标签），直接返回 HTML
-        if (
-          text.includes("<img") ||
-          text.includes('<div class="pure-image-content"')
-        ) {
+        // 🌟 纯图片占位内容直接走 HTML，避免被 Markdown 重新包裹
+        if (text.includes('<div class="pure-image-content"')) {
           return decorateRenderedMarkdownImages(text);
         }
 
@@ -8171,7 +11646,7 @@ try {
         targetView.style.bottom = "auto"; // 👈 解除底部锁定
         targetView.style.height = "auto";
         targetView.style.overflow = "visible";
-        targetView.style.backgroundColor = "#ffffff";
+        targetView.style.backgroundColor = readRootCssToken("white", "#ffffff");
 
         scrollContent.style.overflowY = "visible";
         scrollContent.style.flex = "none";
@@ -8188,7 +11663,7 @@ try {
           const canvas = await html2canvas(targetView, {
             scale: 2,
             useCORS: true,
-            backgroundColor: "#ffffff",
+            backgroundColor: readRootCssToken("white", "#ffffff"),
             allowTaint: false,
             foreignObjectRendering: true,
             windowWidth: targetView.scrollWidth,
@@ -8390,42 +11865,19 @@ try {
           }
 
           if (res.status === "success") {
-            const updatedArticle = buildArticleViewModel({
-              ...article,
-              summary: res.summary,
-              ai_summary: res.ai_summary || "",
-              ai_tags: res.ai_tags || [],
-              raw_markdown:
-                res.raw_markdown ??
-                article.raw_markdown ??
-                article.rawMarkdown ??
-                "",
-              raw_text:
-                res.raw_text ?? article.raw_text ?? article.rawBody ?? "",
-              enhanced_markdown:
-                res.enhanced_markdown ??
-                article.enhanced_markdown ??
-                article.enhancedMarkdown ??
-                "",
-              enable_ai_formatting:
-                res.enable_ai_formatting ??
-                article.enable_ai_formatting ??
-                false,
-              enable_ai_summary:
-                res.enable_ai_summary ??
-                article.enable_ai_summary ??
-                false,
-              formatting_prompt:
-                res.formatting_prompt ??
-                article.formatting_prompt ??
-                "",
-              summary_prompt:
-                res.summary_prompt ??
-                article.summary_prompt ??
-                article.custom_summary_prompt ??
-                "",
-            });
+            const updatedArticle = mergeArticleApiPayload(article, res);
             const resultKind = String(res.result_kind || "").trim();
+            const clearedAnnotationViewModes = normalizeAnnotationViewModes(
+              res.cleared_annotation_view_modes ||
+                getAnnotationResetViewModesAfterRegeneration(
+                  updatedArticle,
+                  resultKind,
+                ),
+            );
+
+            clearAnnotationSelection();
+            hideAnnotationToolbar();
+            clearLocalAnnotationsForViewModes(clearedAnnotationViewModes);
 
             if (isRssArticle(updatedArticle)) {
               rssDetailMode.value = getPreferredRssDetailMode(updatedArticle);
@@ -8514,7 +11966,7 @@ try {
           closeImagePreview();
           return;
         }
-        if (currentView.value === "detail") {
+        if (isDetailPaneVisible.value) {
           backToList();
         }
       };
@@ -8631,13 +12083,14 @@ try {
       // 存储每个附件前半部分的 DOM 引用和截断状态
       const prefixRefs = {};
       const truncatedStates = ref({});
+      const attachmentTruncationFrames = new Map();
 
       // 设置前半部分 DOM 引用
       const setPrefixRef = (el, url) => {
         if (el) {
           prefixRefs[url] = el;
           // 延迟检测截断状态
-          setTimeout(() => checkTruncation(url), 0);
+          setTimeout(() => scheduleTruncationCheck(url), 0);
         }
       };
 
@@ -8654,10 +12107,13 @@ try {
 
           // 监听容器宽度变化
           const resizeObserver = new ResizeObserver(() => {
-            checkTruncation(url);
+            scheduleTruncationCheck(url);
           });
           resizeObserver.observe(el);
           attachmentResizeObservers.set(url, resizeObserver);
+        } else if (attachmentResizeObservers.has(url)) {
+          attachmentResizeObservers.get(url).disconnect();
+          attachmentResizeObservers.delete(url);
         }
       };
 
@@ -8667,6 +12123,10 @@ try {
           observer.disconnect();
         });
         attachmentResizeObservers.clear();
+        attachmentTruncationFrames.forEach((frameId) => {
+          cancelAnimationFrame(frameId);
+        });
+        attachmentTruncationFrames.clear();
       };
 
       // 检测前半部分是否被截断
@@ -8674,8 +12134,23 @@ try {
         const el = prefixRefs[url];
         if (el) {
           const isTruncated = el.scrollWidth > el.clientWidth;
-          truncatedStates.value[url] = isTruncated;
+          if (truncatedStates.value[url] !== isTruncated) {
+            truncatedStates.value[url] = isTruncated;
+          }
+        } else if (truncatedStates.value[url] !== false) {
+          truncatedStates.value[url] = false;
         }
+      };
+
+      const scheduleTruncationCheck = (url) => {
+        if (!url || attachmentTruncationFrames.has(url)) {
+          return;
+        }
+        const frameId = requestAnimationFrame(() => {
+          attachmentTruncationFrames.delete(url);
+          checkTruncation(url);
+        });
+        attachmentTruncationFrames.set(url, frameId);
       };
 
       // 判断是否被截断
@@ -8888,6 +12363,7 @@ try {
       window.openSettingsFromTray = openSettingsFromTray;
       window.updateTrayStatus = updateTrayStatus;
       window.refreshConfigFromBackend = refreshConfigFromBackend;
+      window.syncMuteModeFromTray = syncMuteModeFromTray;
       window.handleTodayClick = handleTodayClick; // 🌟 供托盘调用，回到今天界面
 
       return {
@@ -8897,8 +12373,13 @@ try {
 
         // 视图与状态
         currentView,
+        isDualPaneActive,
+        showListPane,
+        isDetailPaneVisible,
+        showDualPanePlaceholder,
         activeArticle,
         activeArticleIndex, // 🌟 当前文章索引（用于删除）
+        isArticleSelected,
         deleteConfirmVisible, // 🌟 删除确认弹窗状态
         confirmDeleteArticle, // 🌟 确认删除
         cancelDeleteArticle, // 🌟 取消删除
@@ -8977,6 +12458,17 @@ try {
         searchInputRef,
         handleSearchClick,
         closeSearchUI,
+        handleListPanePointerDown,
+        handleDetailPanePointerDown,
+        detailSearchQuery,
+        isDetailSearchExpanded,
+        detailSearchInputRef,
+        detailSearchMatchCount,
+        detailSearchCounterText,
+        toggleDetailSearchUI,
+        closeDetailSearchUI,
+        jumpToDetailSearchMatch,
+        handleDetailSearchSubmit,
         handleListClick,
         handleTodayClick,
         toastList,
@@ -8988,11 +12480,32 @@ try {
         playAnim,
         backToPrevious,
         config,
+        settingsSections,
+        activeSettingsSection,
+        isSettingsSplitView,
+        showSettingsSectionList,
+        showSettingsSectionDetail,
+        activeSettingsSubpage,
+        isSettingsSubpageVisible,
+        settingsDetailTransitionKey,
+        activeSettingsSectionMeta,
+        settingsOfficialSources,
+        settingsAcademySources,
+        selectSettingsSection,
+        backToSettingsSectionList,
+        backFromSettingsSubpage,
+        currentFontLabel,
+        setTrackMode,
         showApiKey,
         networkAccessState,
         isCheckingNetworkAccess,
         refreshNetworkAccessStatus,
         formatNetworkCheckedAt,
+        softwareUpdateState,
+        isCheckingSoftwareUpdate,
+        checkSoftwareUpdate,
+        openSoftwareUpdateDownload,
+        formatSoftwareUpdateCheckedAt,
         isTesting,
         connectionStatus,
         regeneratingIds,
@@ -9021,6 +12534,7 @@ try {
         isSendingTestEmail,
         emailSendStatus,
         isTestingPush,
+        pushSendStatus,
         isDiagnosing,
         addSubscriber,
         removeSubscriber,
@@ -9032,10 +12546,14 @@ try {
         customRules,
         rssStrategyCatalog,
         rssHealthSummary,
+        htmlHealthSummary,
+        combinedCustomHealthSummary,
         editingRuleId,
         showCustomRuleModal,
         isGeneratingRule,
         previewData,
+        htmlDetailPreviewData,
+        htmlDetailPreviewState,
         rssPreviewInfo,
         generatedRuleCache,
         ruleForm,
@@ -9043,9 +12561,13 @@ try {
         rssTemplateOptions,
         currentRssTemplateMeta,
         getRuleStrategyLabel,
+        getHtmlAccessConfigValidationMessage,
         getHtmlRulePendingRetestMessage,
         isRuleInlineEditing,
+        isHealthRetestingRule,
         fetchCustomRules,
+        exportCustomRules,
+        importCustomRules,
         addRuleField,
         removeRuleField,
         generateAndTestRule,
@@ -9053,8 +12575,13 @@ try {
         confirmAndSaveRssRule,
         handleRegenerateRule,
         handleManualRetest,
+        handleRuleListExtractionAction,
+        handleRuleDetailPreviewAction,
+        handleSavedRuleHealthRetest,
+        retestAllCustomRules,
         showSelectorPanel,
         isRetestingRule,
+        healthRetestingRuleId,
         confirmAndSaveRule,
         editRule,
         toggleRuleStatus,
@@ -9084,14 +12611,26 @@ try {
         markRssImageLoadError,
         clearRssImageLoadError,
         hasRssImageLoadError,
+        ANNOTATION_COLOR_OPTIONS,
         detailScrollContainerRef,
         rssBodyShellRef,
         rssBodyContentRef,
+        detailBodyContentRef,
         rssTocItems,
         activeRssTocId,
         showRssFloatingToc,
         scrollToRssHeading,
+        handleDetailContentPointerDown,
+        handleDetailContentClick,
         handleDetailContentScroll,
+        annotationToolbarStyle,
+        isAnnotationToolbarVisible,
+        canDeleteActiveAnnotation,
+        isAnnotationToolbarColorActive,
+        isAnnotationToolbarToggleActive,
+        applyAnnotationHighlightColor,
+        toggleAnnotationTextStyle,
+        deleteActiveAnnotation,
         setPrefixRef,
         setAttNameRef,
         isPrefixTruncated,
@@ -9112,14 +12651,21 @@ try {
         getSubsIcon,
         getSubsChipStyle,
         getSubsIconStyle,
+        getSettingsSourceBadgeStyle,
         getRssSourceLabelStyle,
         getRuleHealthLabel,
         getRuleHealthTitle,
-        getRssHealthAttentionText,
+        getRuleHealthAttentionText,
 
         //设置相关
         isPromptEditorOpen,
+        isFontSheetOpen,
+        isSecondaryModelsSheetOpen,
         openPromptEditor,
+        openFontSheet,
+        closeFontSheet,
+        openSecondaryModelsSheet,
+        closeSecondaryModelsSheet,
         tempPromptContent,
         savePrompt,
         resetPromptInEditor,
@@ -9136,11 +12682,15 @@ try {
 
         // RSS 阅读模式
         rssDetailMode,
+        standardDetailMode,
         hasRssAiSummary,
         isRssEnhancedModeEnabled,
         isRssSummaryModeEnabled,
+        isStandardSummaryModeEnabled,
         setRssDetailMode,
+        setStandardDetailMode,
         getRssDetailModeTooltip,
+        getStandardDetailModeTooltip,
         getRssDetailModeHint,
         getRssEditTooltip,
         getArticleCopyTooltip,

@@ -4,7 +4,8 @@ import json
 import logging
 import threading
 import requests
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple, Callable, Type, TYPE_CHECKING
 
@@ -96,6 +97,14 @@ class SpiderScheduler:
     _FALLBACK_LIMIT = 10  # 每板块最大抓取条数
     _COLD_START_QUOTA_GWT = 10  # 公文通冷启动配额
     _COLD_START_QUOTA_COLLEGE = 1  # 学院冷启动配额（跨板块累计）
+    _WEAK_DATE_UNDATED_GRACE = 3  # 弱日期站点在连续追踪时，允许每板块前 N 条无时间文章通过
+    _INCREMENTAL_REPAIR_WINDOW_HTML = 10  # 连续追踪时，HTML 源每板块顶部回补窗口
+    _INCREMENTAL_REPAIR_WINDOW_RSS = 20  # 连续追踪时，RSS 源每板块顶部回补窗口
+    _MANUAL_REPAIR_SCAN_LIMIT_HTML = 50  # 手动更新时，HTML 源每板块深补扫上限
+    _MANUAL_REPAIR_SCAN_LIMIT_RSS = 100  # 手动更新时，RSS 源每板块深补扫上限
+    _SPIDER_WATCHDOG_POLL_SECONDS = 0.5
+    _SPIDER_TIMEOUT_BASE_SECONDS = 18
+    _SPIDER_TIMEOUT_PER_SECTION_SECONDS = 14
 
     def __init__(
         self,
@@ -197,9 +206,9 @@ class SpiderScheduler:
         except Exception as e:
             logger.error(f"加载动态爬虫规则失败: {e}")
 
-    def _update_rss_rule_health(self, spider: BaseSpider) -> None:
-        """将 RSS 抓取结果回写到规则健康状态。"""
-        if getattr(spider, "_source_type", "html") != "rss":
+    def _update_dynamic_rule_health(self, spider: BaseSpider) -> None:
+        """将自定义动态规则的抓取结果回写到规则健康状态。"""
+        if not getattr(spider, "_is_dynamic", False):
             return
 
         rule_id = str(
@@ -211,6 +220,7 @@ class SpiderScheduler:
         status = str(getattr(spider, "last_fetch_status", "") or "").strip() or "error"
         error_message = str(getattr(spider, "last_fetch_error", "") or "").strip()
         fetched_count = getattr(spider, "last_fetched_count", None)
+        field_hit_stats = getattr(spider, "last_field_hit_stats", None)
 
         try:
             get_rules_manager().update_rule_health(
@@ -218,6 +228,7 @@ class SpiderScheduler:
                 status=status,
                 error_message=error_message,
                 fetched_count=fetched_count if isinstance(fetched_count, int) else None,
+                field_hit_stats=field_hit_stats if isinstance(field_hit_stats, dict) else None,
             )
         except Exception as e:
             logger.debug(f"回写 RSS 健康状态失败: {e}")
@@ -283,17 +294,15 @@ class SpiderScheduler:
 
     def _get_sections(self, spider: BaseSpider) -> List[Optional[str]]:
         """获取爬虫的板块列表"""
-        if isinstance(spider, NmneSpider):
-            return list(spider.SECTIONS.keys())
-        elif isinstance(spider, AiSpider):
-            return list(spider.SECTIONS.keys())
-        elif isinstance(
-            spider,
-            (SgimSpider, UtlSpider, HseeSpider, CepSpider, CopSpider, DesignSpider),
-        ):
-            return list(spider.sections.keys())
-        else:
-            return [None]
+        sections_dict = getattr(spider, "SECTIONS", None)
+        if isinstance(sections_dict, dict) and sections_dict:
+            return list(sections_dict.keys())
+
+        sections_dict = getattr(spider, "sections", None)
+        if isinstance(sections_dict, dict) and sections_dict:
+            return list(sections_dict.keys())
+
+        return [None]
 
     def _push_progress(self, completed: int, total: int, current_title: str = ""):
         """推送进度更新（通过回调）"""
@@ -302,6 +311,281 @@ class SpiderScheduler:
                 self.progress_callback(completed, total, current_title)
             except Exception as e:
                 logger.debug(f"进度回调执行失败: {e}")
+
+    def _resolve_fetch_limit(self, spider: BaseSpider) -> int:
+        """确定单板块本次抓取上限。"""
+        if hasattr(spider, "max_items") and getattr(spider, "max_items") is not None:
+            return int(getattr(spider, "max_items"))
+        if getattr(spider, "_source_type", "html") == "rss":
+            return 50
+        return self._FALLBACK_LIMIT
+
+    def _parse_time_cursor(self, value: Optional[str]) -> Optional[datetime]:
+        """解析时间游标，尽量保留时分秒精度。"""
+        if not value or not str(value).strip():
+            return None
+
+        text = (
+            str(value)
+            .strip()
+            .replace("年", "-")
+            .replace("月", "-")
+            .replace("日", "")
+            .replace("/", "-")
+            .replace("T", " ")
+        )
+        text = " ".join(text.split())
+
+        try:
+            from dateutil import parser
+
+            return parser.parse(text, fuzzy=False)
+        except ImportError:
+            pass
+        except Exception:
+            pass
+
+        for fmt in (
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d %H:%M",
+            "%Y-%m-%d",
+            "%Y-%m-%d %H:%M:%S.%f",
+        ):
+            try:
+                return datetime.strptime(text, fmt)
+            except ValueError:
+                continue
+
+        return _parse_date_safe(text)
+
+    def _resolve_dynamic_page_budget(
+        self,
+        spider: BaseSpider,
+        is_cold_start: bool,
+        *,
+        is_manual: bool = False,
+    ) -> Optional[int]:
+        if (
+            getattr(spider, "_source_type", "html") != "html"
+            or not getattr(spider, "_is_dynamic", False)
+        ):
+            return None
+
+        pagination_mode = str(
+            getattr(spider, "pagination_mode", "single") or "single"
+        ).strip().lower()
+        if pagination_mode == "single":
+            return 1
+
+        max_pages = max(int(getattr(spider, "max_pages", 1) or 1), 1)
+        if is_cold_start or is_manual:
+            return max_pages
+
+        incremental_max_pages = max(
+            int(getattr(spider, "incremental_max_pages", 1) or 1),
+            1,
+        )
+        return min(max_pages, incremental_max_pages)
+
+    def _resolve_section_scan_limit(
+        self,
+        spider: BaseSpider,
+        *,
+        mode: str,
+        is_cold_start: bool,
+        is_manual: bool,
+    ) -> int:
+        """确定单板块本次实际扫描深度。"""
+        base_limit = self._resolve_fetch_limit(spider)
+        if is_cold_start or mode != "continuous" or not is_manual:
+            return base_limit
+
+        source_type = getattr(spider, "_source_type", "html")
+        deep_limit = (
+            self._MANUAL_REPAIR_SCAN_LIMIT_RSS
+            if source_type == "rss"
+            else self._MANUAL_REPAIR_SCAN_LIMIT_HTML
+        )
+        return max(base_limit, deep_limit)
+
+    def _resolve_incremental_repair_window(
+        self,
+        spider: BaseSpider,
+        fetch_limit: int,
+    ) -> int:
+        """连续追踪时，为物理删除/漏抓留出的顶部回补窗口。"""
+        source_type = getattr(spider, "_source_type", "html")
+        base_window = (
+            self._INCREMENTAL_REPAIR_WINDOW_RSS
+            if source_type == "rss"
+            else self._INCREMENTAL_REPAIR_WINDOW_HTML
+        )
+        return max(0, min(max(fetch_limit, 0), base_window))
+
+    @staticmethod
+    def _normalize_section_key(section_name: Optional[str]) -> str:
+        return str(section_name or "").strip()
+
+    def _record_cold_start_frontiers(
+        self, selected_candidates: List[Dict[str, Any]]
+    ) -> None:
+        """记录冷启动首批入库文章的板块边界，避免后续手动更新倒灌旧文。"""
+        frontier_map: Dict[Tuple[str, str], ArticleContext] = {}
+        for candidate in selected_candidates:
+            ctx = candidate.get("ctx")
+            if not isinstance(ctx, ArticleContext) or not ctx.url:
+                continue
+            source_name = str(ctx.source_name or "").strip()
+            if not source_name:
+                continue
+            section_key = self._normalize_section_key(candidate.get("section_name"))
+            frontier_map[(source_name, section_key)] = ctx
+
+        for (source_name, section_key), ctx in frontier_map.items():
+            db.upsert_crawl_frontier(
+                source_name=source_name,
+                section_name=section_key,
+                frontier_url=ctx.url,
+                frontier_cursor=str(ctx.date or "").strip(),
+            )
+
+    def _fetch_section_articles(
+        self,
+        spider: BaseSpider,
+        section_name: Optional[str],
+        fetch_limit: int,
+        *,
+        page_budget: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """抓取单个板块的候选文章列表。"""
+        if section_name:
+            return spider.fetch_list(
+                page_num=1,
+                section_name=section_name,
+                limit=fetch_limit,
+                page_budget=page_budget,
+                cancel_event=self._cancel_event,
+            )
+        return spider.fetch_list(
+            page_num=1,
+            limit=fetch_limit,
+            page_budget=page_budget,
+            cancel_event=self._cancel_event,
+        )
+
+    def _prefetch_detail_cursor(
+        self, spider: BaseSpider, ctx: ArticleContext
+    ) -> Optional[datetime]:
+        """为时间裁剪预取详情页时间，并复用详情避免重复抓取。"""
+        if ctx.detail is None:
+            try:
+                ctx.detail = spider.fetch_detail(ctx.url)
+            except Exception as e:
+                logger.debug(f"[{ctx.source_name}] 预取详情时间失败 ({ctx.title}): {e}")
+                ctx.detail = None
+
+        if not ctx.detail:
+            return None
+
+        detail = ctx.detail
+        detail_cursor = (
+            str(detail.get("exact_time") or "").strip()
+            or str(detail.get("date") or "").strip()
+        )
+        parsed = self._parse_time_cursor(detail_cursor)
+        if parsed is not None and not ctx.date:
+            ctx.date = parsed.strftime("%Y-%m-%d")
+        return parsed
+
+    def _submit_context(
+        self,
+        spider: BaseSpider,
+        ctx: ArticleContext,
+        mode: str,
+        today_str: str,
+        is_manual: bool,
+    ) -> bool:
+        """提交文章到处理队列，并同步进度。"""
+        with self._progress_lock:
+            self._current_scanned += 1
+            current_scanned = self._current_scanned
+        self._push_progress(current_scanned, 0, ctx.title)
+
+        return self.article_processor.submit(
+            spider=spider,
+            ctx=ctx,
+            mode=mode,
+            today_str=today_str,
+            is_manual=is_manual,
+        )
+
+    def _collect_cold_start_candidates(
+        self,
+        spider: BaseSpider,
+        sections: List[Optional[str]],
+        fetch_limit: int,
+        page_budget: Optional[int] = None,
+    ) -> Tuple[List[Dict[str, Any]], List[str]]:
+        """冷启动时先跨板块收集候选，再按全来源最新程度裁剪。"""
+        source_name = spider.SOURCE_NAME
+        candidates: List[Dict[str, Any]] = []
+        error_list: List[str] = []
+        seen_urls: set[str] = set()
+        encounter_order = 0
+
+        for section_name in sections:
+            if self._cancel_event.is_set():
+                break
+
+            try:
+                articles = self._fetch_section_articles(
+                    spider,
+                    section_name,
+                    fetch_limit,
+                    page_budget=page_budget,
+                )
+                self._update_dynamic_rule_health(spider)
+
+                for article in articles:
+                    ctx = self.article_processor.create_context(
+                        article=article,
+                        source_name=source_name,
+                        section_name=section_name,
+                    )
+
+                    should_skip, _ = self.article_processor.should_skip_by_title(
+                        ctx.title
+                    )
+                    if should_skip or not ctx.url or ctx.url in seen_urls:
+                        continue
+
+                    seen_urls.add(ctx.url)
+                    candidates.append(
+                        {
+                            "ctx": ctx,
+                            "section_name": section_name,
+                            "article_dt": self._parse_time_cursor(ctx.date),
+                            "order": encounter_order,
+                        }
+                    )
+                    encounter_order += 1
+            except (
+                requests.RequestException,
+                ConnectionError,
+                TimeoutError,
+                ValueError,
+            ) as e:
+                section_label = f"板块 '{section_name}'" if section_name else "默认板块"
+                error_msg = f"[{source_name}] {section_label} 抓取异常: {e}"
+                logger.warning(error_msg)
+                error_list.append(error_msg)
+
+        candidates.sort(key=lambda item: item["order"])
+        candidates.sort(
+            key=lambda item: item["article_dt"] or datetime.min,
+            reverse=True,
+        )
+        return candidates, error_list
 
     def run_all_spiders(
         self,
@@ -413,8 +697,12 @@ class SpiderScheduler:
                     logger.debug(f"爬虫进度回调失败: {e}")
 
             # 6. 使用线程池并发执行爬虫
-            with ThreadPoolExecutor(max_workers=5) as executor:
+            executor = ThreadPoolExecutor(max_workers=5)
+            try:
                 futures = {}
+                future_deadlines = {}
+                pending = set()
+
                 for idx, spider in enumerate(spiders_to_run):
                     future = executor.submit(
                         self._process_spider,
@@ -423,34 +711,85 @@ class SpiderScheduler:
                         today_str=today_str,
                         is_manual=is_manual,
                     )
-                    futures[future] = (spider.SOURCE_NAME, idx)
+                    futures[future] = (spider.SOURCE_NAME, idx, spider)
+                    future_deadlines[future] = (
+                        time.monotonic() + self._resolve_spider_timeout(spider)
+                    )
+                    pending.add(future)
 
-                # 使用 as_completed 收集结果，并在每个完成时更新进度
                 completed_count = 0
-                for future in as_completed(futures):
-                    source_name, idx = futures[future]
-                    completed_count += 1
+                while pending:
+                    done, still_pending = wait(
+                        pending,
+                        timeout=self._SPIDER_WATCHDOG_POLL_SECONDS,
+                        return_when=FIRST_COMPLETED,
+                    )
 
-                    # 每个爬虫完成时推送进度
-                    if spider_progress_callback:
-                        try:
-                            spider_progress_callback(
-                                completed_count, total_spiders, source_name
+                    if not done:
+                        now = time.monotonic()
+                        timed_out = [
+                            future
+                            for future in list(still_pending)
+                            if future_deadlines.get(future, float("inf")) <= now
+                        ]
+
+                        if not timed_out:
+                            pending = still_pending
+                            continue
+
+                        for future in timed_out:
+                            source_name, idx, spider = futures[future]
+                            pending.discard(future)
+                            completed_count += 1
+
+                            if spider_progress_callback:
+                                try:
+                                    spider_progress_callback(
+                                        completed_count, total_spiders, source_name
+                                    )
+                                except Exception as e:
+                                    logger.debug(f"爬虫进度回调失败: {e}")
+
+                            timeout_seconds = int(
+                                round(self._resolve_spider_timeout(spider))
                             )
-                        except Exception as e:
-                            logger.debug(f"爬虫进度回调失败: {e}")
+                            future.cancel()
+                            error_msg = (
+                                f"[{source_name}] 抓取耗时超过 {timeout_seconds} 秒，"
+                                "已跳过该来源"
+                            )
+                            logger.warning(error_msg)
+                            errors.append(error_msg)
 
-                    try:
-                        result_name, count, error_list = future.result()
-                        submitted_count += count
-                        if error_list:
-                            errors.extend(error_list)
-                        if count > 0:
-                            submitted_sources.append(f"{result_name}({count})")
-                    except Exception as e:
-                        error_msg = f"[{source_name}] 爬虫执行崩溃: {e}"
-                        logger.error(error_msg, exc_info=True)
-                        errors.append(error_msg)
+                        continue
+
+                    for future in done:
+                        pending.discard(future)
+                        source_name, idx, spider = futures[future]
+                        completed_count += 1
+
+                        # 每个爬虫完成时推送进度
+                        if spider_progress_callback:
+                            try:
+                                spider_progress_callback(
+                                    completed_count, total_spiders, source_name
+                                )
+                            except Exception as e:
+                                logger.debug(f"爬虫进度回调失败: {e}")
+
+                        try:
+                            result_name, count, error_list = future.result()
+                            submitted_count += count
+                            if error_list:
+                                errors.extend(error_list)
+                            if count > 0:
+                                submitted_sources.append(f"{result_name}({count})")
+                        except Exception as e:
+                            error_msg = f"[{source_name}] 爬虫执行崩溃: {e}"
+                            logger.error(error_msg, exc_info=True)
+                            errors.append(error_msg)
+            finally:
+                executor.shutdown(wait=False, cancel_futures=True)
 
             # 5. 如果需要等待完成
             if wait_for_completion:
@@ -503,6 +842,7 @@ class SpiderScheduler:
         """
         submitted_count = 0
         source_name = spider.SOURCE_NAME
+        source_type = getattr(spider, "_source_type", "html")
         error_list: List[str] = []
 
         # ── 冷启动状态推演 ──────────────────────────────────────────
@@ -510,8 +850,6 @@ class SpiderScheduler:
         is_cold_start = existing_count == 0
 
         if is_cold_start:
-            # 🌟 检查数据源类型
-            source_type = getattr(spider, '_source_type', 'html')
             if source_type == 'rss':
                 # RSS 订阅：不设配额限制，抓取所有条目
                 quota = None
@@ -537,59 +875,105 @@ class SpiderScheduler:
                 )
                 time_cutoff = today_dt - __import__("datetime").timedelta(hours=2)
             elif mode == "continuous":
-                # 持续追踪：游标为该来源最新文章日期
-                latest_date_str = db.get_latest_article_date_by_source(source_name)
-                if latest_date_str:
-                    time_cutoff = _parse_date_safe(latest_date_str)
+                # 持续追踪：优先使用精确时间游标，避免同日历史内容回灌
+                latest_cursor_str = db.get_latest_article_cursor_by_source(source_name)
+                if latest_cursor_str:
+                    time_cutoff = self._parse_time_cursor(latest_cursor_str)
 
         # 获取板块列表
         sections = self._get_sections(spider)
+        fetch_limit = self._resolve_fetch_limit(spider)
+        default_page_budget = self._resolve_dynamic_page_budget(spider, is_cold_start)
+        deep_scan_limit = self._resolve_section_scan_limit(
+            spider,
+            mode=mode,
+            is_cold_start=is_cold_start,
+            is_manual=is_manual,
+        )
 
-        # 冷启动跨板块计数器
-        cold_yield_count = 0
+        if is_cold_start and quota is not None:
+            candidates, error_list = self._collect_cold_start_candidates(
+                spider=spider,
+                sections=sections,
+                fetch_limit=fetch_limit,
+                page_budget=default_page_budget,
+            )
+            selected_candidates = candidates[:quota]
+
+            if selected_candidates:
+                logger.info(
+                    f"❄️ [{source_name}] 冷启动候选 {len(candidates)} 条，按全来源最新排序后入库 {len(selected_candidates)} 条"
+                )
+                self._record_cold_start_frontiers(selected_candidates)
+
+            for candidate in selected_candidates:
+                if self._cancel_event.is_set():
+                    break
+
+                ctx: ArticleContext = candidate["ctx"]
+                if self._submit_context(
+                    spider=spider,
+                    ctx=ctx,
+                    mode=mode,
+                    today_str=today_str,
+                    is_manual=is_manual,
+                ):
+                    submitted_count += 1
+
+            return (source_name, submitted_count, error_list)
+
+        seen_urls_in_run: set[str] = set()
 
         for section_name in sections:
             if self._cancel_event.is_set():
                 break
 
-            # 冷启动配额短路：跨板块累计已达上限，终止所有剩余板块
-            if is_cold_start and quota is not None and cold_yield_count >= quota:
-                logger.info(
-                    f"❄️ [{source_name}] 冷启动配额已满（{cold_yield_count}/{quota}），终止剩余板块"
+            section_key = self._normalize_section_key(section_name)
+            manual_frontier_url = (
+                db.get_crawl_frontier_url(source_name, section_key)
+                if (is_manual and not is_cold_start and mode == "continuous")
+                else ""
+            )
+            allow_manual_deep_repair = bool(manual_frontier_url)
+            section_scan_limit = (
+                deep_scan_limit if allow_manual_deep_repair else fetch_limit
+            )
+            section_page_budget = default_page_budget
+            if getattr(spider, "_is_dynamic", False):
+                section_page_budget = self._resolve_dynamic_page_budget(
+                    spider,
+                    is_cold_start,
+                    is_manual=allow_manual_deep_repair,
                 )
-                break
 
-            # 🌟 确定本次抓取上限
-            # 优先级：规则配置 max_items > 数据源类型默认 > 全局默认
-            if hasattr(spider, 'max_items') and spider.max_items is not None:
-                fetch_limit = spider.max_items
-            elif getattr(spider, '_source_type', 'html') == 'rss':
-                fetch_limit = 50  # RSS 默认抓取 50 条
-            else:
-                fetch_limit = self._FALLBACK_LIMIT  # HTML 默认 10 条
+            repair_window = (
+                self._resolve_incremental_repair_window(spider, section_scan_limit)
+                if (
+                    not is_cold_start
+                    and mode == "continuous"
+                    and not allow_manual_deep_repair
+                )
+                else 0
+            )
+            section_unique_index = 0
+            manual_frontier_reached = False
+            undated_grace_remaining = (
+                self._WEAK_DATE_UNDATED_GRACE
+                if (not is_cold_start and mode == "continuous" and time_cutoff is not None)
+                else 0
+            )
 
             try:
-                if section_name:
-                    articles = spider.fetch_list(
-                        page_num=1,
-                        section_name=section_name,
-                        limit=fetch_limit,
-                    )
-                else:
-                    articles = spider.fetch_list(page_num=1, limit=fetch_limit)
-
-                self._update_rss_rule_health(spider)
+                articles = self._fetch_section_articles(
+                    spider,
+                    section_name,
+                    section_scan_limit,
+                    page_budget=section_page_budget,
+                )
+                self._update_dynamic_rule_health(spider)
 
                 for article in articles:
                     if self._cancel_event.is_set():
-                        break
-
-                    # 冷启动配额短路（文章粒度）
-                    if (
-                        is_cold_start
-                        and quota is not None
-                        and cold_yield_count >= quota
-                    ):
                         break
 
                     ctx = self.article_processor.create_context(
@@ -606,33 +990,110 @@ class SpiderScheduler:
                         logger.debug(f"跳过导航噪音（黑名单标题）: {ctx.title}")
                         continue
 
-                    # ── 双轨时间拦截断言 ────────────────────────────
-                    if time_cutoff is not None and ctx.date:
-                        article_dt = _parse_date_safe(ctx.date)
-                        if article_dt is not None and article_dt < time_cutoff:
-                            # 列表通常按时间倒序，遇到过期文章可直接 break 当前板块
+                    if not ctx.url or ctx.url in seen_urls_in_run:
+                        continue
+                    seen_urls_in_run.add(ctx.url)
+                    section_unique_index += 1
+                    auto_repair_window = (
+                        not is_cold_start
+                        and mode == "continuous"
+                        and repair_window > 0
+                        and section_unique_index <= repair_window
+                    )
+                    is_manual_frontier_article = (
+                        allow_manual_deep_repair and ctx.url == manual_frontier_url
+                    )
+                    in_manual_repair_range = (
+                        allow_manual_deep_repair and not manual_frontier_reached
+                    )
+                    in_repair_window = auto_repair_window or in_manual_repair_range
+
+                    # 持续追踪模式：
+                    # - 顶部回补窗口内：继续检查是否存在物理删除/漏抓的缺口文章
+                    # - 回补窗口外：命中已存在 URL 视为触达当前板块的增量边界
+                    if (
+                        not is_cold_start
+                        and mode == "continuous"
+                        and self.article_processor.should_skip_by_url(ctx.url, is_manual)
+                    ):
+                        if is_manual_frontier_article:
                             logger.debug(
-                                f"[{source_name}] 时间拦截：{ctx.date} < {time_cutoff.date()}，终止当前板块"
+                                "[%s] 命中手动修复边界，结束当前板块缺口检查: %s",
+                                source_name,
+                                ctx.url,
                             )
+                            manual_frontier_reached = True
                             break
-                    elif not is_cold_start:
+                        if in_repair_window:
+                            logger.debug(
+                                "[%s] 命中已存在 URL，但仍处于顶部回补窗口，继续检查缺口: %s",
+                                source_name,
+                                ctx.url,
+                            )
+                            continue
+                        logger.debug(
+                            f"[{source_name}] 命中已存在 URL，终止当前板块继续回溯: {ctx.url}"
+                        )
+                        break
+
+                    # ── 双轨时间拦截断言 ────────────────────────────
+                    if time_cutoff is not None:
+                        article_dt = self._parse_time_cursor(ctx.date)
+                        has_list_date = bool(ctx.date)
+                        needs_detail_cursor = article_dt is None
+
+                        if (
+                            not needs_detail_cursor
+                            and article_dt is not None
+                            and article_dt.date() == time_cutoff.date()
+                            and article_dt.time() == datetime.min.time()
+                            and time_cutoff.time() != datetime.min.time()
+                        ):
+                            needs_detail_cursor = True
+
+                        if needs_detail_cursor:
+                            detail_dt = self._prefetch_detail_cursor(spider, ctx)
+                            if detail_dt is not None:
+                                article_dt = detail_dt
+
+                        if (
+                            article_dt is not None
+                            and article_dt <= time_cutoff
+                            and not in_repair_window
+                        ):
+                            # 有列表日期时可视作当前板块已进入旧内容区，直接停止继续扫描
+                            if has_list_date:
+                                logger.debug(
+                                    f"[{source_name}] 时间拦截：{ctx.date} <= {time_cutoff}，终止当前板块"
+                                )
+                                break
+                            logger.debug(
+                                f"[{source_name}] 详情时间拦截：{ctx.title} <= {time_cutoff}，跳过文章"
+                            )
+                            continue
+
+                        if article_dt is None and not is_cold_start:
+                            if undated_grace_remaining > 0:
+                                undated_grace_remaining -= 1
+                                logger.debug(
+                                    "[%s] 弱日期站点回退：未解析到时间，允许继续提交 (%s)，本板块剩余额度=%d",
+                                    source_name,
+                                    ctx.title,
+                                    undated_grace_remaining,
+                                )
+                            else:
+                                logger.debug(
+                                    f"[{source_name}] 无法解析时间游标，保守跳过: {ctx.title}"
+                                )
+                                continue
+                    elif not is_cold_start and time_cutoff is None:
                         # 非冷启动且无时间游标时，走旧的 today 模式过滤兜底
                         if self.article_processor.should_skip_by_date(
                             ctx.date, mode, today_str
                         ):
                             continue
 
-                    # 持续追踪模式：快速跳过已存在的 URL
-                    if self.article_processor.should_skip_by_url(ctx.url, is_manual):
-                        continue
-
-                    # 线程安全地更新进度
-                    with self._progress_lock:
-                        self._current_scanned += 1
-                        current_scanned = self._current_scanned
-                    self._push_progress(current_scanned, 0, ctx.title)
-
-                    if self.article_processor.submit(
+                    if self._submit_context(
                         spider=spider,
                         ctx=ctx,
                         mode=mode,
@@ -640,11 +1101,12 @@ class SpiderScheduler:
                         is_manual=is_manual,
                     ):
                         submitted_count += 1
-                        if is_cold_start:
-                            cold_yield_count += 1
+                    if is_manual_frontier_article:
+                        manual_frontier_reached = True
+                        break
 
             except (requests.RequestException, ConnectionError, TimeoutError, ValueError) as e:
-                if getattr(spider, '_source_type', 'html') == 'rss':
+                if getattr(spider, "_is_dynamic", False):
                     try:
                         get_rules_manager().update_rule_health(
                             str(
@@ -654,6 +1116,7 @@ class SpiderScheduler:
                             status="error",
                             error_message=str(e),
                             fetched_count=0,
+                            field_hit_stats=None,
                         )
                     except Exception:
                         pass
@@ -676,6 +1139,14 @@ class SpiderScheduler:
             "stats": self.article_processor.get_stats(),
             "queue_size": self.article_processor.get_queue_size(),
         }
+
+    def _resolve_spider_timeout(self, spider: BaseSpider) -> float:
+        """根据板块数量估算单来源的最长允许执行时间。"""
+        section_count = max(1, len(self._get_sections(spider)))
+        return float(
+            self._SPIDER_TIMEOUT_BASE_SECONDS
+            + section_count * self._SPIDER_TIMEOUT_PER_SECTION_SECONDS
+        )
 
     def request_cancel(self):
         """🌟 外部调用：紧急终止所有爬虫任务"""

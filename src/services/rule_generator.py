@@ -13,21 +13,42 @@
 import json
 import logging
 import uuid
-import requests
 import threading
+from copy import deepcopy
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, FeatureNotFound
 
 from src.models.spider_rule import (
     SpiderRuleSchema,
     SpiderRuleOutput,
     RuleGenerationResult,
 )
-from src.services.selector_knowledge_base import find_matching_template
+from src.services.html_template_library import (
+    build_site_profile,
+    match_template_candidates,
+)
+from src.utils.browser_render import fetch_html_with_strategy, normalize_fetch_strategy
+from src.utils.html_rule_strategy import normalize_detail_strategy
+from src.utils.http_rule_config import (
+    normalize_request_headers,
+    normalize_cookie_string,
+    parse_cookie_string,
+    normalize_request_method,
+    normalize_request_body,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _create_soup(html: str) -> BeautifulSoup:
+    """优先使用 lxml，缺失时自动回退到内置 html.parser。"""
+    try:
+        return BeautifulSoup(html, "lxml")
+    except FeatureNotFound:
+        logger.debug("lxml 解析器不可用，回退到 html.parser")
+        return BeautifulSoup(html, "html.parser")
 
 
 def _normalize_selector(selector: str) -> str:
@@ -288,6 +309,7 @@ class RuleGeneratorService:
         """
         self.config_service = config_service
         self._generation_lock = threading.Lock()
+        self._last_html_fetch_error = ""
         logger.info("🔧 RuleGeneratorService 初始化完成")
 
     # 🌟 网站类型识别策略
@@ -387,6 +409,205 @@ class RuleGeneratorService:
 """
 
         return base_prompt + type_hint
+
+    def _build_recovery_prompt_hint(
+        self,
+        recovery_context: Optional[Dict[str, Any]],
+    ) -> str:
+        if not isinstance(recovery_context, dict):
+            return ""
+
+        health = (
+            recovery_context.get("health")
+            if isinstance(recovery_context.get("health"), dict)
+            else {}
+        )
+        snapshot = (
+            recovery_context.get("last_known_good_snapshot")
+            if isinstance(recovery_context.get("last_known_good_snapshot"), dict)
+            else {}
+        )
+        current_rule = (
+            recovery_context.get("current_rule_snapshot")
+            if isinstance(recovery_context.get("current_rule_snapshot"), dict)
+            else {}
+        )
+
+        lines = [
+            "",
+            "================================================================================",
+            "【♻️ 规则恢复上下文】",
+            "================================================================================",
+        ]
+
+        status_detail = str(health.get("status_detail") or "").strip().lower()
+        error_message = str(health.get("last_error_message") or "").strip()
+        if status_detail == "list_container_drift":
+            lines.append("- 上次失败点：旧的列表容器选择器已失效，请优先重新定位承载重复列表项的父容器。")
+        elif status_detail == "item_selector_drift":
+            lines.append("- 上次失败点：列表项选择器已失效，请优先重新定位单条重复项。")
+        elif status_detail == "field_drift":
+            lines.append("- 上次失败点：字段命中率明显下降，请尽量保留仍稳定的字段，仅修复失效字段。")
+        elif status_detail == "stale_empty":
+            lines.append("- 上次失败点：规则持续空抓，请检查站点列表结构是否改版或内容入口已迁移。")
+
+        if error_message:
+            lines.append(f"- 最近错误：{error_message}")
+
+        if snapshot:
+            lines.append("- 最近一次健康快照可作为优先参考，请尽量在其基础上最小改动：")
+            if snapshot.get("list_container"):
+                lines.append(f"  - list_container: {snapshot.get('list_container')}")
+            if snapshot.get("item_selector"):
+                lines.append(f"  - item_selector: {snapshot.get('item_selector')}")
+            field_selectors = snapshot.get("field_selectors")
+            if isinstance(field_selectors, dict) and field_selectors:
+                lines.append(
+                    f"  - field_selectors: {json.dumps(field_selectors, ensure_ascii=False)}"
+                )
+
+        if current_rule:
+            current_fields = current_rule.get("field_selectors")
+            if isinstance(current_fields, dict) and current_fields:
+                lines.append(
+                    f"- 当前待修复规则字段：{json.dumps(current_fields, ensure_ascii=False)}"
+                )
+
+        lines.append("- 输出目标：给出一套尽量稳健、语义化、可维护的新版规则。")
+        return "\n".join(lines).strip()
+
+    def _build_template_prompt_hint(
+        self,
+        template_candidates: Optional[List[Dict[str, Any]]],
+        target_fields: Optional[List[str]] = None,
+    ) -> str:
+        """将模板库推荐转成 AI 可理解的补充提示。"""
+        candidates = [
+            item for item in (template_candidates or []) if isinstance(item, dict)
+        ][:2]
+        if not candidates:
+            return ""
+
+        normalized_targets = [
+            str(field or "").strip()
+            for field in (target_fields or [])
+            if str(field or "").strip()
+        ]
+        lines = [
+            "",
+            "================================================================================",
+            "【📚 模板库候选】",
+            "================================================================================",
+            "以下模板为当前网页的高相似度候选，请优先参考其结构，再输出最终规则：",
+        ]
+        for index, candidate in enumerate(candidates, start=1):
+            field_selectors = (
+                candidate.get("field_selectors")
+                if isinstance(candidate.get("field_selectors"), dict)
+                else {}
+            )
+            compact_fields = {
+                field: field_selectors.get(field)
+                for field in normalized_targets
+                if str(field_selectors.get(field) or "").strip()
+            }
+            if not compact_fields:
+                compact_fields = {
+                    key: value
+                    for key, value in list(field_selectors.items())[:4]
+                    if str(key or "").strip() and str(value or "").strip()
+                }
+            lines.append(
+                f"{index}. {candidate.get('name')} / {candidate.get('profile_label')} / {candidate.get('confidence_label')}"
+            )
+            if candidate.get("reason"):
+                lines.append(f"   - 匹配原因：{candidate.get('reason')}")
+            if candidate.get("list_container"):
+                lines.append(f"   - list_container: {candidate.get('list_container')}")
+            if candidate.get("item_selector"):
+                lines.append(f"   - item_selector: {candidate.get('item_selector')}")
+            if compact_fields:
+                lines.append(
+                    f"   - field_selectors: {json.dumps(compact_fields, ensure_ascii=False)}"
+                )
+        lines.append("请保留模板中真正稳定的结构特征，不要机械照抄不适用的选择器。")
+        return "\n".join(lines).strip()
+
+    def _build_recovery_schema(
+        self,
+        recovery_context: Optional[Dict[str, Any]],
+        target_fields: List[str],
+    ) -> Optional[SpiderRuleSchema]:
+        if not isinstance(recovery_context, dict):
+            return None
+
+        snapshot = (
+            recovery_context.get("last_known_good_snapshot")
+            if isinstance(recovery_context.get("last_known_good_snapshot"), dict)
+            else {}
+        )
+        if not snapshot:
+            return None
+
+        list_container = str(snapshot.get("list_container") or "").strip()
+        item_selector = str(snapshot.get("item_selector") or "").strip()
+        field_selectors = (
+            snapshot.get("field_selectors")
+            if isinstance(snapshot.get("field_selectors"), dict)
+            else {}
+        )
+        if not list_container or not item_selector or not field_selectors:
+            return None
+
+        normalized_fields: Dict[str, str] = {}
+        preferred_fields = [str(field or "").strip() for field in target_fields if str(field or "").strip()]
+        for field_name in preferred_fields:
+            selector = str(field_selectors.get(field_name) or "").strip()
+            if selector:
+                normalized_fields[field_name] = selector
+
+        if not normalized_fields:
+            normalized_fields = {
+                str(key): str(value).strip()
+                for key, value in field_selectors.items()
+                if str(key or "").strip() and str(value or "").strip()
+            }
+
+        if not normalized_fields:
+            return None
+
+        try:
+            return SpiderRuleSchema(
+                list_container=list_container,
+                item_selector=item_selector,
+                field_selectors=normalized_fields,
+            )
+        except Exception as e:
+            logger.debug("恢复快照构建 SpiderRuleSchema 失败: %s", e)
+            return None
+
+    def _sample_data_has_signal(
+        self,
+        sample_data: Optional[List[Dict[str, Any]]],
+        target_fields: List[str],
+    ) -> bool:
+        if not sample_data:
+            return False
+
+        preferred_fields = [
+            field
+            for field in target_fields
+            if str(field or "").strip().lower() in {"title", "url", "date", "time"}
+        ]
+        inspect_fields = preferred_fields or [str(field or "").strip() for field in target_fields if str(field or "").strip()]
+
+        for item in sample_data:
+            if not isinstance(item, dict):
+                continue
+            for field_name in inspect_fields:
+                if str(item.get(field_name) or "").strip():
+                    return True
+        return False
 
     def _get_llm_config(self) -> Dict[str, Any]:
         """
@@ -525,7 +746,16 @@ class RuleGeneratorService:
             },
         }
 
-    def _fetch_html_content(self, url: str, timeout: int = 30) -> Optional[str]:
+    def _fetch_html_content(
+        self,
+        url: str,
+        timeout: int = 30,
+        fetch_strategy: str = "requests_first",
+        request_method: str = "get",
+        request_body: str = "",
+        request_headers: Optional[Dict[str, str]] = None,
+        cookie_string: str = "",
+    ) -> Optional[str]:
         """
         获取网页 HTML 内容
 
@@ -536,35 +766,60 @@ class RuleGeneratorService:
         Returns:
             HTML 内容字符串，失败返回 None
         """
-        try:
-            # 🌟 强力伪装：模拟真实浏览器行为，绕过基础反爬
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-                "Cache-Control": "max-age=0",
-                "Upgrade-Insecure-Requests": "1",
-                "Sec-Fetch-Dest": "document",
-                "Sec-Fetch-Mode": "navigate",
-                "Sec-Fetch-Site": "none",
-                "Sec-Fetch-User": "?1",
-            }
+        # 🌟 强力伪装：模拟真实浏览器行为，绕过基础反爬
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            "Cache-Control": "max-age=0",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+        }
 
-            response = requests.get(url, headers=headers, timeout=timeout)
-            response.raise_for_status()
+        normalized_strategy = normalize_fetch_strategy(fetch_strategy)
+        normalized_request_method = normalize_request_method(request_method)
+        normalized_request_body = normalize_request_body(request_body)
+        normalized_request_headers = normalize_request_headers(request_headers)
+        normalized_cookie_string = normalize_cookie_string(cookie_string)
+        merged_headers = {
+            **headers,
+            **normalized_request_headers,
+        }
+        result = fetch_html_with_strategy(
+            url,
+            strategy=normalized_strategy,
+            headers=merged_headers,
+            browser_headers=normalized_request_headers,
+            cookies=parse_cookie_string(normalized_cookie_string),
+            request_method=normalized_request_method,
+            request_body=normalized_request_body,
+            request_timeout_seconds=timeout,
+            browser_timeout_seconds=max(timeout, 20),
+            browser_wait_ms=1200,
+        )
+        if result.success:
+            self._last_html_fetch_error = ""
+            logger.info(
+                "网页抓取成功: strategy=%s, engine=%s, url=%s",
+                normalized_strategy,
+                result.engine or "unknown",
+                url,
+            )
+            return result.html
 
-            # 处理编码
-            if response.encoding is None or response.encoding == "ISO-8859-1":
-                response.encoding = response.apparent_encoding or "utf-8"
-
-            return response.text
-
-        except requests.exceptions.Timeout:
-            logger.error(f"获取网页超时: {url}")
-            return None
-        except requests.exceptions.RequestException as e:
-            logger.error(f"获取网页失败: {url}, 错误: {e}")
-            return None
+        self._last_html_fetch_error = str(
+            result.error_message or f"获取网页失败: {url}"
+        ).strip()
+        logger.error(
+            "获取网页失败: strategy=%s, url=%s, 错误=%s",
+            normalized_strategy,
+            url,
+            self._last_html_fetch_error,
+        )
+        return None
 
     def _prune_html(self, raw_html: str) -> str:
         """
@@ -581,7 +836,7 @@ class RuleGeneratorService:
         """
         from bs4 import Comment
 
-        soup = BeautifulSoup(raw_html, 'lxml')
+        soup = _create_soup(raw_html)
 
         # 1. 移除无意义的标签（保留语义标签如 article, section, nav）
         for tag in soup(['script', 'style', 'noscript', 'iframe', 'canvas', 'svg', 'path']):
@@ -634,7 +889,7 @@ class RuleGeneratorService:
                 return None
 
             # 2. 分析 HTML 结构，识别主内容区域
-            soup = BeautifulSoup(raw_html, 'lxml')
+            soup = _create_soup(raw_html)
 
             # 3. 常见的主内容区域标签
             main_content_tags = [
@@ -682,6 +937,132 @@ class RuleGeneratorService:
             logger.warning(f"主内容区域提取失败: {e}")
             return None
 
+    def _build_page_summary(
+        self,
+        *,
+        url: str,
+        raw_html: str,
+        pruned_html: str,
+        website_type: str = "",
+        fetch_strategy: str = "requests_first",
+        request_method: str = "get",
+        content_region: Optional[Dict[str, Any]] = None,
+        site_profile: Optional[Dict[str, Any]] = None,
+        template_candidates: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        """构建轻量页面摘要，供规则调试与持久化保存。"""
+        soup = _create_soup(raw_html)
+        title = ""
+        if soup.title and soup.title.string:
+            title = soup.title.string.strip()
+
+        meta_description = ""
+        for attrs in (
+            {"name": "description"},
+            {"property": "og:description"},
+            {"name": "Description"},
+        ):
+            meta = soup.find("meta", attrs=attrs)
+            content = str(meta.get("content") or "").strip() if meta else ""
+            if content:
+                meta_description = content
+                break
+
+        canonical_link = ""
+        canonical_tag = soup.find("link", attrs={"rel": lambda value: value and "canonical" in value})
+        if canonical_tag:
+            canonical_link = str(canonical_tag.get("href") or "").strip()
+
+        headings = []
+        for heading in soup.find_all(["h1", "h2", "h3"], limit=8):
+            text = heading.get_text(" ", strip=True)
+            if not text:
+                continue
+            headings.append(
+                {
+                    "level": heading.name.lower(),
+                    "text": text[:120],
+                }
+            )
+
+        signal_counts = {
+            "link_count": len(soup.find_all("a", href=True)),
+            "list_count": len(soup.find_all(["ul", "ol"])),
+            "table_count": len(soup.find_all("table")),
+            "article_count": len(soup.find_all("article")),
+            "heading_count": len(soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6"])),
+        }
+
+        detected_regions = []
+        if isinstance(content_region, dict):
+            detected_regions = (
+                content_region.get("detected_regions")
+                if isinstance(content_region.get("detected_regions"), list)
+                else []
+            )
+
+        compression_ratio = 0.0
+        if raw_html:
+            compression_ratio = round(len(pruned_html) / len(raw_html) * 100, 2)
+
+        return {
+            "url": str(url or "").strip(),
+            "title": title,
+            "description": meta_description[:240],
+            "canonical_url": canonical_link,
+            "website_type": str(website_type or "").strip(),
+            "fetch_strategy": str(fetch_strategy or "").strip(),
+            "request_method": str(request_method or "").strip().lower(),
+            "fetched_at": datetime.now().isoformat(),
+            "html_length": len(raw_html or ""),
+            "pruned_html_length": len(pruned_html or ""),
+            "compression_ratio": compression_ratio,
+            "signal_counts": signal_counts,
+            "heading_outline": headings,
+            "detected_regions": detected_regions[:3],
+            "main_text_excerpt": str(
+                (content_region or {}).get("text_content") or ""
+            ).strip()[:240],
+            "site_profile": (
+                deepcopy(site_profile) if isinstance(site_profile, dict) else None
+            ),
+            "template_recommendations": (
+                deepcopy(template_candidates[:3])
+                if isinstance(template_candidates, list)
+                else []
+            ),
+            "matched_template": None,
+        }
+
+    def _build_test_snapshot(
+        self,
+        *,
+        sample_data: Optional[List[Dict[str, Any]]] = None,
+        detail_samples: Optional[List[Dict[str, Any]]] = None,
+        detail_preview_required: bool = False,
+        detail_preview_passed: bool = False,
+        detail_preview_message: str = "",
+        stability_score: Optional[float] = None,
+        stability_rating: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """构建最近一次规则测试快照。"""
+        return {
+            "tested_at": datetime.now().isoformat(),
+            "sample_count": len(sample_data or []),
+            "sample_data": deepcopy(sample_data or []),
+            "detail_sample_count": len(detail_samples or []),
+            "detail_samples": deepcopy(detail_samples or []),
+            "detail_preview_required": bool(detail_preview_required),
+            "detail_preview_passed": bool(detail_preview_passed),
+            "detail_preview_message": str(detail_preview_message or "").strip(),
+            "stability_score": (
+                round(float(stability_score), 1)
+                if stability_score is not None
+                else None
+            ),
+            "stability_rating": str(stability_rating or "").strip(),
+        }
+
     def _test_rule_with_beautifulsoup(
         self, html_content: str, rule: SpiderRuleSchema, max_items: int = 3
     ) -> List[Dict[str, str]]:
@@ -702,7 +1083,7 @@ class RuleGeneratorService:
             提取的样本数据列表
         """
         try:
-            soup = BeautifulSoup(html_content, 'lxml')
+            soup = _create_soup(html_content)
 
             # 查找列表容器
             container = soup.select_one(rule.list_container)
@@ -821,8 +1202,15 @@ class RuleGeneratorService:
         task_purpose: str = "",
         custom_summary_prompt: str = "",
         max_items: Optional[int] = None,
+        detail_strategy: str = "detail_preferred",
         body_field: str = "",
         skip_detail: bool = False,
+        fetch_strategy: str = "requests_first",
+        request_method: str = "get",
+        request_body: str = "",
+        request_headers: Optional[Dict[str, str]] = None,
+        cookie_string: str = "",
+        recovery_context: Optional[Dict[str, Any]] = None,
     ) -> RuleGenerationResult:
         """
         生成并测试爬虫规则（带 AI 自我反思与自愈机制）
@@ -839,8 +1227,11 @@ class RuleGeneratorService:
             task_purpose: 任务目的/类别（映射到数据库 category 字段）
             custom_summary_prompt: 🌟 专属 AI 提示词（用于定制摘要输出格式）
             max_items: 🌟 单次抓取最大条目数
+            detail_strategy: 🌟 HTML 正文抓取策略（list_only / detail_preferred / hybrid）
             body_field: 🌟 正文来源字段（仅 HTML 爬虫有效）
             skip_detail: 🌟 是否跳过详情页抓取（仅 HTML 爬虫有效）
+            request_headers: 🌟 可选，自定义请求头
+            cookie_string: 🌟 可选，Cookie 原始字符串
 
         Returns:
             RuleGenerationResult 包含生成的规则和沙盒测试数据
@@ -849,6 +1240,8 @@ class RuleGeneratorService:
         MAX_RETRIES = 2
         attempt = 0
         ai_hint = ""  # AI 分析师的修复建议
+        recovery_applied = False
+        recovery_message = ""
 
         with self._generation_lock:
             try:
@@ -875,73 +1268,43 @@ class RuleGeneratorService:
                 graph_config = self._build_scrapegraph_config(llm_config)
 
                 # 🌟 4. 获取并清洗 HTML（DOM 降噪预处理）
-                raw_html = self._fetch_html_content(url)
+                normalized_fetch_strategy = normalize_fetch_strategy(fetch_strategy)
+                normalized_request_method = normalize_request_method(
+                    request_method
+                )
+                normalized_request_body = normalize_request_body(request_body)
+                normalized_detail_strategy = normalize_detail_strategy(
+                    detail_strategy,
+                    skip_detail=skip_detail,
+                )
+                raw_html = self._fetch_html_content(
+                    url,
+                    fetch_strategy=normalized_fetch_strategy,
+                    request_method=normalized_request_method,
+                    request_body=normalized_request_body,
+                    request_headers=request_headers,
+                    cookie_string=cookie_string,
+                )
                 if not raw_html:
                     return RuleGenerationResult(
                         success=False,
-                        error_message="无法获取网页内容，请检查 URL 是否可访问",
+                        error_message=self._last_html_fetch_error
+                        or "无法获取网页内容，请检查 URL 是否可访问",
                     )
 
                 pruned_html = self._prune_html(raw_html)
-                compression_ratio = len(pruned_html) / len(raw_html) * 100 if raw_html else 0
-                logger.info(f"🔧 HTML 降噪: {len(raw_html)} -> {len(pruned_html)} 字符, 压缩率 {compression_ratio:.1f}%")
+                compression_ratio = (
+                    len(pruned_html) / len(raw_html) * 100 if raw_html else 0
+                )
+                logger.info(
+                    f"🔧 HTML 降噪: {len(raw_html)} -> {len(pruned_html)} 字符, 压缩率 {compression_ratio:.1f}%"
+                )
 
-                # 🌟 5. 知识库匹配（优先使用已知模板）
-                known_template = find_matching_template(url)
-                if known_template:
-                    logger.info(f"📚 匹配到已知模板: {known_template.get('notes', '未知')}")
-                    # 直接使用已知模板进行沙盒测试
-                    try:
-                        template_schema = SpiderRuleSchema(
-                            list_container=known_template.get("list_container", ""),
-                            item_selector=known_template.get("item_selector", ""),
-                            field_selectors=known_template.get("field_selectors", {}),
-                        )
-                        sample_data = self._test_rule_with_beautifulsoup(
-                            raw_html, template_schema, max_items=3
-                        )
-                        if sample_data and len(sample_data) > 0:
-                            # 模板有效，直接返回
-                            logger.info(f"✅ 知识库模板有效，直接使用！提取到 {len(sample_data)} 条数据")
-                            rule_id = f"rule_{uuid.uuid4().hex[:8]}"
-                            now = datetime.now().isoformat()
-                            rule_output = SpiderRuleOutput(
-                                rule_id=rule_id,
-                                task_id=task_id,
-                                task_name=task_name,
-                                task_purpose=task_purpose,
-                                url=url,
-                                list_container=template_schema.list_container,
-                                item_selector=template_schema.item_selector,
-                                field_selectors=template_schema.field_selectors,
-                                require_ai_summary=require_ai_summary,
-                                enable_ai_summary=require_ai_summary,
-                                custom_summary_prompt=custom_summary_prompt,
-                                summary_prompt=custom_summary_prompt,
-                                max_items=max_items,
-                                body_field=body_field,
-                                skip_detail=skip_detail,
-                                created_at=now,
-                                updated_at=now,
-                                enabled=True,
-                            )
-                            # 计算稳定性评分
-                            avg_score = 80.0  # 已知模板默认高分
-                            return RuleGenerationResult(
-                                success=True,
-                                rule=rule_output,
-                                sample_data=sample_data,
-                                stability_score=avg_score,
-                                stability_rating="🟢 优秀 (知识库模板)",
-                            )
-                    except Exception as e:
-                        logger.warning(f"知识库模板测试失败，回退到 AI 生成: {e}")
-
-                # 🌟 6. 网站类型识别
-                website_type, website_strategy = self._identify_website_type(url, raw_html)
+                website_type, website_strategy = self._identify_website_type(
+                    url, raw_html
+                )
                 logger.info(f"🌐 网站类型: {website_type}")
 
-                # 🌟 7. 主内容区域提取（使用 trafilatura）
                 content_region = self._extract_main_content_region(raw_html)
                 if content_region and content_region.get('detected_regions'):
                     # 将检测到的区域信息注入策略
@@ -956,6 +1319,273 @@ class RuleGeneratorService:
                     website_strategy['hints'] = website_strategy.get('hints', '') + region_hints
                     logger.info(f"📍 检测到 {len(content_region['detected_regions'])} 个潜在列表区域")
 
+                site_profile = build_site_profile(
+                    url,
+                    raw_html,
+                    target_fields=target_fields,
+                )
+                template_candidates = match_template_candidates(
+                    url,
+                    raw_html,
+                    target_fields=target_fields,
+                    limit=3,
+                )
+                template_prompt_hint = self._build_template_prompt_hint(
+                    template_candidates,
+                    target_fields,
+                )
+
+                page_summary = self._build_page_summary(
+                    url=url,
+                    raw_html=raw_html,
+                    pruned_html=pruned_html,
+                    website_type=website_type,
+                    fetch_strategy=normalized_fetch_strategy,
+                    request_method=normalized_request_method,
+                    content_region=content_region,
+                    site_profile=site_profile,
+                    template_candidates=template_candidates,
+                )
+
+                def build_success_result(
+                    *,
+                    rule_output: SpiderRuleOutput,
+                    sample_rows: List[Dict[str, Any]],
+                    detail_rows: List[Dict[str, Any]],
+                    detail_required: bool,
+                    detail_passed: bool,
+                    detail_message: str,
+                    stability_score: Optional[float],
+                    stability_rating: Optional[str],
+                    matched_template: Optional[Dict[str, Any]] = None,
+                ) -> RuleGenerationResult:
+                    result_page_summary = deepcopy(page_summary)
+                    if isinstance(result_page_summary, dict):
+                        result_page_summary["matched_template"] = (
+                            deepcopy(matched_template)
+                            if isinstance(matched_template, dict)
+                            else None
+                        )
+                    return RuleGenerationResult(
+                        success=True,
+                        rule=rule_output,
+                        sample_data=sample_rows,
+                        detail_samples=detail_rows,
+                        detail_preview_required=detail_required,
+                        detail_preview_passed=detail_passed,
+                        detail_preview_message=detail_message,
+                        recovery_applied=recovery_applied,
+                        recovery_message=recovery_message or None,
+                        page_summary=result_page_summary,
+                        test_snapshot=self._build_test_snapshot(
+                            sample_data=sample_rows,
+                            detail_samples=detail_rows,
+                            detail_preview_required=detail_required,
+                            detail_preview_passed=detail_passed,
+                            detail_preview_message=detail_message,
+                            stability_score=stability_score,
+                            stability_rating=stability_rating,
+                        ),
+                        stability_score=(
+                            round(float(stability_score), 1)
+                            if stability_score is not None
+                            else None
+                        ),
+                        stability_rating=stability_rating,
+                    )
+
+                recovery_prompt_hint = self._build_recovery_prompt_hint(
+                    recovery_context
+                )
+                if recovery_prompt_hint:
+                    recovery_applied = True
+                    recovery_message = "已基于历史健康快照和失败上下文辅助重生成。"
+                recovery_schema = self._build_recovery_schema(
+                    recovery_context,
+                    target_fields,
+                )
+                if recovery_schema:
+                    try:
+                        recovery_sample_data = self._test_rule_with_beautifulsoup(
+                            raw_html,
+                            recovery_schema,
+                            max_items=3,
+                        )
+                        if self._sample_data_has_signal(
+                            recovery_sample_data,
+                            target_fields,
+                        ):
+                            logger.info("♻️ 最近健康快照仍可用，直接复用恢复规则")
+                            rule_id = (
+                                str(
+                                    (
+                                        recovery_context or {}
+                                    ).get("existing_rule_id")
+                                    or f"rule_{uuid.uuid4().hex[:8]}"
+                                ).strip()
+                                or f"rule_{uuid.uuid4().hex[:8]}"
+                            )
+                            now = datetime.now().isoformat()
+                            rule_output = SpiderRuleOutput(
+                                rule_id=rule_id,
+                                task_id=task_id,
+                                task_name=task_name,
+                                task_purpose=task_purpose,
+                                url=url,
+                                list_container=recovery_schema.list_container,
+                                item_selector=recovery_schema.item_selector,
+                                field_selectors=recovery_schema.field_selectors,
+                                require_ai_summary=require_ai_summary,
+                                enable_ai_summary=require_ai_summary,
+                                custom_summary_prompt=custom_summary_prompt,
+                                summary_prompt=custom_summary_prompt,
+                                max_items=max_items,
+                                detail_strategy=normalized_detail_strategy,
+                                body_field=body_field,
+                                skip_detail=skip_detail,
+                                fetch_strategy=normalized_fetch_strategy,
+                                request_method=normalized_request_method,
+                                request_body=normalized_request_body,
+                                request_headers=normalize_request_headers(
+                                    request_headers
+                                ),
+                                cookie_string=normalize_cookie_string(
+                                    cookie_string
+                                ),
+                                created_at=now,
+                                updated_at=now,
+                                enabled=True,
+                            )
+                            (
+                                detail_samples,
+                                detail_preview_required,
+                                detail_preview_passed,
+                                detail_preview_message,
+                            ) = self._build_html_detail_preview(
+                                rule_output,
+                                max_items=2,
+                            )
+                            recovery_applied = True
+                            recovery_message = "已直接复用最近一次健康规则快照。"
+                            return build_success_result(
+                                rule_output=rule_output,
+                                sample_rows=recovery_sample_data,
+                                detail_rows=detail_samples,
+                                detail_required=detail_preview_required,
+                                detail_passed=detail_preview_passed,
+                                detail_message=detail_preview_message,
+                                stability_score=75.0,
+                                stability_rating="🟢 优秀 (健康快照恢复)",
+                            )
+                        recovery_applied = True
+                        recovery_message = "已加载最近一次健康快照作为恢复参考。"
+                    except Exception as e:
+                        logger.warning("恢复快照测试失败，转入 AI 重生成: %s", e)
+
+                # 🌟 5. 模板库候选优先
+                if template_candidates:
+                    logger.info(
+                        "📚 模板库命中 %s 个候选，最高分 %s",
+                        len(template_candidates),
+                        template_candidates[0].get("score"),
+                    )
+                for candidate in template_candidates:
+                    try:
+                        template_schema = SpiderRuleSchema(
+                            list_container=str(candidate.get("list_container") or ""),
+                            item_selector=str(candidate.get("item_selector") or ""),
+                            field_selectors=(
+                                candidate.get("field_selectors")
+                                if isinstance(candidate.get("field_selectors"), dict)
+                                else {}
+                            ),
+                        )
+                        sample_data = self._test_rule_with_beautifulsoup(
+                            raw_html,
+                            template_schema,
+                            max_items=3,
+                        )
+                        if not self._sample_data_has_signal(
+                            sample_data,
+                            target_fields,
+                        ):
+                            continue
+
+                        logger.info(
+                            "✅ 模板候选命中成功：%s（%s）",
+                            candidate.get("name"),
+                            candidate.get("confidence_label"),
+                        )
+                        rule_id = f"rule_{uuid.uuid4().hex[:8]}"
+                        now = datetime.now().isoformat()
+                        rule_output = SpiderRuleOutput(
+                            rule_id=rule_id,
+                            task_id=task_id,
+                            task_name=task_name,
+                            task_purpose=task_purpose,
+                            url=url,
+                            list_container=template_schema.list_container,
+                            item_selector=template_schema.item_selector,
+                            field_selectors=template_schema.field_selectors,
+                            require_ai_summary=require_ai_summary,
+                            enable_ai_summary=require_ai_summary,
+                            custom_summary_prompt=custom_summary_prompt,
+                            summary_prompt=custom_summary_prompt,
+                            max_items=max_items,
+                            detail_strategy=normalized_detail_strategy,
+                            body_field=body_field,
+                            skip_detail=skip_detail,
+                            fetch_strategy=normalized_fetch_strategy,
+                            request_method=normalized_request_method,
+                            request_body=normalized_request_body,
+                            request_headers=normalize_request_headers(
+                                request_headers
+                            ),
+                            cookie_string=normalize_cookie_string(
+                                cookie_string
+                            ),
+                            detail_body_selector=str(
+                                candidate.get("detail_body_selector") or ""
+                            ),
+                            detail_time_selector=str(
+                                candidate.get("detail_time_selector") or ""
+                            ),
+                            detail_attachment_selector=str(
+                                candidate.get("detail_attachment_selector") or ""
+                            ),
+                            detail_image_selector=str(
+                                candidate.get("detail_image_selector") or ""
+                            ),
+                            created_at=now,
+                            updated_at=now,
+                            enabled=True,
+                        )
+                        (
+                            detail_samples,
+                            detail_preview_required,
+                            detail_preview_passed,
+                            detail_preview_message,
+                        ) = self._build_html_detail_preview(
+                            rule_output,
+                            max_items=2,
+                        )
+                        candidate_score = float(candidate.get("score") or 80.0)
+                        return build_success_result(
+                            rule_output=rule_output,
+                            sample_rows=sample_data,
+                            detail_rows=detail_samples,
+                            detail_required=detail_preview_required,
+                            detail_passed=detail_preview_passed,
+                            detail_message=detail_preview_message,
+                            stability_score=max(candidate_score, 80.0),
+                            stability_rating=(
+                                f"🟢 优秀 (模板库：{candidate.get('name')})"
+                            ),
+                            matched_template=candidate,
+                        )
+                    except Exception as e:
+                        logger.warning("模板候选测试失败，回退到 AI 生成: %s", e)
+
                 # 🌟 ========== 自我反思循环 ==========
                 last_error = None
                 rule_schema = None
@@ -968,6 +1598,10 @@ class RuleGeneratorService:
 
                     # 🌟 动态构建 Prompt（注入网站类型策略 + AI 分析师的建议）
                     prompt = self._build_enhanced_prompt(target_fields, website_type, website_strategy)
+                    if recovery_prompt_hint:
+                        prompt = f"{prompt}\n\n{recovery_prompt_hint}"
+                    if template_prompt_hint:
+                        prompt = f"{prompt}\n\n{template_prompt_hint}"
                     if ai_hint:
                         prompt = f"{prompt}\n\n⚠️ 上次提取失败，AI 分析师的修复建议：{ai_hint}"
                         logger.info(f"💡 注入 AI 修复建议: {ai_hint[:100]}...")
@@ -1089,6 +1723,8 @@ class RuleGeneratorService:
                             try:
                                 sec_graph_config = self._build_scrapegraph_config(sec_config)
                                 prompt = self._build_enhanced_prompt(target_fields, website_type, website_strategy)
+                                if template_prompt_hint:
+                                    prompt = f"{prompt}\n\n{template_prompt_hint}"
 
                                 sec_scraper = SmartScraperGraph(
                                     prompt=prompt,
@@ -1145,8 +1781,14 @@ class RuleGeneratorService:
                     custom_summary_prompt=custom_summary_prompt,
                     summary_prompt=custom_summary_prompt,
                     max_items=max_items,
+                    detail_strategy=normalized_detail_strategy,
                     body_field=body_field,
                     skip_detail=skip_detail,
+                    fetch_strategy=normalized_fetch_strategy,
+                    request_method=normalized_request_method,
+                    request_body=normalized_request_body,
+                    request_headers=normalize_request_headers(request_headers),
+                    cookie_string=normalize_cookie_string(cookie_string),
                     created_at=now,
                     updated_at=now,
                     enabled=True,
@@ -1176,11 +1818,24 @@ class RuleGeneratorService:
                 stability_rating = get_stability_rating(avg_score)
                 logger.info(f"🎯 综合稳定性评分: {avg_score:.1f}分 - {stability_rating}")
 
-                return RuleGenerationResult(
-                    success=True,
-                    rule=rule_output,
-                    sample_data=sample_data,
-                    stability_score=round(avg_score, 1),
+                (
+                    detail_samples,
+                    detail_preview_required,
+                    detail_preview_passed,
+                    detail_preview_message,
+                ) = self._build_html_detail_preview(
+                    rule_output,
+                    max_items=2,
+                )
+
+                return build_success_result(
+                    rule_output=rule_output,
+                    sample_rows=sample_data,
+                    detail_rows=detail_samples,
+                    detail_required=detail_preview_required,
+                    detail_passed=detail_preview_passed,
+                    detail_message=detail_preview_message,
+                    stability_score=avg_score,
                     stability_rating=stability_rating,
                 )
 
@@ -1276,7 +1931,22 @@ class RuleGeneratorService:
         """
         try:
             # 获取 HTML
-            html_content = self._fetch_html_content(rule.url)
+            html_content = self._fetch_html_content(
+                rule.url,
+                fetch_strategy=str(rule.fetch_strategy or "requests_first"),
+                request_method=normalize_request_method(
+                    getattr(rule, "request_method", "get")
+                ),
+                request_body=normalize_request_body(
+                    getattr(rule, "request_body", "")
+                ),
+                request_headers=normalize_request_headers(
+                    getattr(rule, "request_headers", {})
+                ),
+                cookie_string=normalize_cookie_string(
+                    getattr(rule, "cookie_string", "")
+                ),
+            )
             if not html_content:
                 return []
 
@@ -1295,3 +1965,388 @@ class RuleGeneratorService:
         except Exception as e:
             logger.error(f"测试规则失败: {e}")
             return []
+
+    def _detail_preview_has_primary_content(
+        self, detail: Optional[Dict[str, Any]]
+    ) -> bool:
+        if not isinstance(detail, dict):
+            return False
+        return any(
+            [
+                str(detail.get("body_text") or "").strip(),
+                str(detail.get("raw_markdown") or "").strip(),
+                str(detail.get("body_html") or "").strip(),
+                bool(detail.get("content_blocks")),
+            ]
+        )
+
+    def _merge_preview_asset_dicts(
+        self,
+        primary: Optional[List[Dict[str, Any]]],
+        fallback: Optional[List[Dict[str, Any]]],
+    ) -> List[Dict[str, Any]]:
+        merged: List[Dict[str, Any]] = []
+        seen_keys: set[str] = set()
+        for bucket in (primary or [], fallback or []):
+            if not isinstance(bucket, list):
+                continue
+            for item in bucket:
+                if not isinstance(item, dict):
+                    continue
+                item_url = str(item.get("url") or "").strip()
+                dedupe_key = item_url or json.dumps(
+                    item,
+                    sort_keys=True,
+                    ensure_ascii=False,
+                )
+                if dedupe_key in seen_keys:
+                    continue
+                seen_keys.add(dedupe_key)
+                merged.append(dict(item))
+        return merged
+
+    def _merge_preview_image_urls(
+        self,
+        primary: Optional[List[str]],
+        fallback: Optional[List[str]],
+        image_assets: Optional[List[Dict[str, Any]]] = None,
+    ) -> List[str]:
+        merged: List[str] = []
+        seen: set[str] = set()
+
+        for bucket in (primary or [], fallback or []):
+            if not isinstance(bucket, list):
+                continue
+            for value in bucket:
+                clean_value = str(value or "").strip()
+                if not clean_value or clean_value in seen:
+                    continue
+                seen.add(clean_value)
+                merged.append(clean_value)
+
+        if isinstance(image_assets, list):
+            for item in image_assets:
+                if not isinstance(item, dict):
+                    continue
+                clean_value = str(item.get("url") or "").strip()
+                if not clean_value or clean_value in seen:
+                    continue
+                seen.add(clean_value)
+                merged.append(clean_value)
+
+        return merged
+
+    def _build_list_fallback_detail_preview(
+        self, article: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        image_assets = (
+            article.get("image_assets")
+            if isinstance(article.get("image_assets"), list)
+            else []
+        )
+        images = self._merge_preview_image_urls(
+            article.get("images") if isinstance(article.get("images"), list) else [],
+            [
+                item.get("url")
+                for item in image_assets
+                if isinstance(item, dict) and item.get("url")
+            ],
+            image_assets,
+        )
+        raw_markdown = str(article.get("raw_markdown") or "").strip()
+        body_text = str(article.get("body_text") or "").strip()
+        return {
+            "title": str(article.get("title") or "").strip(),
+            "url": str(article.get("url") or "").strip(),
+            "body_text": body_text,
+            "raw_markdown": raw_markdown or body_text,
+            "body_html": str(article.get("body_html") or "").strip(),
+            "attachments": (
+                article.get("attachments")
+                if isinstance(article.get("attachments"), list)
+                else []
+            ),
+            "image_assets": image_assets,
+            "images": images,
+            "content_blocks": (
+                article.get("content_blocks")
+                if isinstance(article.get("content_blocks"), list)
+                else []
+            ),
+            "exact_time": str(article.get("date") or "").strip(),
+        }
+
+    def _merge_detail_preview_with_list_fallback(
+        self,
+        detail: Optional[Dict[str, Any]],
+        article: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        merged = dict(detail or {})
+        fallback = self._build_list_fallback_detail_preview(article)
+
+        if not self._detail_preview_has_primary_content(merged) and self._detail_preview_has_primary_content(fallback):
+            merged["body_text"] = fallback.get("body_text", "")
+            merged["body_html"] = fallback.get("body_html", "")
+            merged["raw_markdown"] = fallback.get("raw_markdown", "")
+            if fallback.get("content_blocks"):
+                merged["content_blocks"] = fallback.get("content_blocks", [])
+            if fallback.get("image_assets"):
+                merged["image_assets"] = fallback.get("image_assets", [])
+            if fallback.get("images"):
+                merged["images"] = fallback.get("images", [])
+
+        merged["title"] = str(merged.get("title") or article.get("title") or "").strip()
+        merged["url"] = str(merged.get("url") or article.get("url") or "").strip()
+        merged["exact_time"] = str(
+            merged.get("exact_time") or article.get("date") or ""
+        ).strip()
+        merged["attachments"] = self._merge_preview_asset_dicts(
+            merged.get("attachments"),
+            fallback.get("attachments"),
+        )
+        merged["image_assets"] = self._merge_preview_asset_dicts(
+            merged.get("image_assets"),
+            fallback.get("image_assets"),
+        )
+        merged["images"] = self._merge_preview_image_urls(
+            merged.get("images"),
+            fallback.get("images"),
+            merged.get("image_assets"),
+        )
+        if not merged.get("content_blocks") and fallback.get("content_blocks"):
+            merged["content_blocks"] = fallback.get("content_blocks", [])
+        return merged
+
+    def _build_detail_preview_sample(
+        self,
+        spider: Any,
+        article: Dict[str, Any],
+        detail_strategy: str,
+    ) -> Dict[str, Any]:
+        list_fallback = self._build_list_fallback_detail_preview(article)
+        list_body_ok = self._detail_preview_has_primary_content(list_fallback)
+
+        if detail_strategy == "list_only":
+            preview_payload = list_fallback
+            return {
+                "title": preview_payload.get("title", ""),
+                "url": preview_payload.get("url", ""),
+                "list_date": str(article.get("date") or "").strip(),
+                "status": "passed" if list_body_ok else "failed",
+                "status_label": "列表正文可用" if list_body_ok else "列表正文为空",
+                "status_reason": (
+                    "当前策略为列表页足够，无需详情抓取。"
+                    if list_body_ok
+                    else "列表页正文为空，请补充正文来源字段或切换详情策略。"
+                ),
+                "body_source": "list_only",
+                "body_ok": list_body_ok,
+                "exact_time": str(preview_payload.get("exact_time") or "").strip(),
+                "attachment_count": len(preview_payload.get("attachments") or []),
+                "image_count": len(preview_payload.get("images") or []),
+                "attachments": (preview_payload.get("attachments") or [])[:3],
+                "images": (preview_payload.get("images") or [])[:6],
+                "raw_markdown": str(
+                    preview_payload.get("raw_markdown")
+                    or preview_payload.get("body_text")
+                    or ""
+                ).strip(),
+            }
+
+        detail_error = ""
+        detail_payload: Optional[Dict[str, Any]] = None
+        try:
+            detail_payload = spider.fetch_detail(str(article.get("url") or "").strip())
+        except Exception as e:
+            detail_error = str(e)
+
+        detail_body_ok = self._detail_preview_has_primary_content(detail_payload)
+        preview_payload = self._merge_detail_preview_with_list_fallback(
+            detail_payload,
+            article,
+        )
+
+        if detail_body_ok:
+            status = "passed"
+            status_label = "详情正文命中"
+            status_reason = "详情页正文已成功提取。"
+            body_source = "detail"
+        elif list_body_ok:
+            status = "warning"
+            status_label = "仅回退列表正文"
+            status_reason = (
+                detail_error
+                or "详情页正文未命中，当前仅能回退到列表页正文。"
+            )
+            body_source = "list_fallback"
+        else:
+            status = "failed"
+            status_label = "详情正文缺失"
+            status_reason = detail_error or "详情页与列表页均未提取到可用正文。"
+            body_source = "missing"
+
+        return {
+            "title": str(preview_payload.get("title") or "").strip(),
+            "url": str(preview_payload.get("url") or "").strip(),
+            "list_date": str(article.get("date") or "").strip(),
+            "status": status,
+            "status_label": status_label,
+            "status_reason": status_reason,
+            "body_source": body_source,
+            "body_ok": detail_body_ok,
+            "exact_time": str(preview_payload.get("exact_time") or "").strip(),
+            "attachment_count": len(preview_payload.get("attachments") or []),
+            "image_count": len(preview_payload.get("images") or []),
+            "attachments": (preview_payload.get("attachments") or [])[:3],
+            "images": (preview_payload.get("images") or [])[:6],
+            "raw_markdown": str(
+                preview_payload.get("raw_markdown")
+                or preview_payload.get("body_text")
+                or ""
+            ).strip(),
+        }
+
+    def _build_html_detail_preview(
+        self,
+        rule: SpiderRuleOutput,
+        max_items: int = 2,
+    ) -> tuple[List[Dict[str, Any]], bool, bool, str]:
+        detail_strategy = normalize_detail_strategy(
+            getattr(rule, "detail_strategy", ""),
+            skip_detail=bool(getattr(rule, "skip_detail", False)),
+        )
+        detail_preview_required = detail_strategy != "list_only"
+
+        if str(getattr(rule, "source_type", "html") or "html").lower() != "html":
+            return [], False, True, ""
+
+        try:
+            from src.spiders.dynamic_spider import create_dynamic_spider_from_rule
+
+            spider = create_dynamic_spider_from_rule(rule.model_dump())
+            if not spider:
+                return (
+                    [],
+                    detail_preview_required,
+                    False,
+                    "无法根据当前规则创建详情预览爬虫。",
+                )
+
+            articles = spider.fetch_list(limit=max(max_items, 1))
+        except Exception as e:
+            return (
+                [],
+                detail_preview_required,
+                False,
+                f"详情预览初始化失败：{e}",
+            )
+
+        if not articles:
+            message = "未提取到列表样本，无法生成详情预览。"
+            return [], detail_preview_required, False, message
+
+        detail_samples = [
+            self._build_detail_preview_sample(spider, article, detail_strategy)
+            for article in list(articles)[: max(max_items, 1)]
+        ]
+
+        if not detail_preview_required:
+            return (
+                detail_samples,
+                False,
+                True,
+                "当前策略为列表页足够，无需详情预览。",
+            )
+
+        passed_count = sum(
+            1 for item in detail_samples if str(item.get("status") or "") == "passed"
+        )
+        warning_count = sum(
+            1 for item in detail_samples if str(item.get("status") or "") == "warning"
+        )
+        failed_count = sum(
+            1 for item in detail_samples if str(item.get("status") or "") == "failed"
+        )
+        passed = bool(detail_samples) and warning_count == 0 and failed_count == 0
+        if passed:
+            message = f"详情预览通过，{passed_count} 条样本正文已成功命中详情页。"
+        else:
+            message = (
+                f"详情预览未通过：{warning_count + failed_count} 条样本未稳定命中详情正文。"
+                "请调整详情规则，或切换为“列表页足够”。"
+            )
+        return detail_samples, True, passed, message
+
+    def build_rule_preview_bundle(
+        self,
+        rule: SpiderRuleOutput,
+        max_items: int = 3,
+    ) -> Dict[str, Any]:
+        sample_data = self.test_existing_rule(rule, max_items=max_items)
+        detail_samples, detail_preview_required, detail_preview_passed, detail_preview_message = (
+            self._build_html_detail_preview(rule, max_items=min(max_items, 2))
+        )
+        page_summary = None
+        try:
+            raw_html = self._fetch_html_content(
+                rule.url,
+                fetch_strategy=str(rule.fetch_strategy or "requests_first"),
+                request_method=normalize_request_method(
+                    getattr(rule, "request_method", "get")
+                ),
+                request_body=normalize_request_body(
+                    getattr(rule, "request_body", "")
+                ),
+                request_headers=normalize_request_headers(
+                    getattr(rule, "request_headers", {})
+                ),
+                cookie_string=normalize_cookie_string(
+                    getattr(rule, "cookie_string", "")
+                ),
+            )
+            if raw_html:
+                pruned_html = self._prune_html(raw_html)
+                website_type, _ = self._identify_website_type(rule.url, raw_html)
+                content_region = self._extract_main_content_region(raw_html)
+                site_profile = build_site_profile(
+                    rule.url,
+                    raw_html,
+                    target_fields=list((rule.field_selectors or {}).keys()),
+                )
+                template_candidates = match_template_candidates(
+                    rule.url,
+                    raw_html,
+                    target_fields=list((rule.field_selectors or {}).keys()),
+                    limit=3,
+                )
+                page_summary = self._build_page_summary(
+                    url=rule.url,
+                    raw_html=raw_html,
+                    pruned_html=pruned_html,
+                    website_type=website_type,
+                    fetch_strategy=str(rule.fetch_strategy or "requests_first"),
+                    request_method=normalize_request_method(
+                        getattr(rule, "request_method", "get")
+                    ),
+                    content_region=content_region,
+                    site_profile=site_profile,
+                    template_candidates=template_candidates,
+                )
+        except Exception as e:
+            logger.debug("构建规则页面摘要失败: %s", e)
+
+        return {
+            "sample_data": sample_data,
+            "detail_samples": detail_samples,
+            "detail_preview_required": detail_preview_required,
+            "detail_preview_passed": detail_preview_passed,
+            "detail_preview_message": detail_preview_message,
+            "page_summary": page_summary,
+            "test_snapshot": self._build_test_snapshot(
+                sample_data=sample_data,
+                detail_samples=detail_samples,
+                detail_preview_required=detail_preview_required,
+                detail_preview_passed=detail_preview_passed,
+                detail_preview_message=detail_preview_message,
+            ),
+        }

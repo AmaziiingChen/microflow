@@ -29,6 +29,7 @@ _BLOCK_TAGS = {
 }
 
 _LIST_TAGS = {"ul", "ol"}
+_TABLE_TAGS = {"table"}
 _SKIP_TAGS = {"script", "style", "noscript", "iframe", "canvas", "svg", "path"}
 _HEADING_TAGS = {f"h{i}" for i in range(1, 7)}
 _IMAGE_CAPTION_CLASS_KEYWORDS = (
@@ -335,6 +336,15 @@ def _inline_text(
     if tag_name == "br":
         return "\n"
 
+    if tag_name == "table":
+        return _block_to_markdown(
+            node,
+            base_url,
+            images,
+            image_assets,
+            list_indent=0,
+        )
+
     if tag_name == "img":
         src = _resolve_url(base_url, node.get("data-src") or node.get("src") or "")
         if src and src not in images:
@@ -417,7 +427,7 @@ def _inline_text(
     if tag_name == "sup":
         return f"^{_clean_text(node.get_text(' ', strip=True))}"
 
-    if tag_name in _BLOCK_TAGS | _LIST_TAGS | _HEADING_TAGS:
+    if tag_name in _BLOCK_TAGS | _LIST_TAGS | _HEADING_TAGS | _TABLE_TAGS:
         return _block_to_markdown(
             node,
             base_url,
@@ -475,6 +485,107 @@ def _render_list_items(
     return "\n".join(lines)
 
 
+def _sanitize_table_html(
+    table_node: Tag,
+    base_url: str,
+    images: List[str],
+    image_assets: List[Dict[str, Any]],
+) -> str:
+    clone_soup = _make_soup(str(table_node))
+    clone_table = clone_soup.find("table")
+    if not clone_table:
+        return ""
+
+    for tag in clone_table.find_all(list(_SKIP_TAGS)):
+        tag.decompose()
+
+    for tag in clone_table.find_all(True):
+        for attr_name in list(tag.attrs.keys()):
+            lowered = str(attr_name or "").lower()
+            if lowered.startswith("on") or lowered == "style":
+                tag.attrs.pop(attr_name, None)
+
+        if tag.name == "a":
+            href = _resolve_url(base_url, str(tag.get("href") or ""))
+            if href:
+                tag["href"] = href
+                tag["target"] = "_blank"
+                tag["rel"] = "noopener noreferrer nofollow"
+            else:
+                tag.attrs.pop("href", None)
+            tag.attrs.pop("class", None)
+            tag.attrs.pop("id", None)
+            continue
+
+        if tag.name == "img":
+            src = _resolve_url(base_url, tag.get("data-src") or tag.get("src") or "")
+            if src:
+                if src not in images:
+                    images.append(src)
+                alt = _clean_text(tag.get("alt") or tag.get("data-alt") or "")
+                caption = _extract_image_caption(tag)
+                title_hint = _extract_image_title_hint(tag)
+                width = _safe_float(
+                    tag.get("data-w") or tag.get("data-width") or tag.get("width")
+                )
+                height = _safe_float(
+                    tag.get("data-h") or tag.get("data-height") or tag.get("height")
+                )
+                aspect_ratio = _safe_float(
+                    tag.get("data-ratio") or tag.get("data-aspect-ratio")
+                )
+                _register_image_asset(
+                    image_assets,
+                    src,
+                    category="body",
+                    name=caption or alt or title_hint or "表格图片",
+                    source="table_image",
+                    alt=alt,
+                    caption=caption,
+                    width=width,
+                    height=height,
+                    aspect_ratio=aspect_ratio,
+                )
+                tag["src"] = src
+                tag["referrerpolicy"] = "no-referrer"
+                tag["loading"] = "lazy"
+            else:
+                tag.decompose()
+                continue
+
+            for attr_name in ("data-src", "class", "id", "width", "height"):
+                tag.attrs.pop(attr_name, None)
+            continue
+
+        if tag.name in {
+            "table",
+            "thead",
+            "tbody",
+            "tfoot",
+            "tr",
+            "th",
+            "td",
+            "caption",
+            "colgroup",
+            "col",
+        }:
+            for attr_name in (
+                "class",
+                "id",
+                "width",
+                "height",
+                "align",
+                "valign",
+                "bgcolor",
+                "border",
+                "cellpadding",
+                "cellspacing",
+            ):
+                tag.attrs.pop(attr_name, None)
+
+    return str(clone_table)
+
+
 def _block_to_markdown(
     node: Tag,
     base_url: str,
@@ -517,6 +628,9 @@ def _block_to_markdown(
 
     if tag_name in _LIST_TAGS:
         return _render_list_items(node, base_url, images, image_assets, list_indent)
+
+    if tag_name == "table":
+        return _sanitize_table_html(node, base_url, images, image_assets)
 
     if tag_name == "pre":
         code = node.get_text("\n", strip=False).strip("\n")
@@ -594,7 +708,12 @@ _UNORDERED_LIST_RE = re.compile(r"^-\s+(.*)$")
 _QUOTE_LINE_RE = re.compile(r"^>\s?(.*)$")
 _IMAGE_LINE_RE = re.compile(r"^!\[(.*?)\]\((.*?)\)$")
 _LINK_LINE_RE = re.compile(r"^\[(.*?)\]\((.*?)\)$")
-_MARKDOWN_PROTECTED_RE = re.compile(r"!\[[^\]]*]\([^)]+\)|\[[^\]]+]\([^)]+\)|`[^`]+`")
+_MARKDOWN_PROTECTED_RE = re.compile(
+    r"!\[[^\]]*]\([^)]+\)"
+    r"|\[[^\]]+]\([^)]+\)"
+    r"|`[^`]+`"
+    r"|<(?:[^<>\"\n]+|\"[^\"]*\"|'[^']*')+>"
+)
 _BARE_URL_RE = re.compile(r"(?P<url>https?://[^\s<>\"]+)")
 _INLINE_SEGMENT_RE = re.compile(
     r"!\[(?P<img_alt>[^\]]*)\]\((?P<img_url>[^)]+)\)"

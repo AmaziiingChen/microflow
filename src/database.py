@@ -40,6 +40,7 @@ import threading
 import queue
 import re
 from src.utils.text_cleaner import strip_emoji
+from src.utils.article_identity import canonicalize_article_url
 from src.utils.ai_markdown import compose_tagged_markdown, extract_leading_tags, serialize_tags
 from typing import Optional, Dict, Any, List, Callable
 from contextlib import contextmanager
@@ -440,6 +441,35 @@ class DatabaseManager:
                 CREATE INDEX IF NOT EXISTS idx_ai_result_cache_scope_updated
                 ON ai_result_cache(cache_scope, updated_at DESC)
             ''')
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS article_annotations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    article_id INTEGER NOT NULL,
+                    view_mode TEXT NOT NULL DEFAULT 'summary',
+                    anchor_text TEXT NOT NULL DEFAULT '',
+                    anchor_prefix TEXT DEFAULT '',
+                    anchor_suffix TEXT DEFAULT '',
+                    start_offset INTEGER NOT NULL DEFAULT 0,
+                    end_offset INTEGER NOT NULL DEFAULT 0,
+                    style_payload TEXT NOT NULL DEFAULT '{}',
+                    created_at TIMESTAMP DEFAULT (datetime('now', 'localtime')),
+                    updated_at TIMESTAMP DEFAULT (datetime('now', 'localtime'))
+                )
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_article_annotations_article_view
+                ON article_annotations(article_id, view_mode, start_offset, end_offset)
+            ''')
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS crawl_frontiers (
+                    source_name TEXT NOT NULL,
+                    section_name TEXT NOT NULL DEFAULT '',
+                    frontier_url TEXT NOT NULL DEFAULT '',
+                    frontier_cursor TEXT DEFAULT '',
+                    updated_at TIMESTAMP DEFAULT (datetime('now', 'localtime')),
+                    PRIMARY KEY(source_name, section_name)
+                )
+            ''')
             return True
 
         # 初始化时使用写线程同步执行
@@ -746,18 +776,24 @@ class DatabaseManager:
 
     def check_if_url_exists(self, url: str) -> bool:
         """检查 URL 是否已存在"""
+        normalized_url = canonicalize_article_url(url)
+        if not normalized_url:
+            return False
         with self._get_read_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT 1 FROM articles WHERE url = ? LIMIT 1", (url,))
+            cursor.execute("SELECT 1 FROM articles WHERE url = ? LIMIT 1", (normalized_url,))
             return cursor.fetchone() is not None
 
     def check_if_new_or_updated(self, url: str, raw_content: str) -> tuple:
         """检查文章是否为新或有更新"""
+        normalized_url = canonicalize_article_url(url)
+        if not normalized_url:
+            return False, "invalid_url"
         current_hash = self.generate_hash(raw_content)
 
         with self._get_read_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT raw_hash FROM articles WHERE url = ?", (url,))
+            cursor.execute("SELECT raw_hash FROM articles WHERE url = ?", (normalized_url,))
             row = cursor.fetchone()
 
             if row is None:
@@ -768,7 +804,15 @@ class DatabaseManager:
 
             return False, "unchanged"
 
-    def get_articles_paged(self, limit: int = 20, offset: int = 0, source_name: Optional[str] = None, source_names: Optional[List[str]] = None, favorites_only: bool = False) -> List[Dict]:
+    def get_articles_paged(
+        self,
+        limit: int = 20,
+        offset: int = 0,
+        source_name: Optional[str] = None,
+        source_names: Optional[List[str]] = None,
+        favorites_only: bool = False,
+        include_content: bool = True,
+    ) -> List[Dict]:
         """分页获取文章
 
         Args:
@@ -777,12 +821,42 @@ class DatabaseManager:
             source_name: 单个来源筛选
             source_names: 多个来源筛选列表（当 source_name 为 None 时生效）
             favorites_only: 仅返回收藏的文章
+            include_content: 是否返回正文/Markdown/结构化图片等重字段
         """
         with self._get_read_connection() as conn:
             cursor = conn.cursor()
 
             # 构建基础查询
-            base_query = "SELECT * FROM articles"
+            if include_content:
+                base_query = "SELECT * FROM articles"
+            else:
+                base_query = """
+                    SELECT
+                        id,
+                        title,
+                        url,
+                        date,
+                        exact_time,
+                        category,
+                        department,
+                        attachments,
+                        summary,
+                        ai_summary,
+                        ai_tags,
+                        is_read,
+                        is_favorite,
+                        is_deleted,
+                        source_name,
+                        source_type,
+                        rule_id,
+                        custom_summary_prompt,
+                        formatting_prompt,
+                        summary_prompt,
+                        enable_ai_formatting,
+                        enable_ai_summary,
+                        created_at
+                    FROM articles
+                """
             conditions = []
             params = []
 
@@ -940,6 +1014,93 @@ class DatabaseManager:
             row = cursor.fetchone()
             return row[0] if row else None
 
+    def get_latest_article_cursor_by_source(self, source_name: str) -> Optional[str]:
+        """查询指定来源最新一篇文章的精确时间游标（优先 exact_time，其次 date）。"""
+        with self._get_read_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT COALESCE(NULLIF(exact_time, ''), date)
+                FROM articles
+                WHERE source_name = ?
+                ORDER BY COALESCE(NULLIF(exact_time, ''), date || ' 00:00:00') DESC
+                LIMIT 1
+                """,
+                (source_name,),
+            )
+            row = cursor.fetchone()
+            return row[0] if row else None
+
+    def get_crawl_frontier_url(
+        self, source_name: str, section_name: Optional[str] = None
+    ) -> str:
+        """读取来源/板块的本地覆盖边界 URL。"""
+        normalized_section = str(section_name or "").strip()
+        with self._get_read_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT frontier_url
+                FROM crawl_frontiers
+                WHERE source_name = ? AND section_name = ?
+                LIMIT 1
+                """,
+                (source_name, normalized_section),
+            )
+            row = cursor.fetchone()
+            return str(row[0] or "").strip() if row else ""
+
+    def upsert_crawl_frontier(
+        self,
+        source_name: str,
+        section_name: Optional[str],
+        frontier_url: str,
+        frontier_cursor: str = "",
+    ) -> bool:
+        """写入来源/板块的本地覆盖边界。"""
+        normalized_section = str(section_name or "").strip()
+        normalized_url = canonicalize_article_url(frontier_url)
+        normalized_cursor = str(frontier_cursor or "").strip()
+        if not source_name or not normalized_url:
+            return False
+
+        def do_upsert(cursor: sqlite3.Cursor):
+            cursor.execute(
+                """
+                INSERT INTO crawl_frontiers (
+                    source_name,
+                    section_name,
+                    frontier_url,
+                    frontier_cursor,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, datetime('now', 'localtime'))
+                ON CONFLICT(source_name, section_name) DO UPDATE SET
+                    frontier_url = excluded.frontier_url,
+                    frontier_cursor = excluded.frontier_cursor,
+                    updated_at = datetime('now', 'localtime')
+                """,
+                (
+                    source_name,
+                    normalized_section,
+                    normalized_url,
+                    normalized_cursor,
+                ),
+            )
+            return True
+
+        try:
+            self._write_worker.submit(do_upsert, wait=True, timeout=5.0)
+            return True
+        except Exception as e:
+            logger.warning(
+                "写入 crawl frontier 失败: source=%s section=%s error=%s",
+                source_name,
+                normalized_section,
+                e,
+            )
+            return False
+
     def get_article_by_id(self, article_id: int) -> Optional[Dict[str, Any]]:
         """根据 ID 获取文章"""
         with self._get_read_connection() as conn:
@@ -948,7 +1109,32 @@ class DatabaseManager:
             row = cursor.fetchone()
             return dict(row) if row else None
 
-    def search_articles(self, keyword: str, limit: int = 50, source_name: Optional[str] = None, source_names: Optional[List[str]] = None, favorites_only: bool = False) -> List[Dict]:
+    def get_article_annotations(
+        self, article_id: int, view_mode: str = "summary"
+    ) -> List[Dict[str, Any]]:
+        """读取指定文章和阅读模式下的批注列表。"""
+        with self._get_read_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT *
+                FROM article_annotations
+                WHERE article_id = ? AND view_mode = ?
+                ORDER BY start_offset ASC, end_offset ASC, id ASC
+                """,
+                (article_id, str(view_mode or "summary").strip() or "summary"),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
+    def search_articles(
+        self,
+        keyword: str,
+        limit: int = 50,
+        source_name: Optional[str] = None,
+        source_names: Optional[List[str]] = None,
+        favorites_only: bool = False,
+        include_content: bool = True,
+    ) -> List[Dict]:
         """搜索文章（支持搜索AI总结标签）
 
         Args:
@@ -957,6 +1143,7 @@ class DatabaseManager:
             source_name: 单个来源筛选
             source_names: 多个来源筛选列表（优先级高于 source_name）
             favorites_only: 仅返回收藏的文章
+            include_content: 是否返回正文/Markdown/结构化图片等重字段
         """
         with self._get_read_connection() as conn:
             cursor = conn.cursor()
@@ -1019,8 +1206,40 @@ class DatabaseManager:
             if extra_conditions:
                 where_clause += " AND " + " AND ".join(extra_conditions)
 
+            if include_content:
+                select_clause = "SELECT *"
+            else:
+                select_clause = """
+                SELECT
+                    id,
+                    title,
+                    url,
+                    date,
+                    exact_time,
+                    category,
+                    department,
+                    attachments,
+                    summary,
+                    ai_summary,
+                    ai_tags,
+                    raw_text,
+                    enhanced_markdown,
+                    is_read,
+                    is_favorite,
+                    is_deleted,
+                    source_name,
+                    source_type,
+                    rule_id,
+                    custom_summary_prompt,
+                    formatting_prompt,
+                    summary_prompt,
+                    enable_ai_formatting,
+                    enable_ai_summary,
+                    created_at
+                """
+
             query = f"""
-            SELECT * FROM articles
+            {select_clause} FROM articles
             WHERE {where_clause}
             ORDER BY created_at DESC, COALESCE(NULLIF(exact_time, ''), date || ' 00:00:00') DESC
             LIMIT ?
@@ -1076,6 +1295,11 @@ class DatabaseManager:
     <div class="snippet-content">{snippets_html}</div>
 </div>"""
                         item['search_snippet_html'] = html_block
+
+                if not include_content:
+                    item["has_full_content"] = False
+                    item.pop("raw_text", None)
+                    item.pop("enhanced_markdown", None)
 
                 results.append(item)
 
@@ -1172,6 +1396,7 @@ class DatabaseManager:
                                   content_blocks: Optional[List[Dict[str, Any]]] = None,
                                   image_assets: Optional[List[Dict[str, Any]]] = None):
         """插入或更新文章（异步写入）"""
+        url = canonicalize_article_url(url)
         current_hash = self.generate_hash(raw_content)
         summary = strip_emoji(summary)
         custom_summary_prompt = strip_emoji(custom_summary_prompt)
@@ -1224,6 +1449,7 @@ class DatabaseManager:
                                         content_blocks: Optional[List[Dict[str, Any]]] = None,
                                         image_assets: Optional[List[Dict[str, Any]]] = None) -> bool:
         """插入或更新文章（同步版本，等待写入完成）"""
+        url = canonicalize_article_url(url)
         current_hash = self.generate_hash(raw_content)
         summary = strip_emoji(summary)
         custom_summary_prompt = strip_emoji(custom_summary_prompt)
@@ -1443,6 +1669,202 @@ class DatabaseManager:
             logger.error(f"更新 RSS 正文失败: {e}")
             return False
 
+    def upsert_article_annotation(
+        self,
+        *,
+        article_id: int,
+        view_mode: str = "summary",
+        anchor_text: str = "",
+        anchor_prefix: str = "",
+        anchor_suffix: str = "",
+        start_offset: int = 0,
+        end_offset: int = 0,
+        style_payload: Optional[Dict[str, Any]] = None,
+        annotation_id: Optional[int] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """新增或更新文章批注。"""
+        safe_view_mode = str(view_mode or "summary").strip() or "summary"
+        safe_anchor_text = strip_emoji(str(anchor_text or ""))
+        safe_anchor_prefix = strip_emoji(str(anchor_prefix or ""))
+        safe_anchor_suffix = strip_emoji(str(anchor_suffix or ""))
+        safe_start_offset = max(int(start_offset or 0), 0)
+        safe_end_offset = max(int(end_offset or 0), safe_start_offset)
+        safe_style_payload = json.dumps(
+            style_payload or {},
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        safe_annotation_id = (
+            int(annotation_id) if annotation_id is not None else None
+        )
+
+        def do_upsert(cursor: sqlite3.Cursor):
+            if safe_annotation_id is not None:
+                cursor.execute(
+                    """
+                    UPDATE article_annotations
+                    SET view_mode = ?,
+                        anchor_text = ?,
+                        anchor_prefix = ?,
+                        anchor_suffix = ?,
+                        start_offset = ?,
+                        end_offset = ?,
+                        style_payload = ?,
+                        updated_at = datetime('now', 'localtime')
+                    WHERE id = ? AND article_id = ?
+                    """,
+                    (
+                        safe_view_mode,
+                        safe_anchor_text,
+                        safe_anchor_prefix,
+                        safe_anchor_suffix,
+                        safe_start_offset,
+                        safe_end_offset,
+                        safe_style_payload,
+                        safe_annotation_id,
+                        article_id,
+                    ),
+                )
+                if cursor.rowcount <= 0:
+                    return None
+                target_id = safe_annotation_id
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO article_annotations (
+                        article_id,
+                        view_mode,
+                        anchor_text,
+                        anchor_prefix,
+                        anchor_suffix,
+                        start_offset,
+                        end_offset,
+                        style_payload
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        article_id,
+                        safe_view_mode,
+                        safe_anchor_text,
+                        safe_anchor_prefix,
+                        safe_anchor_suffix,
+                        safe_start_offset,
+                        safe_end_offset,
+                        safe_style_payload,
+                    ),
+                )
+                target_id = int(cursor.lastrowid or 0)
+
+            if target_id <= 0:
+                return None
+
+            cursor.execute(
+                "SELECT * FROM article_annotations WHERE id = ?",
+                (target_id,),
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+        try:
+            return self._write_worker.submit(do_upsert, wait=True, timeout=10.0)
+        except Exception as e:
+            logger.error(f"保存文章批注失败: {e}")
+            return None
+
+    def delete_article_annotation(
+        self,
+        annotation_id: int,
+        *,
+        article_id: Optional[int] = None,
+    ) -> bool:
+        """删除单条文章批注。"""
+
+        def do_delete(cursor: sqlite3.Cursor):
+            if article_id is None:
+                cursor.execute(
+                    "DELETE FROM article_annotations WHERE id = ?",
+                    (annotation_id,),
+                )
+            else:
+                cursor.execute(
+                    "DELETE FROM article_annotations WHERE id = ? AND article_id = ?",
+                    (annotation_id, article_id),
+                )
+            return cursor.rowcount > 0
+
+        try:
+            return self._write_worker.submit(do_delete, wait=True, timeout=5.0)
+        except Exception as e:
+            logger.error(f"删除文章批注失败: {e}")
+            return False
+
+    def delete_article_annotations(
+        self,
+        article_id: int,
+        annotation_ids: List[int],
+    ) -> int:
+        """批量删除指定文章的批注。"""
+        normalized_ids = [
+            int(annotation_id)
+            for annotation_id in annotation_ids
+            if str(annotation_id).strip()
+        ]
+        if not normalized_ids:
+            return 0
+
+        def do_delete(cursor: sqlite3.Cursor):
+            placeholders = ",".join("?" for _ in normalized_ids)
+            cursor.execute(
+                f"""
+                DELETE FROM article_annotations
+                WHERE article_id = ?
+                  AND id IN ({placeholders})
+                """,
+                (article_id, *normalized_ids),
+            )
+            return int(cursor.rowcount or 0)
+
+        try:
+            return self._write_worker.submit(do_delete, wait=True, timeout=5.0)
+        except Exception as e:
+            logger.error(f"批量删除文章批注失败: {e}")
+            return 0
+
+    def delete_article_annotations_by_view_modes(
+        self,
+        article_id: int,
+        view_modes: List[str],
+    ) -> int:
+        """按阅读模式批量删除指定文章的批注。"""
+        normalized_modes = list(
+            dict.fromkeys(
+                str(view_mode or "").strip()
+                for view_mode in (view_modes or [])
+                if str(view_mode or "").strip()
+            )
+        )
+        if article_id <= 0 or not normalized_modes:
+            return 0
+
+        def do_delete(cursor: sqlite3.Cursor):
+            placeholders = ",".join("?" for _ in normalized_modes)
+            cursor.execute(
+                f"""
+                DELETE FROM article_annotations
+                WHERE article_id = ?
+                  AND view_mode IN ({placeholders})
+                """,
+                (article_id, *normalized_modes),
+            )
+            return int(cursor.rowcount or 0)
+
+        try:
+            return self._write_worker.submit(do_delete, wait=True, timeout=5.0)
+        except Exception as e:
+            logger.error(f"按阅读模式删除文章批注失败: {e}")
+            return 0
+
     def sync_rss_rule_ai_config(
         self,
         rule_id: str,
@@ -1501,6 +1923,15 @@ class DatabaseManager:
         def do_delete(cursor: sqlite3.Cursor):
             if hard_delete:
                 cursor.execute(
+                    """
+                    DELETE FROM article_annotations
+                    WHERE article_id IN (
+                        SELECT id FROM articles WHERE rule_id = ?
+                    )
+                    """,
+                    (clean_rule_id,),
+                )
+                cursor.execute(
                     "DELETE FROM articles WHERE rule_id = ?",
                     (clean_rule_id,),
                 )
@@ -1531,6 +1962,10 @@ class DatabaseManager:
         """
         def do_delete(cursor: sqlite3.Cursor):
             if hard_delete:
+                cursor.execute(
+                    "DELETE FROM article_annotations WHERE article_id = ?",
+                    (article_id,),
+                )
                 cursor.execute("DELETE FROM articles WHERE id = ?", (article_id,))
                 logger.info(f"硬删除文章: id={article_id}")
             else:

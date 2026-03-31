@@ -10,6 +10,8 @@ from datetime import datetime
 from typing import Dict, Any, Optional, Tuple, Callable, TYPE_CHECKING, List
 from src.utils.text_cleaner import strip_emoji
 from src.utils.ai_markdown import compose_tagged_markdown
+from src.utils.html_rule_strategy import normalize_detail_strategy
+from src.utils.article_identity import canonicalize_article_url
 
 if TYPE_CHECKING:
     from src.spiders import BaseSpider
@@ -38,8 +40,11 @@ class ArticleContext:
     summary_prompt: str = ""  # 🌟 RSS 总结提示词
     rule_id: str = ""  # 🌟 规则 ID（用于摘要重生成时反查专属提示词）
     attachments: Optional[List[Dict[str, Any]]] = None  # 🌟 文章附件/图片链接
+    body_html: str = ""  # 🌟 列表侧已提取的结构化 HTML
+    raw_markdown: str = ""  # 🌟 列表侧已提取的 Markdown
     content_blocks: Optional[List[Dict[str, Any]]] = None  # 🌟 结构化块级内容
     image_assets: Optional[List[Dict[str, Any]]] = None  # 🌟 分类后的图片资产
+    images: Optional[List[str]] = None  # 🌟 列表侧已提取的图片 URL
     source_type: str = "html"  # 🌟 数据源类型（rss/html）
 
 
@@ -263,6 +268,238 @@ class ArticleProcessor:
 
         logger.debug(f"Worker #{worker_id} 已安全退出")
 
+    def _detail_has_primary_content(self, detail: Optional[Dict[str, Any]]) -> bool:
+        if not isinstance(detail, dict):
+            return False
+        return any(
+            [
+                str(detail.get("body_text") or "").strip(),
+                str(detail.get("body_html") or "").strip(),
+                str(detail.get("raw_markdown") or "").strip(),
+                bool(detail.get("content_blocks")),
+            ]
+        )
+
+    def _build_html_list_detail_fallback(
+        self,
+        spider: "BaseSpider",
+        ctx: ArticleContext,
+    ) -> Dict[str, Any]:
+        fallback_images = self._merge_detail_image_urls(
+            ctx.images,
+            [
+                asset.get("url", "")
+                for asset in (ctx.image_assets or [])
+                if asset.get("category") == "body" and asset.get("url")
+            ],
+            ctx.image_assets,
+        )
+        return {
+            "title": ctx.title,
+            "url": ctx.url,
+            "body_text": ctx.raw_text,
+            "body_html": ctx.body_html,
+            "raw_markdown": ctx.raw_markdown or ctx.raw_text,
+            "images": fallback_images,
+            "attachments": list(ctx.attachments or []),
+            "content_blocks": list(ctx.content_blocks or []),
+            "image_assets": list(ctx.image_assets or []),
+            "exact_time": ctx.date or "",
+            "dynamic_fields": getattr(spider, "field_selectors", {}),
+        }
+
+    def _merge_detail_asset_dicts(
+        self,
+        primary: Optional[List[Dict[str, Any]]],
+        fallback: Optional[List[Dict[str, Any]]],
+    ) -> List[Dict[str, Any]]:
+        merged: List[Dict[str, Any]] = []
+        seen_keys: set[str] = set()
+        for group in (primary or [], fallback or []):
+            if not isinstance(group, list):
+                continue
+            for item in group:
+                if not isinstance(item, dict):
+                    continue
+                item_url = str(item.get("url") or "").strip()
+                dedupe_key = item_url or json.dumps(
+                    item, sort_keys=True, ensure_ascii=False
+                )
+                if dedupe_key in seen_keys:
+                    continue
+                seen_keys.add(dedupe_key)
+                merged.append(dict(item))
+        return merged
+
+    def _merge_detail_image_urls(
+        self,
+        primary: Optional[List[str]],
+        fallback: Optional[List[str]],
+        asset_fallback: Optional[List[Dict[str, Any]]] = None,
+    ) -> List[str]:
+        merged: List[str] = []
+        seen: set[str] = set()
+        for bucket in (primary or [], fallback or []):
+            if not isinstance(bucket, list):
+                continue
+            for url in bucket:
+                clean_url = str(url or "").strip()
+                if not clean_url or clean_url in seen:
+                    continue
+                seen.add(clean_url)
+                merged.append(clean_url)
+
+        if isinstance(asset_fallback, list):
+            for item in asset_fallback:
+                if not isinstance(item, dict):
+                    continue
+                clean_url = str(item.get("url") or "").strip()
+                if not clean_url or clean_url in seen:
+                    continue
+                seen.add(clean_url)
+                merged.append(clean_url)
+
+        return merged
+
+    def _merge_html_detail_with_list_context(
+        self,
+        spider: "BaseSpider",
+        detail: Optional[Dict[str, Any]],
+        ctx: ArticleContext,
+    ) -> Dict[str, Any]:
+        merged = dict(detail or {})
+        fallback_detail = self._build_html_list_detail_fallback(spider, ctx)
+        if not self._detail_has_primary_content(merged):
+            merged["body_text"] = fallback_detail.get("body_text", "")
+            merged["body_html"] = fallback_detail.get("body_html", "")
+            merged["raw_markdown"] = fallback_detail.get("raw_markdown", "")
+            if fallback_detail.get("content_blocks"):
+                merged["content_blocks"] = fallback_detail.get("content_blocks", [])
+            if fallback_detail.get("image_assets"):
+                merged["image_assets"] = fallback_detail.get("image_assets", [])
+            if fallback_detail.get("images"):
+                merged["images"] = fallback_detail.get("images", [])
+
+        merged["title"] = str(merged.get("title") or ctx.title).strip() or ctx.title
+        merged["url"] = str(merged.get("url") or ctx.url).strip() or ctx.url
+        merged["exact_time"] = str(merged.get("exact_time") or ctx.date or "").strip()
+        merged["attachments"] = self._merge_detail_asset_dicts(
+            merged.get("attachments"),
+            ctx.attachments,
+        )
+        merged["image_assets"] = self._merge_detail_asset_dicts(
+            merged.get("image_assets"),
+            ctx.image_assets,
+        )
+        merged["images"] = self._merge_detail_image_urls(
+            merged.get("images"),
+            fallback_detail.get("images"),
+            merged.get("image_assets"),
+        )
+        if not merged.get("content_blocks") and ctx.content_blocks:
+            merged["content_blocks"] = list(ctx.content_blocks)
+        return merged
+
+    def _resolve_detail_payload(
+        self,
+        spider: "BaseSpider",
+        ctx: ArticleContext,
+        *,
+        source_type: str,
+        detail_strategy: str,
+    ) -> Tuple[Optional[Dict[str, Any]], str]:
+        if ctx.detail is not None:
+            detail = ctx.detail
+            if source_type == "html" and detail_strategy == "hybrid":
+                detail = self._merge_html_detail_with_list_context(spider, detail, ctx)
+            elif (
+                source_type == "html"
+                and not self._detail_has_primary_content(detail)
+                and ctx.raw_text
+                and len(ctx.raw_text.strip()) >= 10
+            ):
+                detail = self._merge_html_detail_with_list_context(spider, detail, ctx)
+            logger.debug(f"[{ctx.source_name}] 复用预取详情: {ctx.title[:30]}...")
+            return detail, ""
+
+        if source_type == "rss":
+            rss_image_assets = ctx.image_assets or []
+            detail = {
+                "title": ctx.title,
+                "url": ctx.url,
+                "body_text": ctx.raw_text,
+                "body_html": "",
+                "images": [
+                    asset.get("url", "")
+                    for asset in rss_image_assets
+                    if asset.get("category") == "body" and asset.get("url")
+                ],
+                "attachments": ctx.attachments or [],
+                "content_blocks": ctx.content_blocks or [],
+                "image_assets": rss_image_assets,
+                "exact_time": "",
+                "dynamic_fields": {},
+            }
+            logger.debug(f"[{ctx.source_name}] RSS 订阅，跳过详情抓取: {ctx.title[:30]}...")
+            return detail, ""
+
+        if source_type == "html" and detail_strategy == "list_only":
+            logger.debug(f"[{ctx.source_name}] HTML 规则使用列表页足够模式: {ctx.title[:30]}...")
+            return self._build_html_list_detail_fallback(spider, ctx), ""
+
+        try:
+            detail = spider.fetch_detail(ctx.url)
+        except Exception as e:
+            logger.warning(f"[{ctx.source_name}] 详情获取异常 ({ctx.title}): {e}")
+            detail = None
+
+        if not detail:
+            if ctx.raw_text and len(ctx.raw_text.strip()) >= 10:
+                logger.debug(f"[{ctx.source_name}] 详情抓取失败，回退列表正文: {ctx.title[:30]}...")
+                return self._build_html_list_detail_fallback(spider, ctx), ""
+            logger.debug(f"[{ctx.source_name}] 详情获取失败: {ctx.title}")
+            return None, "detail_failed"
+
+        if detail_strategy == "hybrid":
+            detail = self._merge_html_detail_with_list_context(spider, detail, ctx)
+        elif (
+            not self._detail_has_primary_content(detail)
+            and ctx.raw_text
+            and len(ctx.raw_text.strip()) >= 10
+        ):
+            detail = self._merge_html_detail_with_list_context(spider, detail, ctx)
+
+        return detail, ""
+
+    def _normalize_ai_failure_message(self, message: Any) -> str:
+        """提炼 AI 失败文案，去掉前缀符号后发给前端展示。"""
+        text = str(message or "").strip()
+        if not text:
+            return "AI 服务暂时不可用，请稍后重试。"
+
+        while text.startswith(self.AI_FAILURE_PREFIXES):
+            text = text[1:].lstrip("：:[]（）() \t")
+
+        return text or "AI 服务暂时不可用，请稍后重试。"
+
+    def _build_ai_failure_payload(
+        self,
+        ctx: ArticleContext,
+        message: Any,
+        reason: str = "ai_failed",
+    ) -> Dict[str, Any]:
+        """构造 AI 失败回调载荷，供 API 层通知前端。"""
+        normalized_message = self._normalize_ai_failure_message(message)
+        return {
+            "title": ctx.title,
+            "url": ctx.url,
+            "source_name": ctx.source_name,
+            "category": ctx.category or ctx.section_name or "未知类别",
+            "reason": str(reason or "ai_failed"),
+            "message": normalized_message,
+            "raw_message": str(message or "").strip(),
+        }
+
     def _process_task(
         self, task: ProcessingTask
     ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
@@ -280,76 +517,26 @@ class ArticleProcessor:
 
         # 🌟 获取数据源类型（用于分流处理）
         source_type = getattr(spider, '_source_type', getattr(ctx, 'source_type', 'html'))
-        # 🌟 获取跳过详情配置（仅 HTML 爬虫有效）
-        skip_detail = getattr(spider, 'skip_detail', False)
+        detail_strategy = normalize_detail_strategy(
+            getattr(spider, "detail_strategy", ""),
+            skip_detail=bool(getattr(spider, "skip_detail", False)),
+        )
 
-        # 1. 获取详情
-        # 🌟 根据数据源类型和配置决定是否抓取详情
-        if source_type == 'rss':
-            # RSS 订阅：列表中已包含完整内容，无需抓取详情
-            rss_image_assets = ctx.image_assets or []
-            detail = {
-                'title': ctx.title,
-                'url': ctx.url,
-                'body_text': ctx.raw_text,
-                'body_html': '',
-                'images': [
-                    asset.get("url", "")
-                    for asset in rss_image_assets
-                    if asset.get("category") == "body" and asset.get("url")
-                ],
-                'attachments': ctx.attachments or [],
-                'content_blocks': ctx.content_blocks or [],
-                'image_assets': rss_image_assets,
-                'exact_time': '',
-                'dynamic_fields': {}
-            }
-            logger.debug(f"[{ctx.source_name}] RSS 订阅，跳过详情抓取: {ctx.title[:30]}...")
-        elif source_type == 'html' and skip_detail:
-            # HTML 动态爬虫且配置了 skip_detail：使用列表页内容，跳过详情抓取
-            detail = {
-                'title': ctx.title,
-                'url': ctx.url,
-                'body_text': ctx.raw_text,
-                'body_html': '',
-                'images': [],
-                'attachments': ctx.attachments or [],
-                'content_blocks': [],
-                'image_assets': [],
-                'exact_time': '',
-                'dynamic_fields': getattr(spider, 'field_selectors', {})
-            }
-            logger.debug(f"[{ctx.source_name}] HTML 动态爬虫配置了 skip_detail，跳过详情抓取: {ctx.title[:30]}...")
-        elif ctx.raw_text and len(ctx.raw_text.strip()) >= 10:
-            # HTML 动态爬虫：列表中可能已包含内容
-            detail = {
-                'title': ctx.title,
-                'url': ctx.url,
-                'body_text': ctx.raw_text,
-                'body_html': '',
-                'images': [],
-                'attachments': ctx.attachments or [],
-                'content_blocks': [],
-                'image_assets': [],
-                'exact_time': ''
-            }
-            logger.debug(f"[{ctx.source_name}] 列表中已包含内容，跳过详情抓取: {ctx.title[:30]}...")
-        else:
-            # 正常抓取详情
-            try:
-                detail = spider.fetch_detail(ctx.url)
-                if not detail:
-                    logger.debug(f"[{ctx.source_name}] 详情获取失败: {ctx.title}")
-                    return False, "detail_failed", None
-            except Exception as e:
-                logger.warning(f"[{ctx.source_name}] 详情获取异常 ({ctx.title}): {e}")
-                return False, "detail_error", None
+        detail, detail_error = self._resolve_detail_payload(
+            spider,
+            ctx,
+            source_type=source_type,
+            detail_strategy=detail_strategy,
+        )
+        if not detail:
+            return False, detail_error or "detail_failed", None
 
         ctx.detail = detail
 
         # 2. 提取正文
         raw_text = detail.get("body_text", "")
         body_html = detail.get("body_html", "")
+        structured_raw_markdown = str(detail.get("raw_markdown") or "").strip()
         images = detail.get("images", [])  # 🌟 新增：获取图片链接列表
 
         # 🌟 纯图片内容检测标记
@@ -561,7 +748,15 @@ class ArticleProcessor:
                         self.on_progress(ai_completed, ai_total, ctx.title)
                     except Exception:
                         pass
-                return False, "ai_error", None
+                return (
+                    False,
+                    "ai_error",
+                    self._build_ai_failure_payload(
+                        ctx,
+                        f"AI 服务调用异常：{e}",
+                        reason="ai_error",
+                    ),
+                )
 
             # 🌟 AI 调用完成，推送最新进度（含完成信号）
             with self._stats_lock:
@@ -577,9 +772,18 @@ class ArticleProcessor:
             # 10. 核心防线：拦截 AI 失败的情况
             if summary.startswith(self.AI_FAILURE_PREFIXES):
                 logger.warning(f"AI 分析失败，本次不入库: {ctx.title}")
-                return False, "ai_failed", None
+                return (
+                    False,
+                    "ai_failed",
+                    self._build_ai_failure_payload(
+                        ctx,
+                        summary,
+                        reason="ai_failed",
+                    ),
+                )
 
         summary = strip_emoji(summary)
+        structured_raw_markdown = strip_emoji(structured_raw_markdown)
         rss_raw_markdown = strip_emoji(rss_raw_markdown)
         rss_enhanced_markdown = strip_emoji(rss_enhanced_markdown)
         rss_ai_summary = strip_emoji(rss_ai_summary)
@@ -593,6 +797,15 @@ class ArticleProcessor:
                 or rss_raw_markdown
                 or "【无内容】"
             )
+
+        stored_raw_markdown = (
+            rss_raw_markdown
+            if source_type == "rss"
+            else structured_raw_markdown
+        )
+        stored_enhanced_markdown = (
+            rss_enhanced_markdown if source_type == "rss" else ""
+        )
 
         # 7. 添加时间戳（已禁用）
         # timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -633,8 +846,8 @@ class ArticleProcessor:
             rule_id=ctx.rule_id,
             custom_summary_prompt=ctx.summary_prompt or ctx.custom_summary_prompt,
             source_type=source_type,
-            raw_markdown=rss_raw_markdown,
-            enhanced_markdown=rss_enhanced_markdown,
+            raw_markdown=stored_raw_markdown,
+            enhanced_markdown=stored_enhanced_markdown,
             ai_summary=rss_ai_summary,
             ai_tags=rss_ai_tags,
             formatting_prompt=ctx.formatting_prompt,
@@ -663,8 +876,8 @@ class ArticleProcessor:
             "image_assets": image_assets,
             "summary": summary,
             "raw_content": raw_text,
-            "raw_markdown": rss_raw_markdown,
-            "enhanced_markdown": rss_enhanced_markdown,
+            "raw_markdown": stored_raw_markdown,
+            "enhanced_markdown": stored_enhanced_markdown,
             "ai_summary": rss_ai_summary,
             "ai_tags": rss_ai_tags,
             "is_read": 0,
@@ -790,7 +1003,8 @@ class ArticleProcessor:
 
     def should_skip_by_url(self, url: str, is_manual: bool) -> bool:
         """根据 URL 判断是否应该跳过（严格依据本地数据库差异比对）"""
-        if self.db.check_if_url_exists(url):
+        normalized_url = canonicalize_article_url(url)
+        if normalized_url and self.db.check_if_url_exists(normalized_url):
             return True
         return False
 
@@ -814,7 +1028,7 @@ class ArticleProcessor:
             department = source_name
 
         return ArticleContext(
-            url=article.get("url", ""),
+            url=canonicalize_article_url(article.get("url", "")),
             title=article.get("title", "未知标题"),
             date=article.get("date", ""),
             source_name=source_name,
@@ -842,8 +1056,11 @@ class ArticleProcessor:
             ),
             rule_id=article.get("rule_id", ""),
             attachments=article.get("attachments", []),
+            body_html=article.get("body_html", ""),
+            raw_markdown=article.get("raw_markdown", ""),
             content_blocks=article.get("content_blocks", []),
             image_assets=article.get("image_assets", []),
+            images=article.get("images", []),
             source_type=article.get("source_type", "html"),
         )
 

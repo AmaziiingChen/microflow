@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class AppConfig:
     """应用配置数据类"""
+
     base_url: str = "https://api.deepseek.com/v1"
     api_key: str = ""
     model_name: str = "deepseek-chat"
@@ -33,6 +34,7 @@ class AppConfig:
     update_cooldown: int = 60  # 🌟 新增：手动更新冷却时间（秒），默认 60 秒
     is_locked: bool = False  # 🌟 新增：配置锁定状态（用于防止修改）
     api_balance_ok: bool = True  # 🌟 新增：API 余额状态（默认正常）
+    channel: str = "stable"  # 🌟 新增：发布渠道 (stable / beta / internal)
     # 🔐 安全字段：防篡改签名
     config_sign: str = ""  # HMAC-SHA256 签名
     last_cloud_sync_time: float = 0.0  # 最后一次成功获取云端授权的时间戳
@@ -45,7 +47,9 @@ class AppConfig:
     smtp_password: str = ""  # SMTP 密码/授权码
     subscriber_list: list = field(default_factory=list)  # 订阅者邮箱列表
     # 🤖 多模型配置（用于 AI 爬虫多模型投票）
-    secondary_models: list = field(default_factory=list)  # 备选模型列表 [{baseUrl, apiKey, modelName}]
+    secondary_models: list = field(
+        default_factory=list
+    )  # 备选模型列表 [{baseUrl, apiKey, modelName}]
 
 
 class ConfigService:
@@ -110,18 +114,16 @@ class ConfigService:
         """
         try:
             # 提取用于签名的关键字段
-            is_locked = str(config_dict.get('isLocked', False))
-            sync_time = str(config_dict.get('lastCloudSyncTime', 0.0))
-            device_id = str(config_dict.get('deviceId', ''))
+            is_locked = str(config_dict.get("isLocked", False))
+            sync_time = str(config_dict.get("lastCloudSyncTime", 0.0))
+            device_id = str(config_dict.get("deviceId", ""))
 
             # 拼接签名字符串
             sign_payload = f"{is_locked}|{sync_time}|{device_id}"
 
             # 计算 HMAC-SHA256 签名
             signature = hmac.new(
-                self._SECRET_KEY,
-                sign_payload.encode('utf-8'),
-                hashlib.sha256
+                self._SECRET_KEY, sign_payload.encode("utf-8"), hashlib.sha256
             ).hexdigest()
 
             return signature
@@ -173,12 +175,12 @@ class ConfigService:
         backup_path = f"{self.config_path}.bak"
 
         try:
-            with open(self.config_path, 'r', encoding='utf-8') as f:
+            with open(self.config_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
             # 🔐 安全检查：验证签名
-            stored_sign = data.get('configSign', '')
-            is_locked_from_file = data.get('isLocked', False)
+            stored_sign = data.get("configSign", "")
+            is_locked_from_file = data.get("isLocked", False)
 
             # 🔐 向后兼容：如果缺少签名字段，视为旧版首次升级，自动放行
             if not stored_sign:
@@ -200,34 +202,48 @@ class ConfigService:
                     logger.debug("🔐 配置签名校验通过")
 
             self._config = AppConfig(
-                base_url=data.get('baseUrl', default.base_url),
-                api_key=data.get('apiKey', default.api_key),
-                model_name=data.get('modelName', default.model_name),
-                prompt=data.get('prompt', default.prompt),
-                auto_start=data.get('autoStart', default.auto_start),
-                mute_mode=data.get('muteMode', default.mute_mode),
-                track_mode=data.get('trackMode', default.track_mode),
-                font_family=data.get('fontFamily', default.font_family),  # 🌟 新增
-                custom_font_path=data.get('customFontPath', default.custom_font_path),  # 🌟 新增
-                custom_font_name=data.get('customFontName', default.custom_font_name),  # 🌟 新增
-                subscribed_sources=data.get('subscribedSources', default.subscribed_sources),  # 🌟 新增
-                polling_interval=data.get('pollingInterval', default.polling_interval),  # 🌟 新增
-                update_cooldown=data.get('updateCooldown', default.update_cooldown),  # 🌟 新增：冷却时间
+                base_url=data.get("baseUrl", default.base_url),
+                api_key=data.get("apiKey", default.api_key),
+                model_name=data.get("modelName", default.model_name),
+                prompt=data.get("prompt", default.prompt),
+                auto_start=data.get("autoStart", default.auto_start),
+                mute_mode=data.get("muteMode", default.mute_mode),
+                track_mode=data.get("trackMode", default.track_mode),
+                font_family=data.get("fontFamily", default.font_family),  # 🌟 新增
+                custom_font_path=data.get(
+                    "customFontPath", default.custom_font_path
+                ),  # 🌟 新增
+                custom_font_name=data.get(
+                    "customFontName", default.custom_font_name
+                ),  # 🌟 新增
+                subscribed_sources=data.get(
+                    "subscribedSources", default.subscribed_sources
+                ),  # 🌟 新增
+                polling_interval=data.get(
+                    "pollingInterval", default.polling_interval
+                ),  # 🌟 新增
+                update_cooldown=data.get(
+                    "updateCooldown", default.update_cooldown
+                ),  # 🌟 新增：冷却时间
                 is_locked=is_locked,  # 🔐 使用签名验证后的锁定状态
-                api_balance_ok=data.get('apiBalanceOk', default.api_balance_ok),  # 🌟 新增：API 余额状态
+                api_balance_ok=data.get(
+                    "apiBalanceOk", default.api_balance_ok
+                ),  # 🌟 新增：API 余额状态
                 # 🔐 安全字段
-                config_sign=data.get('configSign', ''),
-                last_cloud_sync_time=data.get('lastCloudSyncTime', 0.0),
-                device_id=data.get('deviceId', ''),
+                config_sign=data.get("configSign", ""),
+                last_cloud_sync_time=data.get("lastCloudSyncTime", 0.0),
+                device_id=data.get("deviceId", ""),
                 # 📧 邮件推送配置
-                email_notify_enabled=data.get('emailNotifyEnabled', False),
-                smtp_host=data.get('smtpHost', ''),
-                smtp_port=data.get('smtpPort', 465),
-                smtp_user=data.get('smtpUser', ''),
-                smtp_password=data.get('smtpPassword', ''),
-                subscriber_list=self._normalize_email_list(data.get('subscriberList', [])),
+                email_notify_enabled=data.get("emailNotifyEnabled", False),
+                smtp_host=data.get("smtpHost", ""),
+                smtp_port=data.get("smtpPort", 465),
+                smtp_user=data.get("smtpUser", ""),
+                smtp_password=data.get("smtpPassword", ""),
+                subscriber_list=self._normalize_email_list(
+                    data.get("subscriberList", [])
+                ),
                 # 🤖 多模型配置（用于 AI 爬虫多模型投票）
-                secondary_models=data.get('secondaryModels', []),
+                secondary_models=data.get("secondaryModels", []),
             )
             self._last_load_failed = False
             self._has_loaded_successfully = True
@@ -237,34 +253,46 @@ class ConfigService:
             logger.error(f"读取配置文件失败: {e}")
             try:
                 if os.path.exists(backup_path):
-                    with open(backup_path, 'r', encoding='utf-8') as f:
+                    with open(backup_path, "r", encoding="utf-8") as f:
                         data = json.load(f)
                     self._config = AppConfig(
-                        base_url=data.get('baseUrl', default.base_url),
-                        api_key=data.get('apiKey', default.api_key),
-                        model_name=data.get('modelName', default.model_name),
-                        prompt=data.get('prompt', default.prompt),
-                        auto_start=data.get('autoStart', default.auto_start),
-                        mute_mode=data.get('muteMode', default.mute_mode),
-                        track_mode=data.get('trackMode', default.track_mode),
-                        font_family=data.get('fontFamily', default.font_family),
-                        custom_font_path=data.get('customFontPath', default.custom_font_path),
-                        custom_font_name=data.get('customFontName', default.custom_font_name),
-                        subscribed_sources=data.get('subscribedSources', default.subscribed_sources),
-                        polling_interval=data.get('pollingInterval', default.polling_interval),
-                        update_cooldown=data.get('updateCooldown', default.update_cooldown),
-                        is_locked=data.get('isLocked', False),
-                        api_balance_ok=data.get('apiBalanceOk', default.api_balance_ok),
-                        config_sign=data.get('configSign', ''),
-                        last_cloud_sync_time=data.get('lastCloudSyncTime', 0.0),
-                        device_id=data.get('deviceId', ''),
-                        email_notify_enabled=data.get('emailNotifyEnabled', False),
-                        smtp_host=data.get('smtpHost', ''),
-                        smtp_port=data.get('smtpPort', 465),
-                        smtp_user=data.get('smtpUser', ''),
-                        smtp_password=data.get('smtpPassword', ''),
-                        subscriber_list=self._normalize_email_list(data.get('subscriberList', [])),
-                        secondary_models=data.get('secondaryModels', []),
+                        base_url=data.get("baseUrl", default.base_url),
+                        api_key=data.get("apiKey", default.api_key),
+                        model_name=data.get("modelName", default.model_name),
+                        prompt=data.get("prompt", default.prompt),
+                        auto_start=data.get("autoStart", default.auto_start),
+                        mute_mode=data.get("muteMode", default.mute_mode),
+                        track_mode=data.get("trackMode", default.track_mode),
+                        font_family=data.get("fontFamily", default.font_family),
+                        custom_font_path=data.get(
+                            "customFontPath", default.custom_font_path
+                        ),
+                        custom_font_name=data.get(
+                            "customFontName", default.custom_font_name
+                        ),
+                        subscribed_sources=data.get(
+                            "subscribedSources", default.subscribed_sources
+                        ),
+                        polling_interval=data.get(
+                            "pollingInterval", default.polling_interval
+                        ),
+                        update_cooldown=data.get(
+                            "updateCooldown", default.update_cooldown
+                        ),
+                        is_locked=data.get("isLocked", False),
+                        api_balance_ok=data.get("apiBalanceOk", default.api_balance_ok),
+                        config_sign=data.get("configSign", ""),
+                        last_cloud_sync_time=data.get("lastCloudSyncTime", 0.0),
+                        device_id=data.get("deviceId", ""),
+                        email_notify_enabled=data.get("emailNotifyEnabled", False),
+                        smtp_host=data.get("smtpHost", ""),
+                        smtp_port=data.get("smtpPort", 465),
+                        smtp_user=data.get("smtpUser", ""),
+                        smtp_password=data.get("smtpPassword", ""),
+                        subscriber_list=self._normalize_email_list(
+                            data.get("subscriberList", [])
+                        ),
+                        secondary_models=data.get("secondaryModels", []),
                     )
                     self._last_load_failed = False
                     self._has_loaded_successfully = True
@@ -296,27 +324,30 @@ class ConfigService:
                 return False
 
             # 🌟 类型转换：确保数值字段是正确的类型
-            if 'max_items' in config_dict and config_dict['max_items'] is not None:
+            if "max_items" in config_dict and config_dict["max_items"] is not None:
                 try:
-                    config_dict['max_items'] = int(config_dict['max_items'])
+                    config_dict["max_items"] = int(config_dict["max_items"])
                 except (ValueError, TypeError):
-                    config_dict['max_items'] = 20
+                    config_dict["max_items"] = 20
 
-            if 'pollingInterval' in config_dict and config_dict['pollingInterval'] is not None:
+            if (
+                "pollingInterval" in config_dict
+                and config_dict["pollingInterval"] is not None
+            ):
                 try:
-                    config_dict['pollingInterval'] = int(config_dict['pollingInterval'])
+                    config_dict["pollingInterval"] = int(config_dict["pollingInterval"])
                 except (ValueError, TypeError):
-                    config_dict['pollingInterval'] = 60
+                    config_dict["pollingInterval"] = 60
 
-            if 'smtpPort' in config_dict and config_dict['smtpPort'] is not None:
+            if "smtpPort" in config_dict and config_dict["smtpPort"] is not None:
                 try:
-                    config_dict['smtpPort'] = int(config_dict['smtpPort'])
+                    config_dict["smtpPort"] = int(config_dict["smtpPort"])
                 except (ValueError, TypeError):
-                    config_dict['smtpPort'] = 465
+                    config_dict["smtpPort"] = 465
 
-            if 'subscriberList' in config_dict:
-                config_dict['subscriberList'] = self._normalize_email_list(
-                    config_dict.get('subscriberList', [])
+            if "subscriberList" in config_dict:
+                config_dict["subscriberList"] = self._normalize_email_list(
+                    config_dict.get("subscriberList", [])
                 )
 
             # 如果配置从未成功加载过，避免把前端初始空白状态写回磁盘。
@@ -330,19 +361,19 @@ class ConfigService:
                         if current_value not in (None, "", []):
                             config_dict[key] = current_value
 
-                keep_existing('baseUrl', current.base_url)
-                keep_existing('apiKey', current.api_key)
-                keep_existing('modelName', current.model_name)
-                keep_existing('prompt', current.prompt)
-                keep_existing('fontFamily', current.font_family)
-                keep_existing('customFontPath', current.custom_font_path)
-                keep_existing('customFontName', current.custom_font_name)
-                keep_existing('subscribedSources', current.subscribed_sources)
-                keep_existing('secondaryModels', current.secondary_models)
-                keep_existing('smtpHost', current.smtp_host)
-                keep_existing('smtpUser', current.smtp_user)
-                keep_existing('smtpPassword', current.smtp_password)
-                keep_existing('subscriberList', current.subscriber_list)
+                keep_existing("baseUrl", current.base_url)
+                keep_existing("apiKey", current.api_key)
+                keep_existing("modelName", current.model_name)
+                keep_existing("prompt", current.prompt)
+                keep_existing("fontFamily", current.font_family)
+                keep_existing("customFontPath", current.custom_font_path)
+                keep_existing("customFontName", current.custom_font_name)
+                keep_existing("subscribedSources", current.subscribed_sources)
+                keep_existing("secondaryModels", current.secondary_models)
+                keep_existing("smtpHost", current.smtp_host)
+                keep_existing("smtpUser", current.smtp_user)
+                keep_existing("smtpPassword", current.smtp_password)
+                keep_existing("subscriberList", current.subscriber_list)
 
             # 确保目录存在
             config_dir = os.path.dirname(self.config_path)
@@ -351,27 +382,34 @@ class ConfigService:
 
             # 🔐 安全步骤 1：自动更新设备指纹
             device_id = self._get_device_fingerprint()
-            config_dict['deviceId'] = device_id
+            config_dict["deviceId"] = device_id
 
             # 🔐 安全步骤 2：确保时间戳字段存在（如果未设置则使用当前时间）
-            if 'lastCloudSyncTime' not in config_dict or config_dict['lastCloudSyncTime'] == 0:
+            if (
+                "lastCloudSyncTime" not in config_dict
+                or config_dict["lastCloudSyncTime"] == 0
+            ):
                 # 尝试保留旧值
                 old_sync_time = 0.0
-                if self._config and hasattr(self._config, 'last_cloud_sync_time'):
+                if self._config and hasattr(self._config, "last_cloud_sync_time"):
                     old_sync_time = self._config.last_cloud_sync_time
-                config_dict['lastCloudSyncTime'] = old_sync_time
+                config_dict["lastCloudSyncTime"] = old_sync_time
 
             # 🔐 安全步骤 3：计算并添加签名
             signature = self._generate_signature(config_dict)
-            config_dict['configSign'] = signature
+            config_dict["configSign"] = signature
 
             logger.debug(f"🔐 已生成配置签名: {signature[:16]}... (设备: {device_id})")
 
             # 📧 邮件配置日志
-            logger.debug(f"📧 邮件配置保存: emailNotifyEnabled={config_dict.get('emailNotifyEnabled', False)}")
+            logger.debug(
+                f"📧 邮件配置保存: emailNotifyEnabled={config_dict.get('emailNotifyEnabled', False)}"
+            )
             logger.debug(f"📧 邮件配置保存: smtpHost={config_dict.get('smtpHost', '')}")
             logger.debug(f"📧 邮件配置保存: smtpUser={config_dict.get('smtpUser', '')}")
-            logger.debug(f"📧 邮件配置保存: subscriberList={config_dict.get('subscriberList', [])}")
+            logger.debug(
+                f"📧 邮件配置保存: subscriberList={config_dict.get('subscriberList', [])}"
+            )
 
             # 写入文件：先写临时文件，再原子替换，避免并发读到半截 JSON
             backup_path = f"{self.config_path}.bak"
@@ -381,7 +419,7 @@ class ConfigService:
                 suffix=".tmp",
             )
             try:
-                with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
                     json.dump(config_dict, f, ensure_ascii=False, indent=4)
                     f.flush()
                     os.fsync(f.fileno())
@@ -402,34 +440,42 @@ class ConfigService:
 
             # 更新内存中的配置
             self._config = AppConfig(
-                base_url=config_dict.get('baseUrl', self._config.base_url if self._config else ""),
-                api_key=config_dict.get('apiKey', ''),
-                model_name=config_dict.get('modelName', 'deepseek-chat'),
-                prompt=config_dict.get('prompt', self._default_prompt),
-                auto_start=config_dict.get('autoStart', False),
-                mute_mode=config_dict.get('muteMode', False),
-                track_mode=config_dict.get('trackMode', 'continuous'),
-                font_family=config_dict.get('fontFamily', 'sans-serif'),  # 🌟 新增
-                custom_font_path=config_dict.get('customFontPath', ''),  # 🌟 新增
-                custom_font_name=config_dict.get('customFontName', ''),  # 🌟 新增
-                subscribed_sources=config_dict.get('subscribedSources', []),  # 🌟 新增
-                polling_interval=config_dict.get('pollingInterval', 900),  # 🌟 新增
-                update_cooldown=config_dict.get('updateCooldown', 60),  # 🌟 新增：冷却时间
-                is_locked=config_dict.get('isLocked', False),  # 🌟 新增：配置锁定状态
-                api_balance_ok=config_dict.get('apiBalanceOk', True),  # 🌟 新增：API 余额状态
+                base_url=config_dict.get(
+                    "baseUrl", self._config.base_url if self._config else ""
+                ),
+                api_key=config_dict.get("apiKey", ""),
+                model_name=config_dict.get("modelName", "deepseek-chat"),
+                prompt=config_dict.get("prompt", self._default_prompt),
+                auto_start=config_dict.get("autoStart", False),
+                mute_mode=config_dict.get("muteMode", False),
+                track_mode=config_dict.get("trackMode", "continuous"),
+                font_family=config_dict.get("fontFamily", "sans-serif"),  # 🌟 新增
+                custom_font_path=config_dict.get("customFontPath", ""),  # 🌟 新增
+                custom_font_name=config_dict.get("customFontName", ""),  # 🌟 新增
+                subscribed_sources=config_dict.get("subscribedSources", []),  # 🌟 新增
+                polling_interval=config_dict.get("pollingInterval", 900),  # 🌟 新增
+                update_cooldown=config_dict.get(
+                    "updateCooldown", 60
+                ),  # 🌟 新增：冷却时间
+                is_locked=config_dict.get("isLocked", False),  # 🌟 新增：配置锁定状态
+                api_balance_ok=config_dict.get(
+                    "apiBalanceOk", True
+                ),  # 🌟 新增：API 余额状态
                 # 🔐 安全字段
                 config_sign=signature,
-                last_cloud_sync_time=config_dict.get('lastCloudSyncTime', 0.0),
+                last_cloud_sync_time=config_dict.get("lastCloudSyncTime", 0.0),
                 device_id=device_id,
                 # 📧 邮件推送配置
-                email_notify_enabled=config_dict.get('emailNotifyEnabled', False),
-                smtp_host=config_dict.get('smtpHost', ''),
-                smtp_port=config_dict.get('smtpPort', 465),
-                smtp_user=config_dict.get('smtpUser', ''),
-                smtp_password=config_dict.get('smtpPassword', ''),
-                subscriber_list=self._normalize_email_list(config_dict.get('subscriberList', [])),
+                email_notify_enabled=config_dict.get("emailNotifyEnabled", False),
+                smtp_host=config_dict.get("smtpHost", ""),
+                smtp_port=config_dict.get("smtpPort", 465),
+                smtp_user=config_dict.get("smtpUser", ""),
+                smtp_password=config_dict.get("smtpPassword", ""),
+                subscriber_list=self._normalize_email_list(
+                    config_dict.get("subscriberList", [])
+                ),
                 # 🤖 多模型配置（用于 AI 爬虫多模型投票）
-                secondary_models=config_dict.get('secondaryModels', []),
+                secondary_models=config_dict.get("secondaryModels", []),
             )
             self._last_load_failed = False
             self._has_loaded_successfully = True
@@ -446,7 +492,7 @@ class ConfigService:
         """获取当前配置（如果未加载则先加载）"""
         if self._config is None:
             self.load()
-        return self._config # type: ignore
+        return self._config  # type: ignore
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -502,7 +548,7 @@ class ConfigService:
         if os.path.exists(self.config_path):
             try:
                 file_mtime = os.path.getmtime(self.config_path)
-                if not hasattr(self, '_last_mtime') or file_mtime != self._last_mtime:
+                if not hasattr(self, "_last_mtime") or file_mtime != self._last_mtime:
                     self._last_mtime = file_mtime
                     self.load()  # 文件有变更时重新加载
             except Exception:
@@ -512,33 +558,33 @@ class ConfigService:
 
         # 支持两种格式的键名
         key_mapping = {
-            'baseUrl': 'base_url',
-            'apiKey': 'api_key',
-            'modelName': 'model_name',
-            'autoStart': 'auto_start',
-            'muteMode': 'mute_mode',
-            'trackMode': 'track_mode',
-            'fontFamily': 'font_family',  # 🌟 新增
-            'customFontPath': 'custom_font_path',  # 🌟 新增
-            'customFontName': 'custom_font_name',  # 🌟 新增
-            'subscribedSources': 'subscribed_sources',  # 🌟 新增
-            'pollingInterval': 'polling_interval',  # 🌟 新增
-            'updateCooldown': 'update_cooldown',  # 🌟 新增：冷却时间
-            'isLocked': 'is_locked',  # 🌟 新增：配置锁定状态
-            'apiBalanceOk': 'api_balance_ok',  # 🌟 新增：API 余额状态
+            "baseUrl": "base_url",
+            "apiKey": "api_key",
+            "modelName": "model_name",
+            "autoStart": "auto_start",
+            "muteMode": "mute_mode",
+            "trackMode": "track_mode",
+            "fontFamily": "font_family",  # 🌟 新增
+            "customFontPath": "custom_font_path",  # 🌟 新增
+            "customFontName": "custom_font_name",  # 🌟 新增
+            "subscribedSources": "subscribed_sources",  # 🌟 新增
+            "pollingInterval": "polling_interval",  # 🌟 新增
+            "updateCooldown": "update_cooldown",  # 🌟 新增：冷却时间
+            "isLocked": "is_locked",  # 🌟 新增：配置锁定状态
+            "apiBalanceOk": "api_balance_ok",  # 🌟 新增：API 余额状态
             # 🔐 安全字段
-            'configSign': 'config_sign',
-            'lastCloudSyncTime': 'last_cloud_sync_time',
-            'deviceId': 'device_id',
+            "configSign": "config_sign",
+            "lastCloudSyncTime": "last_cloud_sync_time",
+            "deviceId": "device_id",
             # 📧 邮件推送配置
-            'emailNotifyEnabled': 'email_notify_enabled',
-            'smtpHost': 'smtp_host',
-            'smtpPort': 'smtp_port',
-            'smtpUser': 'smtp_user',
-            'smtpPassword': 'smtp_password',
-            'subscriberList': 'subscriber_list',
+            "emailNotifyEnabled": "email_notify_enabled",
+            "smtpHost": "smtp_host",
+            "smtpPort": "smtp_port",
+            "smtpUser": "smtp_user",
+            "smtpPassword": "smtp_password",
+            "subscriberList": "subscriber_list",
             # 🤖 多模型配置（用于 AI 爬虫多模型投票）
-            'secondaryModels': 'secondary_models',
+            "secondaryModels": "secondary_models",
         }
 
         # 转换键名
@@ -571,7 +617,7 @@ class ConfigService:
 
     def get_api_balance_ok(self) -> bool:
         """获取 API 余额是否正常（默认 True）"""
-        return self.get('apiBalanceOk', True)
+        return self.get("apiBalanceOk", True)
 
     def set_api_balance_ok(self, ok: bool) -> bool:
         """
@@ -588,7 +634,7 @@ class ConfigService:
             config_dict = self.to_dict()
 
             # 更新余额状态
-            config_dict['apiBalanceOk'] = ok
+            config_dict["apiBalanceOk"] = ok
 
             # 调用 save() 方法，自动更新签名
             return self.save(config_dict)

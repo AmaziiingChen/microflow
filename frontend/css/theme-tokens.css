@@ -1,0 +1,323 @@
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* Base palette */
+  --white: #ffffff;
+  --black: #000000;
+  --gray-25: #fafafa;
+  --gray-50: #f6f6f8;
+  --gray-75: #f5f5f7;
+  --gray-100: #f3f4f6;
+  --gray-150: #ebebf0;
+  --gray-175: #e1e1e8;
+  --gray-200: #e5e7eb;
+  --gray-300: #d5d5d5;
+  --gray-400: #c7c7cc;
+  --gray-500: #9ca3af;
+  --gray-600: #86868b;
+  --gray-625: #8e8e93;
+  --gray-650: #808080;
+  --gray-700: #6e6e73;
+  --gray-750: #636366;
+  --gray-800: #4b5563;
+  --gray-850: #374151;
+  --gray-900: #1d1d1f;
+  --gray-950: #111827;
+  --slate-950: #0f172a;
+  --sky-400: #60a5fa;
+  --sky-500: #3b82f6;
+  --sky-600: #2563eb;
+  --sky-650: #3378f9;
+
+  /* Brand */
+  --blue-500: #007aff;
+  --blue-550: #408ff7;
+  --blue-600: #3070d9;
+  --blue-700: #2563eb;
+  --blue-800: #1d4ed8;
+  --pink-500: #ff2d55;
+  --cyan-500: #30b0c7;
+  --green-500: #34c759;
+  --amber-550: #f5a623;
+  --orange-500: #ff9500;
+  --orange-550: #ff9f0a;
+  --red-500: #ff3b30;
+
+  /* Semantic */
+  --color-bg-base: var(--gray-50);
+  --color-bg-surface: var(--white);
+  --color-bg-subtle: var(--gray-25);
+  --color-bg-muted: var(--gray-75);
+  --color-border-subtle: var(--gray-200);
+  --color-border-soft: rgba(0, 0, 0, 0.03);
+  --color-border-hover: rgba(0, 0, 0, 0.06);
+  --color-text-primary: var(--gray-950);
+  --color-text-secondary: var(--gray-800);
+  --color-text-tertiary: var(--gray-600);
+  --color-text-quaternary: var(--gray-500);
+  --color-accent-primary: var(--blue-550);
+  --color-accent-hover: var(--blue-600);
+  --color-accent-strong: var(--blue-700);
+  --color-accent-soft: rgba(64, 143, 247, 0.1);
+  --color-success: var(--green-500);
+  --color-warning: var(--orange-500);
+  --color-danger: var(--red-500);
+
+  /* Materials */
+  --material-overlay: rgba(0, 0, 0, 0.45);
+  --material-overlay-strong: rgba(0, 0, 0, 0.5);
+  --material-panel-thick: rgba(250, 250, 252, 0.85);
+  --material-panel-soft: rgba(255, 255, 255, 0.4);
+  --material-panel-thin: rgba(255, 255, 255, 0.15);
+  --material-elevated-line: rgba(255, 255, 255, 0.3);
+
+  /* Component: list */
+  --list-card-bg: var(--color-bg-surface);
+  --list-card-hover-bg: var(--white);
+  --list-card-active-bg: #f9fafb;
+  --list-card-border: var(--color-border-soft);
+  --list-card-hover-border: var(--color-border-hover);
+  --list-card-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.02), 0 4px 12px rgba(0, 0, 0, 0.02);
+  --list-card-hover-shadow:
+    0 4px 8px rgba(0, 0, 0, 0.03), 0 8px 16px rgba(0, 0, 0, 0.05);
+  --list-card-title: var(--gray-750);
+  --list-card-meta-text: var(--gray-650);
+  --list-card-unread-dot: var(--sky-650);
+  --list-card-selected-border: rgba(64, 143, 247, 0.34);
+  --list-card-selected-bg: linear-gradient(
+    180deg,
+    rgba(239, 246, 255, 0.98),
+    rgba(255, 255, 255, 1)
+  );
+  --list-card-selected-shadow:
+    0 0 0 2px rgba(64, 143, 247, 0.16), 0 18px 36px rgba(64, 143, 247, 0.12),
+    0 10px 20px rgba(15, 23, 42, 0.07);
+  --list-card-selected-shadow-hover:
+    0 0 0 2px rgba(64, 143, 247, 0.18), 0 20px 40px rgba(64, 143, 247, 0.14),
+    0 12px 24px rgba(15, 23, 42, 0.08);
+  --list-card-selected-title: var(--slate-950);
+  --list-card-selected-meta: #5f6f86;
+  --list-card-selected-unread-ring: rgba(59, 130, 246, 0.12);
+  --list-card-selected-strip-start: var(--sky-400);
+  --list-card-selected-strip-mid: var(--sky-500);
+  --list-card-selected-strip-end: var(--sky-600);
+  --list-card-selected-strip-glow: rgba(59, 130, 246, 0.26);
+
+  /* Component: filter chips */
+  --filter-chip-bg: var(--gray-150);
+  --filter-chip-hover-bg: var(--gray-175);
+  --filter-chip-text: #3c3c43;
+  --filter-chip-text-muted: var(--gray-700);
+  --filter-chip-active-text: var(--white);
+
+  /* Component: dock */
+  --dock-bg: var(--material-panel-thin);
+  --dock-border: var(--material-elevated-line);
+  --dock-pill-bg: rgba(0, 0, 0, 0.06);
+  --dock-pill-hover: rgba(0, 0, 0, 0.1);
+  --dock-btn-bg: rgba(0, 0, 0, 0.06);
+
+  /* Component: reader */
+  --reader-surface-bg: var(--white);
+  --reader-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  --detail-placeholder-bg: #ededed;
+  --detail-placeholder-ink: var(--gray-300);
+
+  /* Component: settings */
+  --settings-card-bg: var(--white);
+  --settings-card-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.02), 0 1px 2px rgba(0, 0, 0, 0.03);
+  --settings-card-shadow-hover:
+    0 8px 20px rgba(0, 0, 0, 0.04), 0 2px 4px rgba(0, 0, 0, 0.02);
+  --settings-label-text: var(--gray-600);
+  --input-bg: var(--gray-75);
+  --input-bg-hover: var(--white);
+  --input-text: var(--gray-900);
+  --input-placeholder: var(--gray-400);
+  --input-focus-ring: rgba(0, 122, 255, 0.1);
+
+  /* Component: modal / toast / preview */
+  --toast-bg: rgba(255, 255, 255, 0.85);
+  --toast-shadow:
+    0 8px 28px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.02),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.6);
+  --modal-overlay-bg: var(--material-overlay-strong);
+  --image-preview-bg: var(--material-panel-thick);
+  --image-preview-toolbar-bg: rgba(255, 255, 255, 0.3);
+  --image-preview-border: rgba(255, 255, 255, 0.5);
+  --image-preview-toolbar-border: rgba(0, 0, 0, 0.05);
+  --image-preview-shadow:
+    0 40px 100px rgba(0, 0, 0, 0.25), 0 10px 40px rgba(0, 0, 0, 0.1);
+  --image-preview-fallback-bg: rgba(255, 255, 255, 0.72);
+  --image-preview-fallback-text: var(--gray-850);
+  --image-preview-thumb-bg: var(--gray-75);
+  --image-preview-thumb-ring: var(--blue-500);
+
+  /* Component: RSS */
+  --rss-source-label-bg: rgba(255, 105, 0, 0.75);
+  --rss-source-label-fg: var(--white);
+
+  /* Component: top actions / states */
+  --top-action-attachment: var(--blue-500);
+  --top-action-snapshot: var(--pink-500);
+  --top-action-refresh: var(--cyan-500);
+  --top-action-favorite: var(--amber-550);
+  --top-action-pin: var(--red-500);
+  --top-action-home: var(--filter-chip-text);
+  --top-action-edit: var(--source-chip-10);
+  --top-action-cancel: var(--gray-625);
+  --top-action-save: var(--green-500);
+  --connection-idle: var(--gray-625);
+  --connection-success: var(--green-500);
+  --connection-error: var(--red-500);
+  --connection-testing: var(--blue-500);
+
+  /* Dynamic JS hook tokens */
+  --theme-highlight-ring: rgba(0, 122, 255, 0.5);
+  --custom-source-web-color: var(--green-500);
+  --custom-source-rss-color: #ff6900;
+
+  /* Source chip tokens */
+  --source-chip-1: rgb(183, 42, 92);
+  --source-chip-1-soft: rgba(183, 42, 92, 0.8);
+  --source-chip-2: rgb(255, 56, 60);
+  --source-chip-2-soft: rgba(255, 56, 60, 0.8);
+  --source-chip-3: rgb(255, 141, 40);
+  --source-chip-3-soft: rgba(255, 141, 40, 0.8);
+  --source-chip-4: rgb(0, 136, 255);
+  --source-chip-4-soft: rgba(0, 136, 255, 0.8);
+  --source-chip-5: rgb(52, 199, 89);
+  --source-chip-5-soft: rgba(52, 199, 89, 0.8);
+  --source-chip-6: rgb(255, 204, 0);
+  --source-chip-6-soft: rgba(255, 204, 0, 0.8);
+  --source-chip-7: rgb(48, 176, 199);
+  --source-chip-7-soft: rgba(48, 176, 199, 0.8);
+  --source-chip-8: rgb(0, 199, 190);
+  --source-chip-8-soft: rgba(0, 199, 190, 0.8);
+  --source-chip-9: rgb(255, 141, 40);
+  --source-chip-9-soft: rgba(255, 141, 40, 0.8);
+  --source-chip-10: rgb(175, 82, 222);
+  --source-chip-10-soft: rgba(175, 82, 222, 0.8);
+  --source-chip-11: rgb(44, 44, 46);
+  --source-chip-11-soft: rgba(44, 44, 46, 0.8);
+  --source-chip-12: rgb(162, 132, 94);
+  --source-chip-12-soft: rgba(162, 132, 94, 0.8);
+  --source-chip-13: rgb(50, 173, 230);
+  --source-chip-13-soft: rgba(50, 173, 230, 0.8);
+  --source-chip-14: rgb(234, 83, 107);
+  --source-chip-14-soft: rgba(234, 83, 107, 0.8);
+}
+
+/* =========================================================
+   🌙 深色模式 (Dark Mode) - 仅安全反转语义和组件 Token
+   ========================================================= */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* --- 1. 语义层反转 (Semantic) --- */
+  --color-bg-base: #111112; /* 最深底色 */
+  --color-bg-surface: #1c1c1e; /* 卡片底色 (Apple 深色模式标准卡片灰) */
+  --color-bg-subtle: #2c2c2e; /* 稍微凸起的次级背景 */
+  --color-bg-muted: #1c1c1e;
+
+  --color-border-subtle: rgba(255, 255, 255, 0.1);
+  --color-border-soft: rgba(255, 255, 255, 0.05);
+  --color-border-hover: rgba(255, 255, 255, 0.15);
+
+  --color-text-primary: rgba(255, 255, 255, 0.92); /* 避免纯白刺眼 */
+  --color-text-secondary: #8e8e93; /* Apple 深色标准次级灰 */
+  --color-text-tertiary: #636366;
+  --color-text-quaternary: #48484a;
+
+  --color-accent-soft: rgba(64, 143, 247, 0.15);
+
+  /* --- 2. 材质与遮罩反转 (Materials) --- */
+  --material-overlay: rgba(0, 0, 0, 0.6);
+  --material-overlay-strong: rgba(0, 0, 0, 0.8);
+  --material-panel-thick: rgba(44, 44, 46, 0.85); /* 深色毛玻璃 */
+  --material-panel-soft: rgba(60, 60, 62, 0.6);
+  --material-panel-thin: rgba(255, 255, 255, 0.05);
+  --material-elevated-line: rgba(255, 255, 255, 0.1);
+
+  /* --- 3. 组件级反转 (Component) --- */
+  /* 列表卡片 */
+  --list-card-bg: var(--color-bg-surface);
+  --list-card-hover-bg: #2c2c2e;
+  --list-card-active-bg: #111112;
+  --list-card-shadow: 0 4px 12px rgba(0, 0, 0, 0.5); /* 黑暗中必须加深阴影 */
+  --list-card-hover-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+
+  /* 双栏选中态 (剥离大面积高光，采用沉稳辉光) */
+  --list-card-selected-bg: linear-gradient(
+    180deg,
+    rgba(64, 143, 247, 0.1),
+    #1c1c1e
+  );
+  --list-card-selected-shadow:
+    0 0 0 2px rgba(64, 143, 247, 0.3), 0 12px 24px rgba(0, 0, 0, 0.6);
+  --list-card-selected-shadow-hover:
+    0 0 0 2px rgba(64, 143, 247, 0.4), 0 16px 32px rgba(0, 0, 0, 0.7);
+  --list-card-selected-title: var(--color-text-primary);
+  --list-card-selected-meta: var(--color-text-secondary);
+  --list-card-selected-strip-glow: rgba(64, 143, 247, 0.3);
+
+  /* Filter Chips */
+  --filter-chip-bg: #2c2c2e;
+  --filter-chip-hover-bg: #3a3a3c;
+  --filter-chip-text: rgba(255, 255, 255, 0.85);
+
+  /* Dock (白膜替代黑膜) */
+  --dock-pill-bg: rgba(255, 255, 255, 0.08);
+  --dock-pill-hover: rgba(255, 255, 255, 0.15);
+  --dock-btn-bg: rgba(255, 255, 255, 0.08);
+
+  /* Reader & Details */
+  --reader-surface-bg: var(--color-bg-surface);
+  --reader-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  --detail-placeholder-bg: #111112;
+  --detail-placeholder-ink: #3a3a3c;
+
+  /* Settings & Inputs */
+  --settings-card-bg: var(--color-bg-surface);
+  --input-bg: #111112;
+  --input-bg-hover: #2c2c2e;
+  --input-text: var(--color-text-primary);
+  --input-placeholder: #636366;
+
+  /* Modal / Toast / Preview */
+  --toast-bg: rgba(44, 44, 46, 0.85);
+  --toast-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --image-preview-fallback-bg: rgba(44, 44, 46, 0.85);
+  --image-preview-fallback-text: var(--color-text-primary);
+  --image-preview-thumb-bg: #111112;
+
+  /* --- 4. Source Chips 透明度底板反转 --- */
+  /* 深色模式下，原有的 -soft 如果是纯色透明，可以直接沿用，
+     如果是调和色，建议覆写为带有 0.2 透明度的 rgba，以融入深色背景 */
+  --source-chip-1-soft: rgba(183, 42, 92, 0.25);
+  --source-chip-2-soft: rgba(255, 56, 60, 0.25);
+  --source-chip-3-soft: rgba(255, 141, 40, 0.25);
+  --source-chip-4-soft: rgba(0, 136, 255, 0.25);
+  --source-chip-5-soft: rgba(52, 199, 89, 0.25);
+  --source-chip-6-soft: rgba(255, 204, 0, 0.25);
+  --source-chip-7-soft: rgba(48, 176, 199, 0.25);
+  --source-chip-8-soft: rgba(0, 199, 190, 0.25);
+  --source-chip-9-soft: rgba(255, 141, 40, 0.25);
+  --source-chip-10-soft: rgba(175, 82, 222, 0.25);
+  --source-chip-11-soft: rgba(
+    255,
+    255,
+    255,
+    0.1
+  ); /* 深色下黑色 chip 改为半透白 */
+  --source-chip-12-soft: rgba(162, 132, 94, 0.25);
+  --source-chip-13-soft: rgba(50, 173, 230, 0.25);
+  --source-chip-14-soft: rgba(234, 83, 107, 0.25);
+}
+
+:root[data-theme="sepia"] {
+  color-scheme: light;
+}

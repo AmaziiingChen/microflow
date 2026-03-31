@@ -73,7 +73,7 @@ app = BUNDLE(
     coll,
     name='MicroFlow.app',
     icon='frontend/icons/icon_white.png', # 推荐换成 .icns 格式体验更好
-    bundle_identifier='com.yourname.microflow', # 替换为你自己的标识符
+    bundle_identifier='com.microflow.app', # 替换为你自己的标识符
     info_plist={
         'NSHighResolutionCapable': 'True', # 开启 Retina 屏幕高清渲染
         'LSUIElement': 'False',            # 如果你只想做状态栏菜单，设为 True 会隐藏 Dock 图标

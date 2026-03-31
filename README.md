@@ -250,6 +250,7 @@ python -m unittest tests.test_rss_samples -v
 - [项目阶段清单](docs/PROJECT_CHECKLIST.md)
 - [RSS 功能进度记录](docs/RSS_PROGRESS.md)
 - [RSS 阅读器待完善清单](docs/RSS_READER_CHECKLIST.md)
+- [前端主题系统重构方案](docs/THEME_SYSTEM_PLAN.md)
 
 后续如果某个模块进入持续迭代状态，建议继续采用这种方式补充专项文档，例如：
 
