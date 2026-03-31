@@ -2283,6 +2283,7 @@ class RuleGeneratorService:
         max_items: int = 3,
     ) -> Dict[str, Any]:
         sample_data = self.test_existing_rule(rule, max_items=max_items)
+        list_fetch_error = str(self._last_html_fetch_error or "").strip()
         detail_samples, detail_preview_required, detail_preview_passed, detail_preview_message = (
             self._build_html_detail_preview(rule, max_items=min(max_items, 2))
         )
@@ -2337,6 +2338,7 @@ class RuleGeneratorService:
 
         return {
             "sample_data": sample_data,
+            "fetch_error": list_fetch_error,
             "detail_samples": detail_samples,
             "detail_preview_required": detail_preview_required,
             "detail_preview_passed": detail_preview_passed,

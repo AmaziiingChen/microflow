@@ -804,6 +804,55 @@ class DatabaseManager:
 
             return False, "unchanged"
 
+    def get_article_by_url(self, url: str) -> Optional[Dict[str, Any]]:
+        """根据 URL 获取文章。"""
+        normalized_url = canonicalize_article_url(url)
+        if not normalized_url:
+            return None
+        with self._get_read_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM articles WHERE url = ? LIMIT 1", (normalized_url,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def get_articles_by_rule_prefix(self, rule_prefix: str) -> List[Dict[str, Any]]:
+        """根据 rule_id 前缀读取文章，主要用于系统内容等内置数据。"""
+        prefix = str(rule_prefix or "").strip()
+        if not prefix:
+            return []
+        with self._get_read_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT *
+                FROM articles
+                WHERE rule_id LIKE ? AND is_deleted = 0
+                ORDER BY created_at DESC
+                """,
+                (f"{prefix}%",),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
+    def delete_articles_by_rule_id(self, rule_id: str) -> int:
+        """按 rule_id 删除文章。"""
+        normalized_rule_id = str(rule_id or "").strip()
+        if not normalized_rule_id:
+            return 0
+
+        def do_delete(cursor: sqlite3.Cursor):
+            cursor.execute(
+                "DELETE FROM articles WHERE rule_id = ?",
+                (normalized_rule_id,),
+            )
+            return int(cursor.rowcount or 0)
+
+        try:
+            deleted = self._write_worker.submit(do_delete, wait=True, timeout=10.0)
+            return int(deleted or 0)
+        except Exception as e:
+            logger.error(f"按 rule_id 删除文章失败: {e}")
+            return 0
+
     def get_articles_paged(
         self,
         limit: int = 20,
@@ -823,6 +872,11 @@ class DatabaseManager:
             favorites_only: 仅返回收藏的文章
             include_content: 是否返回正文/Markdown/结构化图片等重字段
         """
+        article_order_sql = (
+            "COALESCE(NULLIF(exact_time, ''), "
+            "CASE WHEN NULLIF(date, '') IS NOT NULL THEN date || ' 00:00:00' END, "
+            "created_at) DESC, created_at DESC"
+        )
         with self._get_read_connection() as conn:
             cursor = conn.cursor()
 
@@ -897,17 +951,9 @@ class DatabaseManager:
             if conditions:
                 base_query += " WHERE " + " AND ".join(conditions)
 
-            # 🌟 合并视图排序：核心公文通优先，其余来源再按入库时间倒序
-            # 这样“全部”首屏不会被高频 RSS 挤掉，但单源筛选仍保持时间优先
-            if source_names is not None and len(source_names) > 1:
-                base_query += (
-                    " ORDER BY CASE WHEN source_name = '公文通' THEN 0 ELSE 1 END,"
-                    " created_at DESC, COALESCE(NULLIF(exact_time, ''), date || ' 00:00:00') DESC"
-                )
-            else:
-                base_query += (
-                    " ORDER BY created_at DESC, COALESCE(NULLIF(exact_time, ''), date || ' 00:00:00') DESC"
-                )
+            # 所有聚合与分页查询统一按“有效发布时间”倒序，
+            # 避免后端分页顺序与前端展示顺序不一致，导致首屏来源分布失真。
+            base_query += f" ORDER BY {article_order_sql}"
             base_query += " LIMIT ? OFFSET ?"
             params.extend([limit, offset])
 
@@ -1147,6 +1193,11 @@ class DatabaseManager:
         """
         with self._get_read_connection() as conn:
             cursor = conn.cursor()
+            article_order_sql = (
+                "COALESCE(NULLIF(exact_time, ''), "
+                "CASE WHEN NULLIF(date, '') IS NOT NULL THEN date || ' 00:00:00' END, "
+                "created_at) DESC, created_at DESC"
+            )
 
             # 解析布尔搜索语法
             or_groups = [g.strip() for g in re.split(r'\s+or\s+', keyword, flags=re.IGNORECASE)]
@@ -1241,7 +1292,7 @@ class DatabaseManager:
             query = f"""
             {select_clause} FROM articles
             WHERE {where_clause}
-            ORDER BY created_at DESC, COALESCE(NULLIF(exact_time, ''), date || ' 00:00:00') DESC
+            ORDER BY {article_order_sql}
             LIMIT ?
             """
 
@@ -2030,7 +2081,12 @@ def get_db() -> DatabaseManager:
 # 兼容旧代码：db 属性访问（延迟初始化）
 class _DBProxy:
     """数据库代理类，支持延迟初始化和属性透明转发"""
+
+    __func__ = None  # 兼容 unittest.mock/inspect 的异步对象探测
+
     def __getattr__(self, name):
+        if name == "__func__":
+            raise AttributeError(name)
         return getattr(get_db(), name)
 
     def __repr__(self):

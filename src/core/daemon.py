@@ -156,6 +156,7 @@ class DaemonManager:
         interval_getter: Callable[[], int] = lambda: 900,
         initial_wait: int = 20,
         on_new_articles: Optional[Callable[[int, Dict[str, Any]], None]] = None,
+        on_symbolic_ping: Optional[Callable[[str, str], None]] = None,
         debug_mode: bool = False,
     ) -> None:
         """
@@ -166,6 +167,7 @@ class DaemonManager:
             interval_getter: 获取轮询间隔的函数（返回秒数），支持热重载
             initial_wait: 初始等待时间（秒），默认 20 秒以确保前端完成初始化
             on_new_articles: 发现新文章时的回调，参数为 (count, result)
+            on_symbolic_ping: 象征性提醒回调，参数为 (title, message)
             debug_mode: 调试模式，缩短初始等待时间
         """
         if self._is_running:
@@ -288,7 +290,20 @@ class DaemonManager:
                     and current_time >= evening_target
                 ):
                     # 晚间抖动触发
-                    if current_time >= last_run_time + self.MIN_RUN_INTERVAL:
+                    recent_run_threshold = max(
+                        current_interval, self.MIN_RUN_INTERVAL
+                    )
+                    if current_time < last_run_time + recent_run_threshold:
+                        evening_ran = True
+                        logger.info(
+                            "🌆 晚间轻提醒触发：近期已完成巡检，本轮跳过额外抓取"
+                        )
+                        if on_symbolic_ping:
+                            on_symbolic_ping(
+                                "晚间轻提醒",
+                                "今晚已完成过后台巡检，这一轮不再重复抓取。",
+                            )
+                    elif current_time >= last_run_time + self.MIN_RUN_INTERVAL:
                         should_run = True
                         logger.info(f"🌆 晚间抖动触发 (目标时间已到)")
 

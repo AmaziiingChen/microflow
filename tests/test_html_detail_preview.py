@@ -167,8 +167,35 @@ class HtmlDetailPreviewTests(unittest.TestCase):
             bundle["page_summary"]["template_recommendations"][0]["id"],
             "sztu_standard_ul_list",
         )
+        self.assertEqual(bundle["fetch_error"], "")
         self.assertEqual(bundle["test_snapshot"]["sample_count"], 1)
         self.assertTrue(bundle["test_snapshot"]["detail_preview_passed"])
+
+    @patch.object(RuleGeneratorService, "_build_html_detail_preview")
+    @patch.object(RuleGeneratorService, "_fetch_html_content")
+    @patch.object(RuleGeneratorService, "test_existing_rule")
+    def test_build_rule_preview_bundle_preserves_fetch_error_for_empty_preview(
+        self,
+        mock_test_existing_rule,
+        mock_fetch_html,
+        mock_detail_preview,
+    ):
+        service = self.make_service()
+        mock_test_existing_rule.return_value = []
+        mock_detail_preview.return_value = ([], False, False, "")
+        mock_fetch_html.return_value = None
+        service._last_html_fetch_error = "请求抓取失败：站点当前不可访问"
+
+        bundle = service.build_rule_preview_bundle(
+            self.make_rule(
+                url="https://example.com/list",
+                list_container="ul.list-gl",
+            ),
+            max_items=1,
+        )
+
+        self.assertEqual(bundle["sample_data"], [])
+        self.assertEqual(bundle["fetch_error"], "请求抓取失败：站点当前不可访问")
 
 
 if __name__ == "__main__":

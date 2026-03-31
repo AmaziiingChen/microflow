@@ -234,6 +234,10 @@
                       </span>
                     </span>
                   </span>
+                  <span
+                    class="settings-nav-chevron settings-inline-arrow"
+                    aria-hidden="true"
+                  ></span>
                 </button>
               </nav>
             </aside>
@@ -603,11 +607,15 @@
                           :render-markdown="renderMarkdown"
                           :get-html-rule-pending-retest-message="getHtmlRulePendingRetestMessage"
                           :get-html-access-config-validation-message="getHtmlAccessConfigValidationMessage"
+                          :editing-rule-id="editingRuleId"
+                          :is-saving-custom-rule="isSavingCustomRule"
                           :sheet-mode="true"
                           @close="closeCustomRuleModal"
                           @add-rule-field="addRuleField"
                           @remove-rule-field="removeRuleField"
                           @toggle-selector-panel="showSelectorPanel = !showSelectorPanel"
+                          @generate="generateAndTestRule"
+                          @preview-rss="validateAndSaveRssRule"
                           @manual-retest="handleManualRetest"
                           @regenerate="handleRegenerateRule"
                           @save="confirmAndSaveRule"
@@ -642,44 +650,7 @@
                     </div>
                   </header>
 
-                  <template v-if="activeSettingsSection === 'network'">
-                    <div class="settings-group-block">
-                      <div class="settings-group-head">
-                        <div class="settings-group-label">状态信息</div>
-                        <button
-                          type="button"
-                          class="settings-group-tool"
-                          @click="refreshNetworkAccessStatus(true)"
-                          :disabled="isCheckingNetworkAccess"
-                        >
-                          {{ isCheckingNetworkAccess ? '检测中…' : '重新检测' }}
-                        </button>
-                      </div>
-                      <div class="settings-group-card">
-                        <div class="settings-row">
-                          <span class="settings-row-label">当前状态</span>
-                          <span class="settings-row-trailing">
-                            <span
-                              class="settings-status-dot"
-                              :class="'is-' + (networkAccessState.status || 'idle')"
-                            ></span>
-                            <span class="settings-row-value">
-                              {{ networkAccessState.label }}
-                            </span>
-                          </span>
-                        </div>
-                        <div class="settings-row">
-                          <span class="settings-row-label">最近检查时间</span>
-                          <span class="settings-row-note is-inline">
-                            {{ formatNetworkCheckedAt(networkAccessState.checkedAt) }}
-                          </span>
-                        </div>
-                      </div>
-                      <p class="settings-group-footer">
-                        {{ networkAccessState.detail }}
-                      </p>
-                    </div>
-
+                  <template v-if="activeSettingsSection === 'software'">
                     <div class="settings-group-block">
                       <div class="settings-group-head">
                         <div class="settings-group-label">软件更新</div>
@@ -727,6 +698,34 @@
                             {{ softwareUpdateState.releaseDate }}
                           </span>
                         </div>
+                        <button
+                          v-if="systemContentEntries.announcement"
+                          type="button"
+                          class="settings-row settings-row-link"
+                          @click="openSystemContentArticle('announcement')"
+                        >
+                          <span class="settings-row-stack">
+                            <span class="settings-row-label">最新公告</span>
+                            <span class="settings-row-note">
+                              {{
+                                systemContentEntries.announcement.title ||
+                                  systemNotice.title
+                              }}
+                            </span>
+                          </span>
+                          <span class="settings-row-trailing">
+                            <span class="settings-row-value">
+                              {{
+                                systemContentEntries.announcement.formattedTime ||
+                                  systemNotice.publish_time
+                              }}
+                            </span>
+                            <span
+                              class="settings-inline-arrow"
+                              aria-hidden="true"
+                            ></span>
+                          </span>
+                        </button>
                         <div class="settings-row">
                           <div class="settings-row-stack">
                             <span class="settings-row-label">更新说明</span>
@@ -767,6 +766,43 @@
                             softwareUpdateState.checkedAt
                           )
                         }}
+                      </p>
+                    </div>
+
+                    <div class="settings-group-block">
+                      <div class="settings-group-head">
+                        <div class="settings-group-label">网络与访问</div>
+                        <button
+                          type="button"
+                          class="settings-group-tool"
+                          @click="refreshNetworkAccessStatus(true)"
+                          :disabled="isCheckingNetworkAccess"
+                        >
+                          {{ isCheckingNetworkAccess ? '检测中…' : '重新检测' }}
+                        </button>
+                      </div>
+                      <div class="settings-group-card">
+                        <div class="settings-row">
+                          <span class="settings-row-label">当前状态</span>
+                          <span class="settings-row-trailing">
+                            <span
+                              class="settings-status-dot"
+                              :class="'is-' + (networkAccessState.status || 'idle')"
+                            ></span>
+                            <span class="settings-row-value">
+                              {{ networkAccessState.label }}
+                            </span>
+                          </span>
+                        </div>
+                        <div class="settings-row">
+                          <span class="settings-row-label">最近检查时间</span>
+                          <span class="settings-row-note is-inline">
+                            {{ formatNetworkCheckedAt(networkAccessState.checkedAt) }}
+                          </span>
+                        </div>
+                      </div>
+                      <p class="settings-group-footer">
+                        {{ networkAccessState.detail }}
                       </p>
                     </div>
                   </template>
@@ -907,7 +943,13 @@
                               {{ promptPreviewText }}
                             </span>
                           </span>
-                          <span class="settings-row-value">编辑</span>
+                          <span class="settings-row-trailing">
+                            <span class="settings-row-value">编辑</span>
+                            <span
+                              class="settings-inline-arrow"
+                              aria-hidden="true"
+                            ></span>
+                          </span>
                         </button>
                       </div>
                     </div>
@@ -921,8 +963,14 @@
                           @click="openSecondaryModelsSheet"
                         >
                           <span class="settings-row-label">备选模型</span>
-                          <span class="settings-row-value">
-                            已添加 {{ config.secondaryModels.length }} 个
+                          <span class="settings-row-trailing">
+                            <span class="settings-row-value">
+                              已添加 {{ config.secondaryModels.length }} 个
+                            </span>
+                            <span
+                              class="settings-inline-arrow"
+                              aria-hidden="true"
+                            ></span>
                           </span>
                         </button>
                       </div>
@@ -1224,6 +1272,111 @@
                         >
                           暂无自定义数据源
                         </div>
+                      </div>
+                    </div>
+                  </template>
+
+                  <template v-else-if="activeSettingsSection === 'about'">
+                    <div class="settings-group-block">
+                      <div class="settings-group-label">应用信息</div>
+                      <div class="settings-group-card">
+                        <div class="settings-row">
+                          <span class="settings-row-label">当前版本</span>
+                          <span class="settings-row-value">
+                            {{
+                              softwareUpdateState.currentVersion ||
+                                remoteVersion ||
+                                '未识别'
+                            }}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          class="settings-row settings-row-link"
+                          @click="openSystemContentArticle('changelog')"
+                        >
+                          <span class="settings-row-stack">
+                            <span class="settings-row-label">版本更新日志</span>
+                            <span class="settings-row-note">
+                              {{
+                                systemContentEntries.changelog?.summary ||
+                                  '查看完整更新记录'
+                              }}
+                            </span>
+                          </span>
+                          <span class="settings-row-trailing">
+                            <span class="settings-row-value">
+                              {{
+                                systemContentEntries.changelog?.category ||
+                                  '详情'
+                              }}
+                            </span>
+                            <span
+                              class="settings-inline-arrow"
+                              aria-hidden="true"
+                            ></span>
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                  </template>
+
+                  <template v-else-if="activeSettingsSection === 'feedback'">
+                    <div class="settings-group-block">
+                      <div class="settings-group-label">反馈邮箱</div>
+                      <div class="settings-group-card">
+                        <button
+                          type="button"
+                          class="settings-row settings-row-link"
+                          @click="openSystemContentArticle('feedback')"
+                        >
+                          <span class="settings-row-stack">
+                            <span class="settings-row-label">英文邮箱</span>
+                            <span class="settings-row-note">
+                              {{
+                                systemContentEntries.feedback?.feedback_email ||
+                                  'amaziiingchen@qq.com'
+                              }}
+                            </span>
+                          </span>
+                          <span class="settings-row-trailing">
+                            <span class="settings-row-value">查看说明</span>
+                            <span
+                              class="settings-inline-arrow"
+                              aria-hidden="true"
+                            ></span>
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                  </template>
+
+                  <template v-else-if="activeSettingsSection === 'disclaimer'">
+                    <div class="settings-group-block">
+                      <div class="settings-group-label">使用边界</div>
+                      <div class="settings-group-card">
+                        <button
+                          type="button"
+                          class="settings-row settings-row-link"
+                          @click="openSystemContentArticle('disclaimer')"
+                        >
+                          <span class="settings-row-stack">
+                            <span class="settings-row-label">免责声明</span>
+                            <span class="settings-row-note">
+                              {{
+                                systemContentEntries.disclaimer?.summary ||
+                                  '查看完整免责声明'
+                              }}
+                            </span>
+                          </span>
+                          <span class="settings-row-trailing">
+                            <span class="settings-row-value">查看内容</span>
+                            <span
+                              class="settings-inline-arrow"
+                              aria-hidden="true"
+                            ></span>
+                          </span>
+                        </button>
                       </div>
                     </div>
                   </template>
@@ -4407,15 +4560,46 @@
                 </div>
               </div>
 
-              <div v-if="!sheetMode" class="custom-rule-editor-footer">
-                <button class="btn btn-ghost" @click="$emit('close')" type="button">
+              <div
+                :class="sheetMode
+                  ? 'custom-rule-editor-footer is-sheet-mode settings-subpage-footer settings-subpage-footer-rule'
+                  : 'custom-rule-editor-footer'"
+              >
+                <button
+                  :class="sheetMode ? 'settings-sheet-action' : 'btn btn-ghost'"
+                  @click="$emit('close')"
+                  :disabled="isGeneratingRule || isRetestingRule || isSavingCustomRule"
+                  type="button"
+                >
                   取消
                 </button>
                 <button
-                  v-if="ruleForm.source_type !== 'rss'"
-                  class="btn btn-secondary"
+                  v-if="ruleForm.source_type === 'rss'"
+                  :class="sheetMode ? 'settings-sheet-action' : 'btn btn-secondary'"
+                  @click="$emit('preview-rss')"
+                  :disabled="isGeneratingRule || isRetestingRule || isSavingCustomRule"
+                  type="button"
+                >
+                  {{ previewData && previewData.length > 0 ? '重新预览' : 'RSS 解析预览' }}
+                </button>
+                <button
+                  v-else
+                  :class="sheetMode ? 'settings-sheet-action' : 'btn btn-secondary'"
+                  @click="generatedRuleCache ? $emit('manual-retest') : $emit('generate')"
+                  :disabled="isGeneratingRule || isRetestingRule || isSavingCustomRule"
+                  type="button"
+                >
+                  {{
+                    generatedRuleCache
+                      ? (previewData && previewData.length > 0 ? '测试规则' : '先测试当前规则')
+                      : 'AI 智能分析并测试'
+                  }}
+                </button>
+                <button
+                  v-if="ruleForm.source_type !== 'rss' && generatedRuleCache"
+                  :class="sheetMode ? 'settings-sheet-action' : 'btn btn-secondary'"
                   @click="$emit('regenerate')"
-                  :disabled="isGeneratingRule"
+                  :disabled="isGeneratingRule || isRetestingRule || isSavingCustomRule"
                   title="字段结构变化较大时，可重新生成选择器规则"
                   type="button"
                 >
@@ -4432,10 +4616,15 @@
                   >
                     <circle cx="12" cy="12" r="10" />
                   </svg>
-                  <span v-else>重新生成规则</span>
+                  <span v-else>重新生成</span>
                 </button>
-                <button class="btn btn-primary" @click="$emit('save')" type="button">
-                  保存修改
+                <button
+                  :class="sheetMode ? 'settings-sheet-action is-primary' : 'btn btn-primary'"
+                  @click="$emit('save')"
+                  :disabled="isGeneratingRule || isRetestingRule || isSavingCustomRule || (ruleForm.source_type !== 'rss' && !generatedRuleCache)"
+                  type="button"
+                >
+                  保存
                 </button>
               </div>
             </div>
@@ -4726,76 +4915,6 @@
             </div>
           </div>
 
-          <div
-            v-if="showCustomRuleModal"
-            class="settings-sheet-overlay"
-            @click.self="closeCustomRuleModal"
-          >
-            <div class="settings-sheet settings-sheet-rule">
-              <div class="settings-sheet-header settings-sheet-header-rule">
-                <div class="settings-sheet-title-wrap settings-sheet-title-wrap-left">
-                  <h3 class="settings-sheet-title">
-                    {{ editingRuleId ? '编辑规则' : '新建规则' }}
-                  </h3>
-                  <p class="settings-sheet-subtitle">
-                    自定义 HTML / RSS 数据源采集与 AI 增强策略
-                  </p>
-                </div>
-                <div class="settings-sheet-header-actions settings-sheet-header-actions-rule">
-                  <button
-                    type="button"
-                    class="settings-sheet-action"
-                    @click="closeCustomRuleModal"
-                  >
-                    取消
-                  </button>
-                  <button
-                    v-if="editingRuleId"
-                    type="button"
-                    class="settings-sheet-action is-danger"
-                    @click="deleteRule(generatedRuleCache || { rule_id: editingRuleId, task_name: ruleForm.task_name })"
-                  >
-                    删除
-                  </button>
-                  <button
-                    type="button"
-                    class="settings-sheet-action is-primary"
-                    @click="confirmAndSaveRule"
-                  >
-                    保存
-                  </button>
-                </div>
-              </div>
-              <div class="settings-sheet-body settings-sheet-body-rule">
-                <custom-rule-editor-panel
-                  :rule-form="ruleForm"
-                  :preview-data="previewData"
-                  :html-detail-preview-data="htmlDetailPreviewData"
-                  :html-detail-preview-state="htmlDetailPreviewState"
-                  :rss-preview-info="rssPreviewInfo"
-                  :generated-rule-cache="generatedRuleCache"
-                  :rss-template-options="rssTemplateOptions"
-                  :current-rss-template-meta="currentRssTemplateMeta"
-                  :show-selector-panel="showSelectorPanel"
-                  :is-retesting-rule="isRetestingRule"
-                  :is-generating-rule="isGeneratingRule"
-                  :get-rule-summary-prompt-placeholder="getRuleSummaryPromptPlaceholder"
-                  :get-tag-color="getTagColor"
-                  :render-markdown="renderMarkdown"
-                  :get-html-rule-pending-retest-message="getHtmlRulePendingRetestMessage"
-                  :get-html-access-config-validation-message="getHtmlAccessConfigValidationMessage"
-                  :sheet-mode="true"
-                  @close="closeCustomRuleModal"
-                  @add-rule-field="addRuleField"
-                  @remove-rule-field="removeRuleField"
-                  @toggle-selector-panel="showSelectorPanel = !showSelectorPanel"
-                  @manual-retest="handleManualRetest"
-                  @regenerate="handleRegenerateRule"
-                  @save="confirmAndSaveRule"
-                />
-              </div>
-            </div>
-          </div>
           </template>
 
           <template v-if="false">

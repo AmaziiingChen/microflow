@@ -89,6 +89,15 @@ class Api:
     # 🌟 云端配置 URL 基础路径（不含文件名）
     # ============================================================
     _VERSION_BASE_URL = "https://microflow-1412347033.cos.ap-guangzhou.myqcloud.com"
+    _SYSTEM_CONTENT_RULE_PREFIX = "system:"
+    _SYSTEM_CONTENT_SOURCE_NAME = "系统内容"
+    _SYSTEM_CONTENT_DEFAULT_FEEDBACK_EMAIL = "amaziiingchen@qq.com"
+    _SYSTEM_CONTENT_ORDER = (
+        "announcement",
+        "changelog",
+        "feedback",
+        "disclaimer",
+    )
 
     def _get_version_url(self) -> str:
         """根据发布渠道动态构建版本文件 URL"""
@@ -1772,6 +1781,15 @@ class Api:
             # 🌟 更新托盘未读数量
             self._refresh_tray_status()
 
+        def on_symbolic_ping(title: str, message: str):
+            """后台轻提醒回调，不触发重型动作。"""
+            try:
+                self._enqueue_js(
+                    f"if(window.showDaemonHint) window.showDaemonHint({json.dumps(title)}, {json.dumps(message)});"
+                )
+            except Exception as e:
+                logger.debug(f"发送后台轻提醒失败: {e}")
+
         # 🌟 热重载 Getter：动态读取配置，带安全边界（最小 15 分钟）
         def get_interval_seconds() -> int:
             polling_minutes = self._config_service.get("pollingInterval", 60)
@@ -1782,6 +1800,7 @@ class Api:
             task_callback=self.check_updates,
             interval_getter=get_interval_seconds,
             on_new_articles=on_new_articles,
+            on_symbolic_ping=on_symbolic_ping,
             debug_mode=debug_mode,
         )
 
@@ -2889,6 +2908,10 @@ class Api:
             ),
         }
 
+    def _is_system_content_article(self, article: Optional[Dict[str, Any]]) -> bool:
+        rule_id = str((article or {}).get("rule_id") or "").strip()
+        return bool(rule_id) and rule_id.startswith(self._SYSTEM_CONTENT_RULE_PREFIX)
+
     def _resolve_article_source_type(self, article: Dict[str, Any]) -> str:
         """按文章上下文解析来源类型（rss/html）"""
         rule_id = str(article.get("rule_id") or "").strip()
@@ -2925,6 +2948,18 @@ class Api:
             article = db.get_article_by_id(article_id)
             if not article:
                 return {"status": "error", "message": "文章不存在"}
+
+            if self._is_system_content_article(article):
+                payload = self._build_article_content_payload(
+                    article,
+                    self._resolve_article_ai_config(article),
+                )
+                return {
+                    "status": "success",
+                    "message": "系统内容无需重新生成",
+                    "result_kind": "system_noop",
+                    **payload,
+                }
 
             # 2. 检查是否有原文内容
             raw_text = article.get("raw_text", "")
@@ -3194,12 +3229,422 @@ class Api:
         else:
             return {}
 
+    def _system_content_rule_id(self, key: str) -> str:
+        return f"{self._SYSTEM_CONTENT_RULE_PREFIX}{str(key or '').strip()}"
+
+    def _system_content_key_from_rule_id(self, rule_id: str) -> str:
+        normalized = str(rule_id or "").strip()
+        if normalized.startswith(self._SYSTEM_CONTENT_RULE_PREFIX):
+            return normalized[len(self._SYSTEM_CONTENT_RULE_PREFIX):]
+        return normalized
+
+    def _system_content_internal_url(self, key: str) -> str:
+        return f"microflow://system/{str(key or '').strip()}"
+
+    def _normalize_system_publish_time(self, value: Any, fallback: str = "") -> str:
+        text = str(value or "").strip()
+        if not text:
+            text = str(fallback or "").strip()
+        if not text:
+            text = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+            return f"{text} 00:00:00"
+        return text
+
+    def _extract_system_content_text(self, payload: Dict[str, Any], *keys: str) -> str:
+        for key in keys:
+            value = payload.get(key)
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text:
+                return text
+        return ""
+
+    def _normalize_system_content_tags(
+        self, value: Any, fallback_tags: Optional[List[str]] = None
+    ) -> List[str]:
+        fallback_tags = fallback_tags or []
+        if isinstance(value, list):
+            tags = [str(item or "").strip() for item in value]
+        elif isinstance(value, str) and value.strip():
+            try:
+                parsed = json.loads(value)
+                if isinstance(parsed, list):
+                    tags = [str(item or "").strip() for item in parsed]
+                else:
+                    tags = [value.strip()]
+            except Exception:
+                tags = [
+                    part.strip()
+                    for part in re.split(r"[、,，|/]+", value)
+                    if part.strip()
+                ]
+        else:
+            tags = []
+
+        normalized: List[str] = []
+        for tag in [*tags, *fallback_tags]:
+            clean_tag = str(tag or "").replace("【", "").replace("】", "").strip()
+            if clean_tag and clean_tag not in normalized:
+                normalized.append(clean_tag)
+        return normalized[:3]
+
+    def _summarize_system_content(self, text: str, fallback: str = "") -> str:
+        plain_text = BeautifulSoup(str(text or ""), "html.parser").get_text("\n")
+        compact = " ".join(plain_text.split()).strip()
+        if compact:
+            return compact[:120]
+        return str(fallback or "").strip()
+
+    def _build_default_system_content_payloads(
+        self, version_data: Dict[str, Any]
+    ) -> Dict[str, Dict[str, Any]]:
+        current_version = str(version_data.get("version") or self.CURRENT_VERSION).strip()
+        release_date = str(version_data.get("release_date") or "").strip()
+        notes = str(version_data.get("notes") or "").strip()
+        announcement = version_data.get("announcement", {}) or {}
+        download_meta = self._resolve_platform_download_meta(version_data)
+        feedback_email = (
+            self._extract_system_content_text(version_data, "feedback_email")
+            or self._extract_system_content_text(
+                version_data.get("feedback", {}) if isinstance(version_data, dict) else {},
+                "email",
+            )
+            or self._SYSTEM_CONTENT_DEFAULT_FEEDBACK_EMAIL
+        )
+        fallback_publish_time = self._normalize_system_publish_time(
+            announcement.get("publish_time") or release_date
+        )
+        download_url = str(download_meta.get("url") or "").strip()
+
+        changelog_lines = [
+            "## 当前版本",
+            f"- 版本：{current_version or self.CURRENT_VERSION}",
+        ]
+        if release_date:
+            changelog_lines.append(f"- 发布时间：{release_date}")
+        if notes:
+            changelog_lines.extend(["", "## 最近更新", notes])
+        if download_url:
+            changelog_lines.extend(["", "## 下载地址", download_url])
+
+        feedback_lines = [
+            f"如需反馈 Bug、提交建议或申请排查，请发送邮件至 <contact>{feedback_email}</contact>。",
+            "",
+            "建议附上以下信息，便于更快定位问题：",
+            "1. 当前版本号",
+            "2. 涉及的数据源、文章标题或规则名称",
+            "3. 报错信息、截图或录屏",
+            "4. 可复现的操作步骤",
+        ]
+
+        disclaimer_lines = [
+            "MicroFlow 仅作为本地信息聚合与阅读辅助工具，不代表任何官方发布渠道。",
+            "",
+            "1. 校内通知、公文、RSS 与网页内容的版权、解释权与最终效力归原发布方所有。",
+            "2. AI 摘要、标签、排版与增强结果仅用于提升阅读效率，不构成官方结论、法律意见或执行依据。",
+            "3. 日期、地点、联系人、附件、原文链接等关键信息，请始终以原始发布页面为准。",
+            "4. 如因网络、站点改版、模型限制或第三方服务异常导致内容缺失、延迟或偏差，MicroFlow 不对此承担直接责任。",
+        ]
+
+        return {
+            "announcement": {
+                "title": announcement.get("title") or f"{current_version or 'MicroFlow'} 最新公告",
+                "summary": announcement.get("summary") or notes or "欢迎使用 MicroFlow。",
+                "content": announcement.get("content")
+                or (
+                    "欢迎使用 MicroFlow。\n\n"
+                    "请先在设置中完成 AI Base URL、API Key 与 Model Name 配置，"
+                    "随后即可体验摘要、增强排版、RSS 订阅与自定义数据源等能力。"
+                ),
+                "publish_time": fallback_publish_time,
+                "url": announcement.get("url") or "https://github.com/AmaziiingChen/microflow",
+                "category": announcement.get("version") or current_version or "系统公告",
+                "tags": announcement.get("tags") or ["系统公告", current_version or "MicroFlow"],
+                "department": "系统公告",
+                "source_name": "系统通知",
+            },
+            "changelog": {
+                "title": "关于 MicroFlow",
+                "summary": notes or "查看当前版本信息与更新日志。",
+                "content": "\n".join(changelog_lines).strip(),
+                "publish_time": fallback_publish_time,
+                "url": announcement.get("url") or download_url or "https://github.com/AmaziiingChen/microflow",
+                "category": current_version or "版本更新日志",
+                "tags": ["关于", "更新日志", current_version or "MicroFlow"],
+                "department": "关于 MicroFlow",
+                "source_name": self._SYSTEM_CONTENT_SOURCE_NAME,
+            },
+            "feedback": {
+                "title": "反馈与建议",
+                "summary": f"欢迎通过邮件联系：{feedback_email}",
+                "content": "\n".join(feedback_lines).strip(),
+                "publish_time": fallback_publish_time,
+                "url": f"mailto:{feedback_email}",
+                "category": "联系方式",
+                "tags": ["反馈", "建议", "邮箱"],
+                "department": "反馈与建议",
+                "source_name": self._SYSTEM_CONTENT_SOURCE_NAME,
+                "email": feedback_email,
+            },
+            "disclaimer": {
+                "title": "免责声明",
+                "summary": "使用前请阅读免责声明与信息使用边界。",
+                "content": "\n".join(disclaimer_lines).strip(),
+                "publish_time": fallback_publish_time,
+                "url": "https://github.com/AmaziiingChen/microflow",
+                "category": "使用说明",
+                "tags": ["免责声明", "使用边界"],
+                "department": "免责声明",
+                "source_name": self._SYSTEM_CONTENT_SOURCE_NAME,
+            },
+        }
+
+    def _extract_remote_system_content_payloads(
+        self, version_data: Dict[str, Any]
+    ) -> Dict[str, Dict[str, Any]]:
+        extracted: Dict[str, Dict[str, Any]] = {}
+        if not isinstance(version_data, dict):
+            return extracted
+
+        alias_map = {
+            "announcement": "announcement",
+            "changelog": "changelog",
+            "about": "changelog",
+            "release_notes": "changelog",
+            "feedback": "feedback",
+            "disclaimer": "disclaimer",
+        }
+
+        bundle = version_data.get("system_contents")
+        if isinstance(bundle, dict):
+            for raw_key, raw_value in bundle.items():
+                target_key = alias_map.get(str(raw_key or "").strip())
+                if target_key and isinstance(raw_value, dict):
+                    extracted[target_key] = dict(raw_value)
+        elif isinstance(bundle, list):
+            for item in bundle:
+                if not isinstance(item, dict):
+                    continue
+                target_key = alias_map.get(str(item.get("key") or "").strip())
+                if target_key:
+                    extracted[target_key] = dict(item)
+
+        for raw_key, target_key in alias_map.items():
+            payload = version_data.get(raw_key)
+            if isinstance(payload, dict):
+                extracted[target_key] = dict(payload)
+
+        return extracted
+
+    def _normalize_system_content_entry(
+        self,
+        key: str,
+        default_payload: Dict[str, Any],
+        override_payload: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        merged = {**(default_payload or {})}
+        if isinstance(override_payload, dict):
+            merged.update(override_payload)
+
+        publish_time = self._normalize_system_publish_time(
+            merged.get("publish_time") or merged.get("updated_at")
+        )
+        content = self._extract_system_content_text(
+            merged,
+            "content",
+            "markdown",
+            "body_markdown",
+            "body",
+        ) or str(default_payload.get("content") or "").strip()
+        summary = self._extract_system_content_text(merged, "summary")
+        tags = self._normalize_system_content_tags(
+            merged.get("tags"),
+            default_payload.get("tags") if isinstance(default_payload.get("tags"), list) else [],
+        )
+        title = self._extract_system_content_text(merged, "title") or str(
+            default_payload.get("title") or key
+        ).strip()
+        category = self._extract_system_content_text(
+            merged, "category", "version", "label"
+        ) or str(default_payload.get("category") or "").strip()
+        url = self._extract_system_content_text(merged, "url") or str(
+            default_payload.get("url") or self._system_content_internal_url(key)
+        ).strip()
+        department = self._extract_system_content_text(merged, "department") or str(
+            default_payload.get("department") or title
+        ).strip()
+        source_name = self._extract_system_content_text(merged, "source_name") or str(
+            default_payload.get("source_name") or self._SYSTEM_CONTENT_SOURCE_NAME
+        ).strip()
+        feedback_email = self._extract_system_content_text(merged, "email")
+
+        if not summary:
+            summary = self._summarize_system_content(
+                content,
+                fallback=str(default_payload.get("summary") or "").strip(),
+            )
+
+        return {
+            "key": key,
+            "rule_id": self._system_content_rule_id(key),
+            "title": title,
+            "summary": summary,
+            "content": content,
+            "exact_time": publish_time,
+            "date": publish_time.split(" ")[0] if publish_time else "",
+            "category": category,
+            "department": department,
+            "source_name": source_name,
+            "source_type": "rss",
+            "url": url,
+            "tags": tags,
+            "enable_ai_formatting": True,
+            "enable_ai_summary": True,
+            "feedback_email": feedback_email,
+        }
+
+    def _build_system_content_entries(
+        self, version_data: Dict[str, Any]
+    ) -> Dict[str, Dict[str, Any]]:
+        defaults = self._build_default_system_content_payloads(version_data)
+        overrides = self._extract_remote_system_content_payloads(version_data)
+        return {
+            key: self._normalize_system_content_entry(
+                key,
+                defaults.get(key, {}),
+                overrides.get(key),
+            )
+            for key in self._SYSTEM_CONTENT_ORDER
+        }
+
+    def _system_content_matches_existing(
+        self, existing_article: Dict[str, Any], normalized_entry: Dict[str, Any]
+    ) -> bool:
+        existing_body = str(
+            existing_article.get("ai_summary")
+            or existing_article.get("enhanced_markdown")
+            or existing_article.get("raw_markdown")
+            or existing_article.get("raw_text")
+            or ""
+        ).strip()
+        existing_tags = self._extract_article_ai_tags(
+            existing_article,
+            str(existing_article.get("summary") or "").strip(),
+        )
+        return (
+            str(existing_article.get("title") or "").strip()
+            == str(normalized_entry.get("title") or "").strip()
+            and str(existing_article.get("exact_time") or "").strip()
+            == str(normalized_entry.get("exact_time") or "").strip()
+            and str(existing_article.get("category") or "").strip()
+            == str(normalized_entry.get("category") or "").strip()
+            and str(existing_article.get("department") or "").strip()
+            == str(normalized_entry.get("department") or "").strip()
+            and str(existing_article.get("source_name") or "").strip()
+            == str(normalized_entry.get("source_name") or "").strip()
+            and str(existing_article.get("url") or "").strip()
+            == str(normalized_entry.get("url") or "").strip()
+            and existing_body == str(normalized_entry.get("content") or "").strip()
+            and existing_tags == list(normalized_entry.get("tags") or [])
+        )
+
+    def _sync_system_content_entries(self, version_data: Optional[Dict[str, Any]]) -> None:
+        existing_articles = {
+            str(item.get("rule_id") or "").strip(): item
+            for item in db.get_articles_by_rule_prefix(self._SYSTEM_CONTENT_RULE_PREFIX)
+        }
+        if not version_data and existing_articles:
+            return
+
+        entries = self._build_system_content_entries(version_data or {})
+
+        for key in self._SYSTEM_CONTENT_ORDER:
+            entry = entries.get(key)
+            if not entry:
+                continue
+            rule_id = str(entry.get("rule_id") or "").strip()
+            existing = existing_articles.get(rule_id)
+            if existing and self._system_content_matches_existing(existing, entry):
+                continue
+
+            if existing:
+                db.delete_articles_by_rule_id(rule_id)
+
+            summary_markdown = (
+                compose_tagged_markdown(
+                    list(entry.get("tags") or []),
+                    str(entry.get("summary") or entry.get("content") or "").strip(),
+                )
+                or str(entry.get("summary") or entry.get("content") or "").strip()
+            )
+            body_markdown = str(entry.get("content") or "").strip()
+
+            db.insert_or_update_article_sync(
+                title=str(entry.get("title") or "").strip(),
+                url=str(entry.get("url") or "").strip(),
+                date=str(entry.get("date") or "").strip(),
+                exact_time=str(entry.get("exact_time") or "").strip(),
+                category=str(entry.get("category") or "").strip(),
+                department=str(entry.get("department") or "").strip(),
+                attachments="",
+                summary=summary_markdown,
+                raw_content=body_markdown,
+                source_name=str(entry.get("source_name") or self._SYSTEM_CONTENT_SOURCE_NAME).strip(),
+                rule_id=rule_id,
+                custom_summary_prompt="",
+                source_type="rss",
+                raw_markdown=body_markdown,
+                enhanced_markdown=body_markdown,
+                ai_summary=body_markdown,
+                ai_tags=list(entry.get("tags") or []),
+                formatting_prompt="",
+                summary_prompt="",
+                enable_ai_formatting=True,
+                enable_ai_summary=True,
+                content_blocks=[],
+                image_assets=[],
+            )
+
+    def _get_system_content_index_payload(self) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {}
+        articles = db.get_articles_by_rule_prefix(self._SYSTEM_CONTENT_RULE_PREFIX)
+        article_by_rule_id = {
+            str(item.get("rule_id") or "").strip(): item for item in articles
+        }
+
+        for key in self._SYSTEM_CONTENT_ORDER:
+            article = article_by_rule_id.get(self._system_content_rule_id(key))
+            if not article:
+                continue
+            detail_payload = self._build_article_detail_response(article)
+            detail_payload["system_content_key"] = key
+            detail_payload["is_announcement"] = key == "announcement"
+            if key == "feedback":
+                url = str(detail_payload.get("url") or "").strip()
+                if url.lower().startswith("mailto:"):
+                    detail_payload["feedback_email"] = url.split(":", 1)[1]
+            payload[key] = detail_payload
+
+        return payload
+
+    def get_system_content_index(self) -> Dict[str, Any]:
+        """返回已同步到本地数据库的系统内容索引。"""
+        try:
+            self._sync_system_content_entries(self._version_info or {})
+            return {"status": "success", "data": self._get_system_content_index_payload()}
+        except Exception as e:
+            logger.error(f"读取系统内容索引失败: {e}")
+            return {"status": "error", "message": "读取系统内容失败"}
+
     def _build_update_payload(self, version_data: Dict[str, Any]) -> Dict[str, Any]:
         """构建统一的软件更新信息结构。"""
         latest_version = str(version_data.get("version", "") or "").strip()
         min_supported_version = str(version_data.get("min_supported_version", "") or "").strip()
         release_date = str(version_data.get("release_date", "") or "").strip()
         platform_download = self._resolve_platform_download_meta(version_data)
+        self._sync_system_content_entries(version_data)
 
         # 🌟 强制更新逻辑：
         # 1. 远程直接指定 force_update
@@ -3232,6 +3677,7 @@ class Api:
             "download_size": platform_download.get("size"),
             "force_update": is_forced,
             "announcement": announcement,  # 🌟 传递完整的公告对象给前端
+            "system_contents": self._get_system_content_index_payload(),
         }
 
     def check_software_update(self, force_refresh: bool = False) -> Dict[str, Any]:
@@ -3445,11 +3891,13 @@ class Api:
         Returns:
             成功响应字典，字段与 version.json 结构对齐
         """
+        self._sync_system_content_entries(version_data)
         response: Dict[str, Any] = {
             "status": "success",
             "has_update": False,
             "announcement": version_data.get("announcement", {}),
             "current_version": self.CURRENT_VERSION,
+            "system_contents": self._get_system_content_index_payload(),
         }
 
         # 检查版本更新
@@ -3461,7 +3909,12 @@ class Api:
         """获取云端版本信息（支持 ETag 304 缓存协商）"""
         # 1. 优先使用内存缓存（如果不强制刷新）
         if self._version_info and not force_refresh:
-            return {"status": "success", **self._version_info}
+            self._sync_system_content_entries(self._version_info)
+            return {
+                "status": "success",
+                **self._version_info,
+                "system_contents": self._get_system_content_index_payload(),
+            }
 
         # 2. 发起真实的网络请求（携带 304 缓存协商头）
         headers = {}
@@ -3474,14 +3927,24 @@ class Api:
             # 3. 命中 304 缓存，云端文件未变，直接返回内存数据
             if response.status_code == 304:
                 logger.debug("🌐 安全心跳：命中 304 缓存，云端配置未变更，免流放行")
-                return {"status": "success", **self._version_info}
+                self._sync_system_content_entries(self._version_info)
+                return {
+                    "status": "success",
+                    **self._version_info,
+                    "system_contents": self._get_system_content_index_payload(),
+                }
 
             # 4. 云端文件有更新，或者首次请求
             if response.status_code == 200:
                 data = response.json()
                 self._version_info = data
                 self._version_etag = response.headers.get("ETag")  # 记录最新 ETag
-                return {"status": "success", **data}
+                self._sync_system_content_entries(data)
+                return {
+                    "status": "success",
+                    **data,
+                    "system_contents": self._get_system_content_index_payload(),
+                }
 
             return {
                 "status": "error",
@@ -3491,7 +3954,12 @@ class Api:
             logger.debug(f"获取版本信息网络异常: {e}")
             # 弱网兜底：如果曾经成功获取过，退级使用旧缓存
             if self._version_info:
-                return {"status": "success", **self._version_info}
+                self._sync_system_content_entries(self._version_info)
+                return {
+                    "status": "success",
+                    **self._version_info,
+                    "system_contents": self._get_system_content_index_payload(),
+                }
             return {"status": "error", "message": "无法获取版本信息"}
 
     def set_window_on_top(self, is_on_top: bool):
@@ -4577,9 +5045,12 @@ class Api:
                 max_items=5,
             )
             sample_data = preview_bundle.get("sample_data") or []
+            fetch_error = str(preview_bundle.get("fetch_error") or "").strip()
+            result_status = "error" if (not sample_data and fetch_error) else "success"
 
             return {
-                "status": "success",
+                "status": result_status,
+                "message": fetch_error if result_status == "error" else "",
                 "sample_data": sample_data,
                 "count": len(sample_data),
                 "detail_samples": preview_bundle.get("detail_samples") or [],

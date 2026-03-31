@@ -16,12 +16,24 @@ class FakeDB:
     def __init__(self, existing_count=0, latest_cursor=None):
         self.existing_count = existing_count
         self.latest_cursor = latest_cursor
+        self.frontiers = {}
 
     def get_article_count_by_source(self, _source_name):
         return self.existing_count
 
     def get_latest_article_cursor_by_source(self, _source_name):
         return self.latest_cursor
+
+    def get_crawl_frontier_url(self, source_name, section_name=None):
+        return self.frontiers.get((source_name, str(section_name or "").strip()), "")
+
+    def upsert_crawl_frontier(
+        self, source_name, section_name=None, frontier_url="", frontier_cursor=""
+    ):
+        _ = frontier_cursor
+        key = (source_name, str(section_name or "").strip())
+        self.frontiers[key] = frontier_url
+        return True
 
 
 class DummyProcessor:
@@ -137,6 +149,10 @@ class SchedulerIncrementalGuardrailsTests(unittest.TestCase):
         self.assertEqual(count, 1)
         self.assertEqual(len(processor.submitted), 1)
         self.assertEqual(processor.submitted[0]["title"], "最新通知")
+        self.assertEqual(
+            fake_db.frontiers[("未来技术学院", "行政通知")],
+            "https://example.com/new",
+        )
 
     def test_continuous_mode_recovers_gap_article_within_repair_window(self):
         processor = DummyProcessor()
@@ -202,10 +218,11 @@ class SchedulerIncrementalGuardrailsTests(unittest.TestCase):
             ["https://example.com/gap-old"],
         )
 
-    def test_manual_continuous_mode_deep_repairs_beyond_default_window(self):
+    def test_manual_continuous_mode_repairs_gap_before_frontier_without_backfill(self):
         processor = DummyProcessor()
-        existing_urls = [f"https://example.com/existing-{idx}" for idx in range(11)]
-        processor.skip_existing_urls = set(existing_urls)
+        existing_urls = [f"https://example.com/existing-{idx}" for idx in range(10)]
+        frontier_url = "https://example.com/frontier-11"
+        processor.skip_existing_urls = set(existing_urls + [frontier_url])
         scheduler = self.make_scheduler(processor)
         spider = DummySpider(
             "城市交通与物流学院",
@@ -216,12 +233,22 @@ class SchedulerIncrementalGuardrailsTests(unittest.TestCase):
                         "url": existing_urls[idx],
                         "date": "2026-03-25",
                     }
-                    for idx in range(11)
+                    for idx in range(10)
                 ]
                 + [
                     {
-                        "title": "窗口外缺口文章",
-                        "url": "https://example.com/gap-12",
+                        "title": "默认窗口外但边界内缺口",
+                        "url": "https://example.com/gap-10",
+                        "date": "2026-03-24",
+                    },
+                    {
+                        "title": "手动修复边界",
+                        "url": frontier_url,
+                        "date": "2026-03-23",
+                    },
+                    {
+                        "title": "边界外旧文章",
+                        "url": "https://example.com/older-than-frontier",
                         "date": "2026-03-18",
                     }
                 ]
@@ -229,6 +256,7 @@ class SchedulerIncrementalGuardrailsTests(unittest.TestCase):
         )
 
         fake_db = FakeDB(existing_count=30, latest_cursor="2026-03-25 10:00:00")
+        fake_db.frontiers[("城市交通与物流学院", "通知公告")] = frontier_url
         with patch("src.core.scheduler.db", fake_db):
             _source_name, count, errors = scheduler._process_spider(
                 spider=spider,
@@ -242,7 +270,7 @@ class SchedulerIncrementalGuardrailsTests(unittest.TestCase):
         self.assertEqual(spider.fetch_kwargs[0]["limit"], 50)
         self.assertEqual(
             [item["url"] for item in processor.submitted],
-            ["https://example.com/gap-12"],
+            ["https://example.com/gap-10"],
         )
 
     def test_continuous_mode_recovers_undated_gap_article_by_detail_time(self):
@@ -415,7 +443,10 @@ class SchedulerIncrementalGuardrailsTests(unittest.TestCase):
 
     def test_manual_dynamic_html_spider_uses_full_page_budget_for_deep_repair(self):
         processor = DummyProcessor()
-        processor.skip_existing_urls = {"https://example.com/existing-frontier"}
+        processor.skip_existing_urls = {
+            "https://example.com/existing-frontier",
+            "https://example.com/manual-frontier",
+        }
         scheduler = self.make_scheduler(processor)
         spider = DummySpider(
             "自定义网页源",
@@ -429,7 +460,12 @@ class SchedulerIncrementalGuardrailsTests(unittest.TestCase):
                     {
                         "title": "历史缺口",
                         "url": "https://example.com/gap",
-                        "date": "2026-03-18",
+                        "date": "2026-03-29",
+                    },
+                    {
+                        "title": "手动修复边界",
+                        "url": "https://example.com/manual-frontier",
+                        "date": "2026-03-28",
                     },
                 ]
             },
@@ -441,6 +477,7 @@ class SchedulerIncrementalGuardrailsTests(unittest.TestCase):
         spider.incremental_max_pages = 1
 
         fake_db = FakeDB(existing_count=5, latest_cursor="2026-03-29 10:00:00")
+        fake_db.frontiers[("自定义网页源", "")] = "https://example.com/manual-frontier"
         with patch("src.core.scheduler.db", fake_db):
             _source_name, count, errors = scheduler._process_spider(
                 spider=spider,

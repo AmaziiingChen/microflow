@@ -431,6 +431,8 @@ try {
         type: Function,
         required: true,
       },
+      editingRuleId: { type: [String, Number], default: "" },
+      isSavingCustomRule: { type: Boolean, default: false },
       sheetMode: { type: Boolean, default: false },
     },
     emits: [
@@ -438,6 +440,8 @@ try {
       "add-rule-field",
       "remove-rule-field",
       "toggle-selector-panel",
+      "generate",
+      "preview-rss",
       "manual-retest",
       "regenerate",
       "save",
@@ -941,10 +945,10 @@ try {
       const isSettingsOpen = ref(false); // 🌟 新增：控制设置面板的独立状态
       const SETTINGS_SECTIONS = Object.freeze([
         {
-          id: "network",
-          label: "网络与访问",
-          description: "查看当前联网状态与最近一次检测结果。",
-          iconClass: "is-network",
+          id: "software",
+          label: "软件更新",
+          description: "检查版本、系统公告与网络访问状态。",
+          iconClass: "is-software",
         },
         {
           id: "ai",
@@ -976,9 +980,27 @@ try {
           description: "配置 SMTP、诊断链路并触发发送。",
           iconClass: "is-email",
         },
+        {
+          id: "about",
+          label: "关于 MicroFlow",
+          description: "查看当前版本与更新日志。",
+          iconClass: "is-about",
+        },
+        {
+          id: "feedback",
+          label: "反馈与建议",
+          description: "通过英文邮箱反馈 Bug 与建议。",
+          iconClass: "is-feedback",
+        },
+        {
+          id: "disclaimer",
+          label: "免责声明",
+          description: "查看使用边界与内容说明。",
+          iconClass: "is-disclaimer",
+        },
       ]);
       const settingsSections = SETTINGS_SECTIONS;
-      const activeSettingsSection = ref("network");
+      const activeSettingsSection = ref("software");
       const isSettingsSplitView = computed(
         () => viewportWidth.value >= SETTINGS_MASTER_DETAIL_MIN_WIDTH,
       );
@@ -1042,6 +1064,8 @@ try {
       const showListPane = computed(
         () => currentView.value === "list" || isDualPaneActive.value,
       );
+      const suppressDualPanePlaceholder = ref(false);
+      let dualPanePlaceholderTimer = 0;
       const isDetailPaneVisible = computed(
         () =>
           Boolean(activeArticle.value) &&
@@ -1049,7 +1073,10 @@ try {
           (currentView.value === "detail" || isDualPaneActive.value),
       );
       const showDualPanePlaceholder = computed(
-        () => isDualPaneActive.value && !activeArticle.value,
+        () =>
+          isDualPaneActive.value &&
+          !activeArticle.value &&
+          !suppressDualPanePlaceholder.value,
       );
       const activeSettingsSectionMeta = computed(
         () =>
@@ -1071,7 +1098,7 @@ try {
 
         if (isWide) {
           if (!String(activeSettingsSection.value || "").trim()) {
-            activeSettingsSection.value = "network";
+            activeSettingsSection.value = "software";
           }
           return;
         }
@@ -1147,11 +1174,17 @@ try {
       let annotationApplyFrame = 0;
       let annotationLoadToken = 0;
       let annotationPointerSelecting = false;
+      let annotationSelectionSettleTimer = 0;
+      let annotationSelectionHoldUntil = 0;
 
       const isRssArticle = (article) =>
         String(article?.source_type || "")
           .trim()
           .toLowerCase() === "rss";
+      const isSystemContentArticle = (article) =>
+        String(article?.rule_id || article?.ruleId || "")
+          .trim()
+          .startsWith("system:");
 
       const getDetailTargetView = () =>
         isDualPaneActive.value ? "list" : "detail";
@@ -1174,6 +1207,37 @@ try {
         }
         return activeKeyboardPane.value === "detail" ? "detail" : "list";
       };
+
+      const clearDualPanePlaceholderTimer = () => {
+        if (dualPanePlaceholderTimer && typeof window !== "undefined") {
+          window.clearTimeout(dualPanePlaceholderTimer);
+          dualPanePlaceholderTimer = 0;
+        }
+      };
+
+      const suspendDualPanePlaceholder = (duration = 240) => {
+        clearDualPanePlaceholderTimer();
+        suppressDualPanePlaceholder.value = true;
+        if (typeof window === "undefined" || duration <= 0) {
+          suppressDualPanePlaceholder.value = false;
+          return;
+        }
+        dualPanePlaceholderTimer = window.setTimeout(() => {
+          dualPanePlaceholderTimer = 0;
+          suppressDualPanePlaceholder.value = false;
+        }, duration);
+      };
+
+      watch(
+        [isDualPaneActive, activeArticle],
+        ([isWide, article]) => {
+          if (!isWide || article) {
+            clearDualPanePlaceholderTimer();
+            suppressDualPanePlaceholder.value = false;
+          }
+        },
+        { flush: "post" },
+      );
 
       const flushPendingReadState = () => {
         if (pendingReadUrls.value.length > 0) {
@@ -2127,6 +2191,7 @@ try {
 
       const getRssDetailModeHint = (article) => {
         if (!isRssArticle(article)) return "";
+        if (isSystemContentArticle(article)) return "";
 
         const resolvedMode = resolveRssDetailMode(article);
 
@@ -3013,6 +3078,20 @@ try {
         });
       };
 
+      const isAnnotationSelectionSyncSuppressed = () =>
+        isAnnotationSaving.value || Date.now() < annotationSelectionHoldUntil;
+
+      const holdAnnotationSelectionSync = (duration = 220) => {
+        annotationSelectionHoldUntil = Date.now() + Math.max(duration, 0);
+      };
+
+      const clearAnnotationSelectionSettleTimer = () => {
+        if (annotationSelectionSettleTimer && typeof window !== "undefined") {
+          window.clearTimeout(annotationSelectionSettleTimer);
+          annotationSelectionSettleTimer = 0;
+        }
+      };
+
       const handleListPanePointerDown = () => {
         setActiveKeyboardPane("list");
       };
@@ -3042,6 +3121,7 @@ try {
           return;
         }
 
+        clearAnnotationSelectionSettleTimer();
         annotationPointerSelecting = true;
         hideAnnotationToolbar();
       };
@@ -3088,9 +3168,11 @@ try {
         }
         annotationPointerSelecting = false;
         if (typeof window !== "undefined") {
-          window.setTimeout(() => {
+          clearAnnotationSelectionSettleTimer();
+          annotationSelectionSettleTimer = window.setTimeout(() => {
+            annotationSelectionSettleTimer = 0;
             queueAnnotationSelectionSync();
-          }, 40);
+          }, 90);
         }
       };
 
@@ -3304,7 +3386,20 @@ try {
         });
       };
 
-      const loadArticleAnnotations = async () => {
+      const getAnnotationMarkElementById = (
+        annotationId,
+        root = getActiveAnnotationRoot(),
+      ) => {
+        if (!root || !annotationId) {
+          return null;
+        }
+        return root.querySelector(
+          `.article-annotation-mark[data-annotation-id="${String(annotationId)}"]`,
+        );
+      };
+
+      const loadArticleAnnotations = async (options = {}) => {
+        const skipSelectionSync = Boolean(options?.skipSelectionSync);
         const article = activeArticle.value;
         if (!article || !isDetailPaneVisible.value || isEditingSummary.value) {
           articleAnnotations.value = [];
@@ -3344,7 +3439,9 @@ try {
           ? res.annotations.map((item) => normalizeArticleAnnotationRecord(item))
           : [];
         queueApplyArticleAnnotations();
-        queueAnnotationSelectionSync();
+        if (!skipSelectionSync) {
+          queueAnnotationSelectionSync();
+        }
       };
 
       const findOverlappingAnnotations = (snapshot) => {
@@ -3361,7 +3458,7 @@ try {
       };
 
       const saveAnnotationForSelection = async (nextStyle = {}) => {
-        const snapshot = annotationSelectionSnapshot.value;
+        let snapshot = annotationSelectionSnapshot.value;
         if (
           !snapshot ||
           isAnnotationSaving.value ||
@@ -3372,16 +3469,49 @@ try {
 
         const normalizedStyle = normalizeAnnotationStyle(nextStyle);
         const articleId = Number(snapshot.articleId || 0);
-        const overlappingAnnotations = findOverlappingAnnotations(snapshot);
-        const exactMatch =
-          overlappingAnnotations.find(
-            (item) =>
-              item.start_offset === snapshot.startOffset &&
-              item.end_offset === snapshot.endOffset,
-          ) || null;
 
         isAnnotationSaving.value = true;
         try {
+          const root = getActiveAnnotationRoot();
+          const rootText = getAnnotationRootText(root);
+          if (root && rootText && String(snapshot.anchorText || "").trim()) {
+            const currentSlice = rootText.slice(
+              snapshot.startOffset,
+              snapshot.endOffset,
+            );
+            if (currentSlice !== snapshot.anchorText) {
+              const fallbackOffsets = findAnnotationOffsetsByQuote(rootText, {
+                anchor_text: snapshot.anchorText,
+                anchor_prefix: snapshot.anchorPrefix,
+                anchor_suffix: snapshot.anchorSuffix,
+              });
+              if (
+                !fallbackOffsets ||
+                fallbackOffsets.endOffset <= fallbackOffsets.startOffset
+              ) {
+                throw new Error("当前选区已变化，请重新选择需要批注的正文");
+              }
+              snapshot = {
+                ...snapshot,
+                ...fallbackOffsets,
+                ...buildAnnotationAnchors(
+                  rootText,
+                  fallbackOffsets.startOffset,
+                  fallbackOffsets.endOffset,
+                ),
+              };
+              annotationSelectionSnapshot.value = snapshot;
+            }
+          }
+
+          const overlappingAnnotations = findOverlappingAnnotations(snapshot);
+          const exactMatch =
+            overlappingAnnotations.find(
+              (item) =>
+                item.start_offset === snapshot.startOffset &&
+                item.end_offset === snapshot.endOffset,
+            ) || null;
+
           const otherOverlapIds = overlappingAnnotations
             .map((item) => Number(item.id || 0))
             .filter(Boolean)
@@ -3409,7 +3539,9 @@ try {
                 throw new Error(deleteRes?.message || "批注删除失败");
               }
             }
-            await loadArticleAnnotations();
+            holdAnnotationSelectionSync();
+            clearAnnotationSelection();
+            await loadArticleAnnotations({ skipSelectionSync: true });
             hideAnnotationToolbar();
             return;
           }
@@ -3433,13 +3565,21 @@ try {
           const savedAnnotation = normalizeArticleAnnotationRecord(
             saveRes.annotation || {},
           );
-          await loadArticleAnnotations();
-          annotationToolbarState.value = {
-            ...annotationToolbarState.value,
-            visible: true,
-            annotationId: savedAnnotation.id || null,
-            style: normalizeAnnotationStyle(savedAnnotation.style_payload),
-          };
+          holdAnnotationSelectionSync();
+          clearAnnotationSelection();
+          await loadArticleAnnotations({ skipSelectionSync: true });
+          await nextTick();
+          if (typeof window !== "undefined") {
+            await new Promise((resolve) => {
+              window.requestAnimationFrame(() => resolve());
+            });
+          }
+          const savedMark = getAnnotationMarkElementById(savedAnnotation.id);
+          const savedRect =
+            typeof savedMark?.getBoundingClientRect === "function"
+              ? savedMark.getBoundingClientRect()
+              : null;
+          showAnnotationToolbarForRecord(savedAnnotation, savedRect);
         } catch (error) {
           console.error("保存正文批注失败:", error);
           showNotification(
@@ -3450,7 +3590,9 @@ try {
           );
         } finally {
           isAnnotationSaving.value = false;
-          queueAnnotationSelectionSync();
+          if (!isAnnotationSelectionSyncSuppressed()) {
+            queueAnnotationSelectionSync();
+          }
         }
       };
 
@@ -3476,8 +3618,9 @@ try {
             throw new Error(deleteRes?.message || "批注删除失败");
           }
 
+          holdAnnotationSelectionSync();
           clearAnnotationSelection();
-          await loadArticleAnnotations();
+          await loadArticleAnnotations({ skipSelectionSync: true });
           hideAnnotationToolbar();
         } catch (error) {
           console.error("删除正文批注失败:", error);
@@ -3842,6 +3985,9 @@ try {
         if (annotationPointerSelecting) {
           return;
         }
+        if (isAnnotationSelectionSyncSuppressed()) {
+          return;
+        }
         if (typeof window === "undefined" || typeof document === "undefined") {
           return;
         }
@@ -3906,6 +4052,8 @@ try {
 
       onUnmounted(() => {
         clearRssTocRefreshFrame();
+        clearDualPanePlaceholderTimer();
+        clearAnnotationSelectionSettleTimer();
         window.removeEventListener("resize", handleWindowResize);
         if (typeof document !== "undefined") {
           document.removeEventListener(
@@ -4989,8 +5137,7 @@ try {
       // 统一的标签颜色获取函数（详情页彩色标签用）
       const getTagColor = (index) => tagColors[index % tagColors.length];
 
-      // 🌟 新增：系统公告状态
-      const systemNotice = ref({
+      const createDefaultSystemNotice = () => ({
         id: "sys_notice_1",
         title: "欢迎使用 MicroFlow (微流)",
         publish_time: new Date().toLocaleDateString("zh-CN", {
@@ -5010,6 +5157,196 @@ try {
         is_announcement: true,
         version: "1.0.0",
       });
+      const SYSTEM_CONTENT_KEYS = Object.freeze([
+        "announcement",
+        "changelog",
+        "feedback",
+        "disclaimer",
+      ]);
+      const createEmptySystemContentEntries = () => ({
+        announcement: null,
+        changelog: null,
+        feedback: null,
+        disclaimer: null,
+      });
+      const systemNotice = ref(createDefaultSystemNotice());
+      const systemContentEntries = ref(createEmptySystemContentEntries());
+      const compareTimeStrings = (time1, time2) => {
+        if (!time1 || !time2) return false;
+        const d1 = new Date(
+          String(time1)
+            .replace(/年|月/g, "-")
+            .replace(/日/g, "")
+            .replace(/\//g, "-"),
+        );
+        const d2 = new Date(
+          String(time2)
+            .replace(/年|月/g, "-")
+            .replace(/日/g, "")
+            .replace(/\//g, "-"),
+        );
+        if (isNaN(d1.getTime()) || isNaN(d2.getTime())) {
+          return String(time1) >= String(time2);
+        }
+        return d1 >= d2;
+      };
+      const normalizeArticleTimeForSort = (timeStr = "") => {
+        if (!timeStr) return "";
+        let normalized = String(timeStr)
+          .replace(/年|月/g, "-")
+          .replace(/日/g, " ")
+          .replace(/\//g, "-");
+        const match = normalized.match(
+          /(\d{4})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/,
+        );
+        if (match) {
+          const [
+            ,
+            year,
+            month,
+            day,
+            hour = "00",
+            minute = "00",
+            second = "00",
+          ] = match;
+          return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")} ${hour.padStart(2, "0")}:${minute.padStart(2, "0")}:${second.padStart(2, "0")}`;
+        }
+        return normalized;
+      };
+      const getArticleSortKey = (article = {}) =>
+        normalizeArticleTimeForSort(
+          article?.exact_time || article?.publish_time || article?.date || "",
+        );
+      const compareArticlesByTimeDesc = (left = {}, right = {}) => {
+        const leftKey = getArticleSortKey(left);
+        const rightKey = getArticleSortKey(right);
+        if (leftKey !== rightKey) {
+          return leftKey > rightKey ? -1 : 1;
+        }
+        const leftId = Number(left?.id || 0);
+        const rightId = Number(right?.id || 0);
+        if (leftId !== rightId) {
+          return rightId - leftId;
+        }
+        return String(left?.url || "").localeCompare(String(right?.url || ""));
+      };
+      const normalizeSystemContentEntry = (key, entry = null) => {
+        if (!entry || typeof entry !== "object") return null;
+        const normalized = buildArticleViewModel({
+          ...entry,
+          system_content_key:
+            entry.system_content_key || key || entry.systemContentKey || "",
+          is_announcement:
+            key === "announcement" || Boolean(entry.is_announcement),
+          has_full_content: entry.has_full_content ?? true,
+        });
+        return {
+          ...normalized,
+          system_content_key:
+            normalized.system_content_key ||
+            normalized.systemContentKey ||
+            key ||
+            "",
+          is_announcement:
+            key === "announcement" || Boolean(normalized.is_announcement),
+          hasFullContent: true,
+          has_full_content: true,
+        };
+      };
+      const applySystemContentIndex = async (payload = null) => {
+        if (!payload || typeof payload !== "object") {
+          return false;
+        }
+
+        const nextEntries = createEmptySystemContentEntries();
+        let nextNoticeArticle = null;
+
+        for (const key of SYSTEM_CONTENT_KEYS) {
+          const normalizedEntry = normalizeSystemContentEntry(key, payload[key]);
+          nextEntries[key] = normalizedEntry;
+          if (key === "announcement" && normalizedEntry) {
+            nextNoticeArticle = normalizedEntry;
+          }
+        }
+
+        systemContentEntries.value = nextEntries;
+
+        if (!nextNoticeArticle) {
+          return false;
+        }
+
+        const newPublishTime =
+          nextNoticeArticle.exact_time ||
+          nextNoticeArticle.publish_time ||
+          nextNoticeArticle.date ||
+          "";
+        const localReadTime = config.value.readNoticeTime || "";
+
+        if (
+          newPublishTime &&
+          localReadTime &&
+          !compareTimeStrings(localReadTime, newPublishTime)
+        ) {
+          config.value.readNoticeTime = "";
+          try {
+            await saveConfigSafely();
+          } catch (e) {
+            console.warn("清除公告已读状态失败:", e);
+          }
+        }
+
+        systemNotice.value = {
+          ...nextNoticeArticle,
+          id: nextNoticeArticle.id || "sys_notice_1",
+          publish_time: newPublishTime,
+          tags:
+            nextNoticeArticle.parsedTags ||
+            nextNoticeArticle.tags ||
+            systemNotice.value.tags,
+          content:
+            nextNoticeArticle.aiSummary ||
+            nextNoticeArticle.ai_summary ||
+            nextNoticeArticle.parsedBody ||
+            nextNoticeArticle.rawMarkdown ||
+            nextNoticeArticle.raw_markdown ||
+            systemNotice.value.content,
+          summary:
+            nextNoticeArticle.summary ||
+            nextNoticeArticle.parsedBody ||
+            systemNotice.value.summary,
+          version:
+            nextNoticeArticle.category ||
+            nextNoticeArticle.version ||
+            systemNotice.value.version,
+          is_announcement: true,
+        };
+
+        return true;
+      };
+      const loadSystemContentIndex = async (seedData = null) => {
+        try {
+          if (seedData && typeof seedData === "object") {
+            const directPayload =
+              seedData.data && typeof seedData.data === "object"
+                ? seedData.data
+                : seedData.system_contents;
+            if (directPayload) {
+              const applied = await applySystemContentIndex(directPayload);
+              if (applied) {
+                return true;
+              }
+            }
+          }
+
+          const res = await safeApiCall("get_system_content_index");
+          if (res.status !== "success") {
+            return false;
+          }
+          return await applySystemContentIndex(res.data);
+        } catch (_error) {
+          return false;
+        }
+      };
 
       // 🌟 云端版本号（从后端缓存获取）
       const remoteVersion = ref("");
@@ -5022,23 +5359,11 @@ try {
           return false;
         }
 
-        // 🌟 解析云端配置，更新 systemNotice
-        if (res.announcement) {
-          const newPublishTime = res.announcement.publish_time || "";
-          const localReadTime = config.value.readNoticeTime || "";
-
-          // 🌟 检查云端公告发布时间是否比本地已读时间更新
-          // 如果云端发布时间 > 本地已读时间，说明有新公告，清除已读状态
-          if (newPublishTime && localReadTime && newPublishTime > localReadTime) {
-            config.value.readNoticeTime = "";
-            try {
-              await saveConfigSafely();
-            } catch (e) {
-              console.warn("清除公告已读状态失败:", e);
-            }
-          }
-
+        if (res.system_contents) {
+          await applySystemContentIndex(res.system_contents);
+        } else if (res.announcement) {
           systemNotice.value = {
+            ...systemNotice.value,
             id: res.announcement.id || "sys_notice_1",
             title: res.announcement.title || systemNotice.value.title,
             publish_time:
@@ -5084,6 +5409,7 @@ try {
         try {
           if (seedData && typeof seedData === "object") {
             const applied = await applyRemoteVersionInfo(seedData);
+            await loadSystemContentIndex(seedData);
             if (applied) return true;
           }
 
@@ -5092,10 +5418,12 @@ try {
 
           if (res.status !== "success") {
             console.warn("⚠️ 后端获取版本信息失败，使用本地保底公告");
-            return false;
+            return await loadSystemContentIndex();
           }
 
-          return await applyRemoteVersionInfo(res);
+          const applied = await applyRemoteVersionInfo(res);
+          await loadSystemContentIndex(res);
+          return applied;
         } catch (error) {
           void error;
           return false;
@@ -7395,6 +7723,21 @@ try {
         return null;
       };
 
+      const findArticleElementById = (root, articleId) => {
+        if (!root || !articleId) return null;
+        const normalizedId = String(articleId);
+        const candidates = root.querySelectorAll("[data-id]");
+        for (const el of candidates) {
+          if (String(el.getAttribute("data-id") || "") === normalizedId) {
+            return el;
+          }
+        }
+        return null;
+      };
+
+      const findUnreadTargetElement = (root, articleId, url) =>
+        findArticleElementById(root, articleId) || findArticleElementByUrl(root, url);
+
       const scrollToNextUnread = async () => {
         try {
           // 🌟 核心修复：从后端获取第一个未读文章信息（传递当前部门）
@@ -7418,7 +7761,11 @@ try {
           }
 
           // 🌟 通过 data-url 属性查找
-          let targetElement = findArticleElementByUrl(listView, targetUrl);
+          let targetElement = findUnreadTargetElement(
+            listView,
+            targetId,
+            targetUrl,
+          );
 
           // 🌟 如果找不到，自动加载更多数据
           if (!targetElement) {
@@ -7440,7 +7787,11 @@ try {
               await new Promise((resolve) => setTimeout(resolve, 300));
 
               // 重新查找
-              targetElement = findArticleElementByUrl(listView, targetUrl);
+              targetElement = findUnreadTargetElement(
+                listView,
+                targetId,
+                targetUrl,
+              );
             }
 
             if (!targetElement) {
@@ -7603,6 +7954,68 @@ try {
       });
 
       const activeSource = ref("全部");
+
+      const shouldInsertArticleIntoCurrentList = (article = {}) => {
+        if (isSearching.value || String(searchQuery.value || "").trim()) {
+          return false;
+        }
+        const currentSource = String(activeSource.value || "全部").trim();
+        if (currentSource === "全部") {
+          return true;
+        }
+        if (currentSource === "收藏") {
+          return Boolean(article?.is_favorite || article?.isFavorite);
+        }
+        return String(article?.source_name || "").trim() === currentSource;
+      };
+
+      const upsertArticleIntoCurrentList = (articlePayload = {}) => {
+        const incomingArticle = buildArticleViewModel(articlePayload);
+        const existingIndex = articles.value.findIndex(
+          (item) => String(item?.url || "") === String(incomingArticle?.url || ""),
+        );
+
+        if (
+          activeArticle.value &&
+          String(activeArticle.value?.url || "") ===
+            String(incomingArticle?.url || "")
+        ) {
+          activeArticle.value = incomingArticle;
+        }
+        if (
+          lastArticle.value &&
+          String(lastArticle.value?.url || "") === String(incomingArticle?.url || "")
+        ) {
+          lastArticle.value = incomingArticle;
+        }
+
+        if (!shouldInsertArticleIntoCurrentList(incomingArticle)) {
+          if (existingIndex !== -1) {
+            const nextArticles = articles.value.slice();
+            nextArticles[existingIndex] = incomingArticle;
+            articles.value = nextArticles;
+          }
+          return { article: incomingArticle, index: existingIndex };
+        }
+
+        const nextArticles = articles.value.slice();
+        if (existingIndex !== -1) {
+          nextArticles.splice(existingIndex, 1);
+        }
+
+        const insertIndex = nextArticles.findIndex(
+          (candidate) =>
+            compareArticlesByTimeDesc(incomingArticle, candidate) < 0,
+        );
+        const finalIndex = insertIndex === -1 ? nextArticles.length : insertIndex;
+        nextArticles.splice(finalIndex, 0, incomingArticle);
+        articles.value = nextArticles;
+
+        return {
+          article: nextArticles[finalIndex] || incomingArticle,
+          index: finalIndex,
+        };
+      };
 
       // 🌟 新增：全选/全不选方法
       const selectAllSources = () => {
@@ -7936,6 +8349,7 @@ try {
       // 打开新增规则向导
       const openCustomRuleModal = () => {
         activeSettingsSection.value = "custom";
+        void ensureCustomRulesLoaded();
         resetRuleForm();
         showCustomRuleModal.value = true;
       };
@@ -8457,6 +8871,7 @@ try {
       const editRule = (rule) => {
         const normalizedRule = normalizeRuleAiConfig(rule);
 
+        void ensureCustomRulesLoaded();
         invalidateCustomRuleRequests({ cancelRssPreview: true });
         // 设置编辑状态
         editingRuleId.value = normalizedRule.rule_id;
@@ -8900,7 +9315,7 @@ try {
 
         // 触发缩放生长动画
         isSettingsOpen.value = true;
-        activeSettingsSection.value = isSettingsSplitView.value ? "network" : "";
+        activeSettingsSection.value = isSettingsSplitView.value ? "software" : "";
 
         // 同步托盘可能改过的配置，避免设置页显示旧状态
         void refreshConfigFromBackend();
@@ -9013,6 +9428,61 @@ try {
         isSettingsOpen.value = false;
       };
 
+      const closeSettingsSilently = async () => {
+        if (!isSettingsOpen.value) return;
+        if (isPromptEditorOpen.value) {
+          if (promptEasyMDE) {
+            tempPromptContent.value = promptEasyMDE.value();
+          }
+          config.value.prompt = tempPromptContent.value;
+        }
+        closeAllSettingsSheets();
+        try {
+          await saveConfigSafely();
+        } catch (e) {
+          console.warn("静默保存设置失败:", e);
+        }
+        isSettingsOpen.value = false;
+      };
+
+      const openSystemContentArticle = async (key) => {
+        let article = systemContentEntries.value[key] || null;
+        if (!article) {
+          const loaded = await loadSystemContentIndex();
+          if (loaded) {
+            article = systemContentEntries.value[key] || null;
+          }
+        }
+
+        if (!article) {
+          showNotification("暂不可用", "当前还没有可显示的系统内容", "warning", 2200);
+          return;
+        }
+
+        if (isSettingsOpen.value) {
+          await closeSettingsSilently();
+        }
+
+        if (key === "announcement") {
+          const noticePublishTime =
+            article.exact_time || article.publish_time || article.date || "";
+          const localReadTime = config.value.readNoticeTime || "";
+          if (
+            noticePublishTime &&
+            !compareTimeStrings(localReadTime, noticePublishTime)
+          ) {
+            config.value.readNoticeTime = noticePublishTime;
+            try {
+              await saveConfigSafely();
+            } catch (e) {
+              console.warn("保存公告已读状态失败:", e);
+            }
+          }
+        }
+
+        await openDetail(article);
+      };
+
       // 返回上一页
       const backToPrevious = () => {
         // 🌟 离开详情页时断开所有附件 ResizeObserver，避免内存泄漏
@@ -9085,39 +9555,14 @@ try {
 
       const processedArticleCache = new WeakMap();
       const processedArticles = computed(() => {
-        // 👇 变化 1：用 let mapped = 把 map 的结果存起来，而不是直接 return
-        const normalizeTimeForSort = (timeStr) => {
-          if (!timeStr) return "";
-          // 统一分隔符：中文 -> 横杠，斜杠 -> 横杠
-          let normalized = timeStr
-            .replace(/年|月/g, "-")
-            .replace(/日/g, " ")
-            .replace(/\//g, "-");
-          // 提取标准格式 YYYY-MM-DD HH:MM:SS
-          const match = normalized.match(
-            /(\d{4})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/,
-          );
-          if (match) {
-            const [
-              ,
-              year,
-              month,
-              day,
-              hour = "00",
-              minute = "00",
-              second = "00",
-            ] = match;
-            return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")} ${hour.padStart(2, "0")}:${minute.padStart(2, "0")}:${second.padStart(2, "0")}`;
-          }
-          return normalized;
-        };
-
         let mapped = articles.value.map((item) => {
           const cachedItem = processedArticleCache.get(item);
           if (cachedItem) return cachedItem;
           const baseItem = buildArticleViewModel(item);
           const formattedTime = formatDateTime(item.exact_time || item.date);
-          const sortKey = normalizeTimeForSort(item.exact_time || item.date);
+          const sortKey = normalizeArticleTimeForSort(
+            item.exact_time || item.date,
+          );
           const renderedItem = {
             ...baseItem,
             formattedTime,
@@ -9127,17 +9572,11 @@ try {
           return renderedItem;
         });
 
-        // 👇 变化 2：新增排序逻辑，按照时间降序（最新抓取的在最上面）
-        mapped.sort((a, b) => {
-          const timeA =
-            a.sortKey || normalizeTimeForSort(a.exact_time || a.date);
-          const timeB =
-            b.sortKey || normalizeTimeForSort(b.exact_time || b.date);
-          // 使用 localeCompare 比较字符串时间，timeB 放前面表示降序
-          return timeB.localeCompare(timeA);
-        });
+        // 分页结果已经由后端按统一时间规则排序。
+        // 这里保留 sortKey 供时间分组使用，但不再前端二次重排，
+        // 否则会和后端分页顺序冲突，造成“首屏缺少学院 / RSS”的错觉。
 
-        // 👇 变化 3：排序完成，不再需要前端二次过滤
+        // 👇 变化 3：不再需要前端二次过滤
         // 🌟 后端已经通过 _get_effective_sources() 统一处理了来源过滤
         // 前端不再重复过滤，直接使用后端返回的数据
         // const subscribedSources = config.value.subscribedSources;
@@ -9194,6 +9633,8 @@ try {
             publish_time: systemNotice.value.publish_time,
             department: systemNotice.value.department,
             source_name: systemNotice.value.source_name,
+            source_type: systemNotice.value.source_type || "rss",
+            rule_id: systemNotice.value.rule_id || "system:announcement",
             category: systemNotice.value.category,
             parsedTags: systemNotice.value.tags,
             url: systemNotice.value.url,
@@ -9201,6 +9642,7 @@ try {
               systemNotice.value.content || systemNotice.value.summary,
             summary: systemNotice.value.summary,
             is_announcement: true,
+            system_content_key: "announcement",
             version: systemNotice.value.version,
             formattedTime: systemNotice.value.publish_time,
             date: systemNotice.value.publish_time,
@@ -9324,46 +9766,14 @@ try {
       // 🌟 修复后的公告点击
       const handleNoticeClick = async (item) => {
         if (item.is_announcement) {
-          activeArticle.value = item;
-          lastArticle.value = item;
-          currentView.value = getDetailTargetView();
-
-          // 🌟 检查是否已读（通过发布时间比较，使用 Date 对象避免格式问题）
-          const compareTimeStrings = (time1, time2) => {
-            if (!time1 || !time2) return false;
-            const d1 = new Date(
-              time1
-                .replace(/年|月/g, "-")
-                .replace(/日/g, "")
-                .replace(/\//g, "-"),
-            );
-            const d2 = new Date(
-              time2
-                .replace(/年|月/g, "-")
-                .replace(/日/g, "")
-                .replace(/\//g, "-"),
-            );
-            if (isNaN(d1.getTime()) || isNaN(d2.getTime())) {
-              return time1 >= time2;
-            }
-            return d1 >= d2;
-          };
-          const localReadTime = config.value.readNoticeTime || "";
-          const noticePublishTime = item.publish_time || "";
-          const isNoticeRead = compareTimeStrings(
-            localReadTime,
-            noticePublishTime,
-          );
-
-          if (!isNoticeRead) {
-            // 🌟 将已读公告的发布时间写入配置文件
-            config.value.readNoticeTime = noticePublishTime;
-            try {
-              await saveConfigSafely();
-            } catch (e) {
-              console.warn("保存公告已读状态失败:", e);
-            }
+          if (
+            item.system_content_key === "announcement" ||
+            systemContentEntries.value.announcement
+          ) {
+            await openSystemContentArticle("announcement");
+            return;
           }
+          await openDetail(item);
         }
       };
 
@@ -9860,6 +10270,8 @@ try {
           if (checkResult && checkResult.current_version) {
             notifySoftwareUpdateIfNeeded(checkResult, "startup");
             await fetchSystemConfig(checkResult);
+          } else {
+            await loadSystemContentIndex(checkResult);
           }
           if (
             checkResult &&
@@ -10240,6 +10652,13 @@ try {
         if (updateSessionToastId !== null) {
           updateSessionToast("检查中", "正在后台检查最新内容", "info");
         }
+      };
+
+      window.showDaemonHint = (
+        title = "后台提醒",
+        message = "已完成例行巡检",
+      ) => {
+        showNotification(title, message, "info", 2200);
       };
 
       // 🌟 兼容旧版：后台完成通知（现在主要用于确认执行成功）
@@ -10670,23 +11089,11 @@ try {
         //     if (statusMsg.value.includes('总结完成')) statusMsg.value = '';
         // }, 4000);
 
-        const enrichedItem = buildArticleViewModel(item);
+        const { article: enrichedItem, index: finalIdx } =
+          upsertArticleIntoCurrentList(item);
         setDefaultDetailMode(enrichedItem);
 
-        // 接下来使用组装好的 enrichedItem 去替换原来的 item
-        const existingIndex = articles.value.findIndex(
-          (a) => a.url === enrichedItem.url,
-        );
-        if (existingIndex !== -1) {
-          articles.value[existingIndex] = enrichedItem;
-        } else {
-          articles.value.unshift(enrichedItem);
-        }
-
         // 🌟 记录当前文章在列表中的索引（用于删除操作）
-        const finalIdx = articles.value.findIndex(
-          (a) => a.url === enrichedItem.url,
-        );
         activeArticleIndex.value = finalIdx;
 
         // 强制切换到详情视图
@@ -10704,17 +11111,7 @@ try {
       window.silentUpdateArticle = (item) => {
         // 🌟 进度条已经显示了进度，这里不需要再设置 statusMsg
 
-        const enrichedItem = buildArticleViewModel(item);
-
-        // 仅更新列表，不切换视图
-        const existingIndex = articles.value.findIndex(
-          (a) => a.url === enrichedItem.url,
-        );
-        if (existingIndex !== -1) {
-          articles.value[existingIndex] = enrichedItem;
-        } else {
-          articles.value.unshift(enrichedItem);
-        }
+        upsertArticleIntoCurrentList(item);
         // 🌟 刷新未读数量
         fetchUnreadCount();
       };
@@ -10912,6 +11309,10 @@ try {
         }
 
         if (isDualPaneActive.value) {
+          suspendDualPanePlaceholder(260);
+          closeDetailSearchUI();
+          clearAnnotationSelection();
+          hideAnnotationToolbar();
           teardownReadingTracker();
           disconnectAllAttachmentObservers();
           activeArticle.value = null;
@@ -10923,6 +11324,9 @@ try {
           return;
         }
 
+        closeDetailSearchUI();
+        clearAnnotationSelection();
+        hideAnnotationToolbar();
         teardownReadingTracker();
         disconnectAllAttachmentObservers();
         isNavigatingBack.value = true;
@@ -11014,6 +11418,19 @@ try {
         const sourceName = String(article.source_name || "").trim();
         return !(sourceName === "公文通" || sourceName.includes("学院"));
       };
+      const shouldEmphasizeOfficialDetailHeadings = (article) => {
+        if (!article || typeof article !== "object") {
+          return false;
+        }
+        const sourceType = String(article.source_type || "")
+          .trim()
+          .toLowerCase();
+        if (sourceType === "rss") {
+          return false;
+        }
+        const sourceName = String(article.source_name || "").trim();
+        return sourceName === "公文通" || sourceName.includes("学院");
+      };
 
       const createMarkdownImageFallbackNode = (altText = "") => {
         const fallback = document.createElement("span");
@@ -11059,6 +11476,8 @@ try {
           : null;
         const shouldApplyHeadingLabels =
           shouldShowDetailHeadingLabels(detailArticle);
+        const shouldEmphasizeOfficialHeadings =
+          shouldEmphasizeOfficialDetailHeadings(detailArticle);
 
         container.querySelectorAll("h1, h2, h3, h4, h5, h6").forEach((heading) => {
           const tagName = String(heading.tagName || "").toUpperCase();
@@ -11068,6 +11487,11 @@ try {
             heading.setAttribute("data-heading-label", `H${level}`);
           } else {
             heading.removeAttribute("data-heading-label");
+          }
+          if (shouldEmphasizeOfficialHeadings && Number(level) >= 2) {
+            heading.setAttribute("data-official-heading-emphasis", level);
+          } else {
+            heading.removeAttribute("data-official-heading-emphasis");
           }
         });
 
@@ -11806,6 +12230,16 @@ try {
         const articleId = article.id;
         if (!articleId) return;
 
+        if (isSystemContentArticle(article)) {
+          showNotification(
+            "无需重新生成",
+            "系统内容直接复用本地文本，无需再次调用 AI",
+            "info",
+            2200,
+          );
+          return;
+        }
+
         // 正在生成时再次点击 = 取消当前 AI 总结
         if (regeneratingIds.has(articleId)) {
           await cancelRegenerateSummary(article);
@@ -11902,6 +12336,8 @@ try {
               successMessage = "RSS 摘要已重新生成";
             } else if (resultKind === "rss_reset") {
               successMessage = "已按当前规则清空 RSS AI 结果";
+            } else if (resultKind === "system_noop") {
+              successMessage = "系统内容无需重新生成";
             }
 
             if (aiProgress) {
@@ -12503,8 +12939,11 @@ try {
         formatNetworkCheckedAt,
         softwareUpdateState,
         isCheckingSoftwareUpdate,
+        remoteVersion,
+        systemContentEntries,
         checkSoftwareUpdate,
         openSoftwareUpdateDownload,
+        openSystemContentArticle,
         formatSoftwareUpdateCheckedAt,
         isTesting,
         connectionStatus,

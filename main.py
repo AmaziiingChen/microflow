@@ -505,9 +505,7 @@ if HAS_PYOBJC:
 
                 if main_mod._api_instance:
                     try:
-                        config_dict = (
-                            main_mod._api_instance._config_service.to_dict()
-                        )
+                        config_dict = main_mod._api_instance._config_service.to_dict()
                         config_dict["muteMode"] = main_mod._mute_mode
                         main_mod._api_instance._config_service.save(config_dict)
                         print(
@@ -717,9 +715,9 @@ if __name__ == "__main__":
         title="Microflow",
         url=html_url,
         js_api=api,
-        width=490,
+        width=450,
         height=800,
-        min_size=(490, 700),
+        min_size=(450, 700),
         frameless=False,
         easy_drag=False,
         transparent=False,

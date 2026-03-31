@@ -309,6 +309,103 @@ class ApiCustomRuleMetadataTests(unittest.TestCase):
         self.assertTrue(result["data"]["has_full_content"])
         self.assertEqual(result["data"]["raw_markdown"], "原文正文")
 
+    def test_get_system_content_index_returns_article_backed_payload(self):
+        api = self.make_api([])
+        api._resolve_article_source_type = Mock(return_value="rss")
+        api._resolve_article_ai_config = Mock(
+            return_value={
+                "source_type": "rss",
+                "enable_ai_formatting": True,
+                "enable_ai_summary": True,
+                "formatting_prompt": "",
+                "summary_prompt": "",
+            }
+        )
+        api._version_info = {
+            "version": "v1.1.3",
+            "announcement": {
+                "title": "系统公告",
+                "summary": "测试公告",
+                "content": "测试公告正文",
+                "publish_time": "2026-03-31 10:00:00",
+            },
+        }
+
+        stored_article = {
+            "id": 88,
+            "title": "系统公告",
+            "url": "https://example.com/announcement",
+            "date": "2026-03-31",
+            "exact_time": "2026-03-31 10:00:00",
+            "category": "v1.1.3",
+            "department": "系统公告",
+            "summary": "【系统公告】测试公告",
+            "raw_text": "测试公告正文",
+            "raw_markdown": "测试公告正文",
+            "enhanced_markdown": "测试公告正文",
+            "ai_summary": "测试公告正文",
+            "ai_tags": '["系统公告"]',
+            "source_name": "系统通知",
+            "source_type": "rss",
+            "rule_id": "system:announcement",
+            "enable_ai_formatting": 1,
+            "enable_ai_summary": 1,
+        }
+
+        with patch.object(api_module, "db") as mock_db:
+            mock_db.get_articles_by_rule_prefix.side_effect = [
+                [],
+                [stored_article],
+            ]
+            mock_db.insert_or_update_article_sync.return_value = True
+
+            result = api.get_system_content_index()
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn("announcement", result["data"])
+        self.assertEqual(result["data"]["announcement"]["id"], 88)
+        self.assertEqual(
+            result["data"]["announcement"]["system_content_key"],
+            "announcement",
+        )
+        self.assertTrue(result["data"]["announcement"]["is_announcement"])
+
+    def test_regenerate_summary_returns_noop_for_system_content_article(self):
+        api = self.make_api([])
+        api._resolve_article_source_type = Mock(return_value="rss")
+        api._resolve_article_ai_config = Mock(
+            return_value={
+                "source_type": "rss",
+                "enable_ai_formatting": True,
+                "enable_ai_summary": True,
+                "formatting_prompt": "",
+                "summary_prompt": "",
+            }
+        )
+
+        with patch.object(api_module, "db") as mock_db:
+            mock_db.get_article_by_id.return_value = {
+                "id": 9,
+                "title": "免责声明",
+                "url": "https://example.com/disclaimer",
+                "summary": "【免责声明】请阅读",
+                "raw_text": "请阅读正文",
+                "raw_markdown": "请阅读正文",
+                "enhanced_markdown": "请阅读正文",
+                "ai_summary": "请阅读正文",
+                "ai_tags": '["免责声明"]',
+                "source_type": "rss",
+                "rule_id": "system:disclaimer",
+                "enable_ai_formatting": 1,
+                "enable_ai_summary": 1,
+            }
+
+            result = api.regenerate_summary(9)
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["result_kind"], "system_noop")
+        self.assertEqual(result["ai_summary"], "请阅读正文")
+
     def test_search_articles_uses_compact_payload_for_keyword_search(self):
         api = self.make_api([])
 
@@ -545,6 +642,7 @@ class ApiCustomRuleMetadataTests(unittest.TestCase):
         api._rule_generator = Mock()
         api._rule_generator.build_rule_preview_bundle.return_value = {
             "sample_data": [{"title": "样本 A"}],
+            "fetch_error": "",
             "detail_samples": [
                 {
                     "title": "详情样本 A",
@@ -583,6 +681,41 @@ class ApiCustomRuleMetadataTests(unittest.TestCase):
         self.assertEqual(result["detail_preview_message"], "详情预览通过")
         self.assertEqual(result["page_summary"]["title"], "Preview Page")
         self.assertEqual(result["test_snapshot"]["sample_count"], 1)
+        self.assertEqual(result["message"], "")
+
+    def test_test_custom_spider_rule_returns_error_when_fetch_failed(self):
+        api = self.make_api([])
+        api._rule_generator = Mock()
+        api._rule_generator.build_rule_preview_bundle.return_value = {
+            "sample_data": [],
+            "fetch_error": "请求抓取失败：目标站点无法访问",
+            "detail_samples": [],
+            "detail_preview_required": False,
+            "detail_preview_passed": False,
+            "detail_preview_message": "",
+            "page_summary": None,
+            "test_snapshot": {"sample_count": 0},
+        }
+
+        rule_dict = {
+            "rule_id": "html_rule_fetch_error",
+            "task_id": "task_fetch_error",
+            "task_name": "HTML Fetch Error",
+            "url": "https://example.com/news",
+            "source_type": "html",
+            "list_container": "ul.news-list",
+            "item_selector": "li",
+            "field_selectors": {
+                "title": "a::text",
+                "url": "a::attr(href)",
+            },
+        }
+
+        result = api.test_custom_spider_rule(rule_dict)
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["count"], 0)
+        self.assertIn("请求抓取失败", result["message"])
 
     @patch("src.spiders.dynamic_spider.create_dynamic_spider_from_rule")
     def test_manual_retest_custom_spider_rule_updates_health_on_success(
