@@ -37,7 +37,7 @@ MicroFlow 当前已经完成了三大主信息获取能力的主链路：
 - [x] `node --check frontend/js/app.js`
 - [x] `python3 -m py_compile src/api.py src/database.py`
 - [x] `/Users/chen/Code/MicroFlow/.venv/bin/pytest -q`
-- [x] 当前默认测试结果：`98 passed`
+- [x] 当前默认测试结果：`105 passed`
 
 ## P0
 

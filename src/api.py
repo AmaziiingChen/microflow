@@ -1991,6 +1991,7 @@ class Api:
             "autoStart": False,
             "muteMode": False,
             "trackMode": "continuous",
+            "themeAppearance": "snow-frost",
             "fontFamily": "sans-serif",
             "customFontPath": "",
             "customFontName": "",

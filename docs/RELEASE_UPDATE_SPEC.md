@@ -202,8 +202,8 @@
 {
   "schema_version": "1",
   "channel": "stable",
-  "version": "v1.2.0",
-  "build": 1200,
+  "version": "v1.0.0",
+  "build": 1000,
   "release_date": "2026-04-10",
   "is_active": true,
   "kill_message": "",
@@ -211,14 +211,14 @@
   "force_update": false,
   "downloads": {
     "windows": {
-      "url": "https://cdn.example.com/MicroFlow-Setup-v1.2.0.exe",
+      "url": "https://cdn.example.com/MicroFlow-Setup-v1.0.0.exe",
       "sha256": "9f9b5b4b7b2b7a8f5d0e0caa11223344556677889900aabbccddeeff00112233",
       "size": 118734245,
       "installer_type": "inno",
       "signature_subject": "Shenzhen MicroFlow Studio"
     },
     "macos": {
-      "url": "https://cdn.example.com/MicroFlow-v1.2.0.dmg",
+      "url": "https://cdn.example.com/MicroFlow-v1.0.0.dmg",
       "sha256": "0f1e2d3c4b5a69788776655443322110ffeeddccbbaa99887766554433221100",
       "size": 102345678,
       "package_type": "dmg",
@@ -227,12 +227,12 @@
   },
   "announcement": {
     "id": "announce_20260410",
-    "title": "v1.2.0 已发布",
+    "title": "v1.0.0 已发布",
     "summary": "新增 Windows 正式安装包与更新提醒优化",
     "content": "本次更新主要包含：1. Windows 正式安装流程；2. RSS 阅读模式优化；3. 错误上报增强。",
     "publish_time": "2026-04-10 09:00:00",
-    "url": "https://example.com/releases/v1.2.0",
-    "version": "v1.2.0"
+    "url": "https://example.com/releases/v1.0.0",
+    "version": "v1.0.0"
   },
   "rollout": {
     "enabled": false,
@@ -350,7 +350,7 @@
 ### 普通更新
 
 - 标题：`发现新版本`
-- 文案：`MicroFlow v1.2.0 已可用，可下载后安装更新。`
+- 文案：`MicroFlow v1.0.0 已可用，可下载后安装更新。`
 
 ### 强制更新
 

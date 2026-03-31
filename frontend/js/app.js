@@ -201,15 +201,66 @@ const getAITagBgColor = (departmentName) => {
 };
 
 // 🌟 新增：获取订阅管理中的来源颜色
+const getSubsChipTokenName = (sourceName) => {
+  const index = SOURCE_ICON_CATALOG.findIndex((item) => item.name === sourceName);
+  return index !== -1 && FILTER_CHIP_TOKENS[index]
+    ? FILTER_CHIP_TOKENS[index]
+    : getSourceChipTokenByIndex(0);
+};
+
 const getSubsChipColor = (sourceName) => {
-  const index = SOURCE_ICON_CATALOG.findIndex(
-    (item) => item.name === sourceName,
-  );
-  const tokenName =
-    index !== -1 && FILTER_CHIP_TOKENS[index]
-      ? FILTER_CHIP_TOKENS[index]
-      : getSourceChipTokenByIndex(0);
-  return asCssVar(tokenName);
+  return asCssVar(getSubsChipTokenName(sourceName));
+};
+
+const _parseRgbLikeColor = (value) => {
+  if (!value) return null;
+  const rgbMatch = value
+    .trim()
+    .match(/^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})/i);
+  if (rgbMatch) {
+    return {
+      r: Math.max(0, Math.min(255, Number(rgbMatch[1]))),
+      g: Math.max(0, Math.min(255, Number(rgbMatch[2]))),
+      b: Math.max(0, Math.min(255, Number(rgbMatch[3]))),
+    };
+  }
+
+  const hexMatch = value.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (hexMatch) {
+    const hex = hexMatch[1];
+    const full =
+      hex.length === 3
+        ? hex
+            .split("")
+            .map((ch) => ch + ch)
+            .join("")
+        : hex;
+    const r = parseInt(full.slice(0, 2), 16);
+    const g = parseInt(full.slice(2, 4), 16);
+    const b = parseInt(full.slice(4, 6), 16);
+    return { r, g, b };
+  }
+
+  return null;
+};
+
+const _mixRgb = (base, target, amount) => ({
+  r: Math.round(base.r + (target.r - base.r) * amount),
+  g: Math.round(base.g + (target.g - base.g) * amount),
+  b: Math.round(base.b + (target.b - base.b) * amount),
+});
+
+const _rgbToString = (rgb) => `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+
+const getSubsIconGradientBackground = (sourceName) => {
+  const tokenName = getSubsChipTokenName(sourceName);
+  const raw = readRootCssToken(tokenName, "").trim();
+  const base = _parseRgbLikeColor(raw) || { r: 0, g: 122, b: 255 };
+  const light = _mixRgb(base, { r: 255, g: 255, b: 255 }, 0.07);
+  const dark = _mixRgb(base, { r: 0, g: 0, b: 0 }, 0.07);
+  return `linear-gradient(135deg, ${_rgbToString(light)} 0%, ${_rgbToString(
+    dark,
+  )} 100%)`;
 };
 
 // 🌟 新增：获取订阅管理中的来源图标
@@ -258,10 +309,8 @@ const getSubsIconStyle = (sourceName, isActive) => {
     };
   }
 
-  // 默认使用普通颜色
-  const color = getSubsChipColor(sourceName);
   return {
-    backgroundColor: color,
+    background: getSubsIconGradientBackground(sourceName),
     color: sourceName === "创意设计学院" ? "#ffffff" : undefined,
   };
 };
@@ -943,12 +992,63 @@ try {
       const DUAL_PANE_MIN_WIDTH = 950;
       const SETTINGS_MASTER_DETAIL_MIN_WIDTH = DUAL_PANE_MIN_WIDTH;
       const isSettingsOpen = ref(false); // 🌟 新增：控制设置面板的独立状态
+      const THEME_APPEARANCE_OPTIONS = Object.freeze([
+        {
+          value: "snow-frost",
+          label: "极地霜白",
+          description: "冷灰底盘与纯白卡片，干净通透。",
+        },
+        {
+          value: "sepia-focus",
+          label: "沉浸纸质",
+          description: "暖米双色分栏，适合长时间读公文。",
+        },
+        {
+          value: "matcha-zen",
+          label: "宇治初雪",
+          description: "清淡草木气息，护眼且适合长文阅读。",
+        },
+        {
+          value: "oat-latte",
+          label: "焦糖燕麦",
+          description: "更年轻的暖奶咖色，松弛柔和。",
+        },
+        {
+          value: "sakura-bloom",
+          label: "樱粉初绽",
+          description: "温柔粉白与珊瑚强调，亲和轻盈。",
+        },
+        {
+          value: "lavender-haze",
+          label: "暮紫霜星",
+          description: "克制优雅的香芋紫灰，偏知性。",
+        },
+        {
+          value: "hacker-abyss",
+          label: "极客深空",
+          description: "纯黑底盘与霓虹青强调，适合夜间。",
+        },
+      ]);
+      const THEME_APPEARANCE_ALIAS = Object.freeze({
+        light: "snow-frost",
+        "snow-frost": "snow-frost",
+        "sepia-focus": "sepia-focus",
+        "warm-paper": "sepia-focus",
+        sepia: "sepia-focus",
+        "matcha-zen": "matcha-zen",
+        "oat-latte": "oat-latte",
+        "sakura-bloom": "sakura-bloom",
+        "lavender-haze": "lavender-haze",
+        "hacker-abyss": "hacker-abyss",
+        ink: "hacker-abyss",
+        dark: "hacker-abyss",
+      });
       const SETTINGS_SECTIONS = Object.freeze([
         {
           id: "software",
-          label: "软件更新",
-          description: "检查版本、系统公告与网络访问状态。",
-          iconClass: "is-software",
+          label: "网络与访问",
+          description: "检查网络与校园网访问状态。",
+          iconClass: "is-network",
         },
         {
           id: "ai",
@@ -5580,6 +5680,28 @@ try {
         // 无法解析则返回原字符串
         return dateStr;
       };
+
+      const formatDateTimeCompact = (dateStr) => {
+        if (!dateStr) return "";
+        const str = String(dateStr).trim();
+        const match = str.match(
+          /(\d{4})[-\/年](\d{1,2})[-\/月](\d{1,2})日?(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/,
+        );
+        if (match) {
+          const [, , month, day, hour, minute] = match;
+          const pad = (n) => String(n).padStart(2, "0");
+          const datePart = `${pad(month)}月${pad(day)}日`;
+          if (
+            hour &&
+            minute &&
+            !(parseInt(hour) === 0 && parseInt(minute) === 0)
+          ) {
+            return `${datePart} ${pad(hour)}:${pad(minute)}`;
+          }
+          return datePart;
+        }
+        return dateStr;
+      };
       // 1. 新增：平滑滚动到附件区
       const scrollToAttachments = () => {
         const el = document.getElementById("attachments-area");
@@ -5596,6 +5718,7 @@ try {
         autoStart: false,
         muteMode: false,
         trackMode: "continuous",
+        themeAppearance: "snow-frost",
         fontFamily: "sans-serif", // 🌟 新增：字体风格，默认黑体
         customFontPath: "", // 🌟 新增：外部字体路径
         customFontName: "", // 🌟 新增：外部字体原始名称
@@ -5616,17 +5739,44 @@ try {
       const isApplyingBackendConfig = ref(false);
       const currentFontLabel = computed(() => {
         if (config.value.fontFamily === "serif") return "经典宋体";
+        if (config.value.fontFamily === "wenkai") return "霞鹜文楷";
         if (config.value.fontFamily === "custom") {
           return config.value.customFontName || "外部导入";
         }
         return "现代黑体";
       });
+      const themeAppearanceOptions = THEME_APPEARANCE_OPTIONS;
+      const normalizeThemeAppearance = (themeName = "snow-frost") => {
+        const normalized = String(themeName || "")
+          .trim()
+          .toLowerCase();
+        return THEME_APPEARANCE_ALIAS[normalized] || "snow-frost";
+      };
+      const lastSavedThemeAppearance = ref("snow-frost");
+      const isPersistingThemeAppearance = ref(false);
+      const currentThemeAppearanceDescription = computed(() => {
+        const currentTheme = normalizeThemeAppearance(
+          config.value.themeAppearance,
+        );
+        const matched = themeAppearanceOptions.find(
+          (item) => item.value === currentTheme,
+        );
+        return matched?.description || "冷灰底盘与纯白卡片，干净通透。";
+      });
 
-      const applyThemeAppearance = (themeName = "light") => {
+      const getFontFormatByPath = (fontPath = "") => {
+        const normalized = String(fontPath || "").trim().toLowerCase();
+        if (normalized.endsWith(".woff2")) return "woff2";
+        if (normalized.endsWith(".woff")) return "woff";
+        if (normalized.endsWith(".otf")) return "opentype";
+        return "truetype";
+      };
+
+      const applyThemeAppearance = (themeName = "snow-frost") => {
         if (typeof document === "undefined" || !document.documentElement) return;
         document.documentElement.setAttribute(
           "data-theme",
-          String(themeName || "light").trim() || "light",
+          normalizeThemeAppearance(themeName),
         );
       };
 
@@ -5644,10 +5794,63 @@ try {
       const mergeConfigFromBackend = (data) => {
         if (!data || typeof data !== "object") return;
         isApplyingBackendConfig.value = true;
-        config.value = { ...config.value, ...data };
+        const normalizedData = { ...data };
+        normalizedData.themeAppearance = normalizeThemeAppearance(
+          normalizedData.themeAppearance,
+        );
+        if (normalizedData.themeAppearance) {
+          lastSavedThemeAppearance.value = normalizedData.themeAppearance;
+        }
+        config.value = { ...config.value, ...normalizedData };
         Promise.resolve().then(() => {
           isApplyingBackendConfig.value = false;
         });
+      };
+
+      const persistThemeAppearance = async () => {
+        if (isApplyingBackendConfig.value || isPersistingThemeAppearance.value) {
+          return;
+        }
+
+        const normalizedTheme = normalizeThemeAppearance(
+          config.value.themeAppearance,
+        );
+        config.value.themeAppearance = normalizedTheme;
+        applyThemeAppearance(normalizedTheme);
+
+        if (!configHydrated) {
+          lastSavedThemeAppearance.value = normalizedTheme;
+          return;
+        }
+
+        isPersistingThemeAppearance.value = true;
+        try {
+          const payload = JSON.parse(JSON.stringify(config.value));
+          payload.themeAppearance = normalizedTheme;
+          const res = await saveConfigSafely(payload);
+          if (!res || res.status !== "success") {
+            throw new Error(res?.message || "界面主题保存失败");
+          }
+          lastSavedThemeAppearance.value = normalizedTheme;
+        } catch (e) {
+          const fallbackTheme = normalizeThemeAppearance(
+            lastSavedThemeAppearance.value,
+          );
+          config.value.themeAppearance = fallbackTheme;
+          applyThemeAppearance(fallbackTheme);
+          showNotification(
+            "保存失败",
+            `界面主题未能保存：${String(e || "未知错误")}`,
+            "error",
+            2400,
+          );
+        } finally {
+          isPersistingThemeAppearance.value = false;
+        }
+      };
+
+      const handleThemeAppearanceChange = () => {
+        void persistThemeAppearance();
       };
 
       const syncMuteModeFromTray = (muteMode) => {
@@ -7503,10 +7706,16 @@ try {
           const oldStyle = document.getElementById("tongwen-custom-font");
           if (oldStyle) oldStyle.remove();
 
-          document.body.classList.remove("serif-mode", "custom-font-mode");
+          document.body.classList.remove(
+            "serif-mode",
+            "custom-font-mode",
+            "wenkai-mode",
+          );
 
           if (newFont === "serif") {
             document.body.classList.add("serif-mode");
+          } else if (newFont === "wenkai") {
+            document.body.classList.add("wenkai-mode");
           } else if (newFont === "custom" && customPath) {
             // 🌟 核心修复：将相对路径转换为包含 http://127.0.0.1:port/ 的绝对网络路径
             // 这样 html2canvas 在生成 SVG 快照时，才能在无基准域名的沙盒中精准下载到字体
@@ -7519,7 +7728,7 @@ try {
             style.innerHTML = `
                             @font-face {
                                 font-family: 'UserCustomFont';
-                                src: url('${absoluteFontUrl}') format('${customPath.endsWith("woff2") ? "woff2" : customPath.endsWith("woff") ? "woff" : customPath.endsWith("otf") ? "opentype" : "truetype"}');
+                                src: url('${absoluteFontUrl}') format('${getFontFormatByPath(customPath)}');
                             }
                             .custom-font-mode,
                             .custom-font-mode .markdown-body, .custom-font-mode .list-card-title,
@@ -7534,6 +7743,20 @@ try {
           }
         },
         { immediate: true, deep: true },
+      );
+
+      watch(
+        () => config.value.themeAppearance,
+        (nextTheme) => {
+          const normalizedTheme = normalizeThemeAppearance(nextTheme);
+          if (normalizedTheme !== nextTheme) {
+            config.value.themeAppearance = normalizedTheme;
+            return;
+          }
+
+          applyThemeAppearance(normalizedTheme);
+        },
+        { immediate: true },
       );
 
       const showApiKey = ref(false); // 密钥显示/隐藏状态
@@ -9559,7 +9782,11 @@ try {
           const cachedItem = processedArticleCache.get(item);
           if (cachedItem) return cachedItem;
           const baseItem = buildArticleViewModel(item);
-          const formattedTime = formatDateTime(item.exact_time || item.date);
+          const shouldShowYear =
+            isSearching.value || Boolean((searchQuery.value || "").trim());
+          const formattedTime = shouldShowYear
+            ? formatDateTime(item.exact_time || item.date)
+            : formatDateTimeCompact(item.exact_time || item.date);
           const sortKey = normalizeArticleTimeForSort(
             item.exact_time || item.date,
           );
@@ -10024,7 +10251,7 @@ try {
       };
 
       onMounted(async () => {
-        applyThemeAppearance("light");
+        applyThemeAppearance(config.value.themeAppearance);
 
         // 🎯 冷却时间恢复：检查 localStorage 中是否有未完成的冷却（不依赖 API）
         const lastTime = localStorage.getItem("lastManualUpdateTime");
@@ -12001,10 +12228,21 @@ try {
         // 🌟 终极修复：沙盒穿透！将外部字体转化为 Base64 纯文本注入
         // ============================================================
         let tempBase64Style = null;
-        if (
-          config.value.fontFamily === "custom" &&
-          config.value.customFontPath
-        ) {
+        const snapshotFontConfig =
+          config.value.fontFamily === "custom" && config.value.customFontPath
+            ? {
+                path: config.value.customFontPath,
+                family: "UserCustomFont",
+                format: getFontFormatByPath(config.value.customFontPath),
+              }
+            : config.value.fontFamily === "wenkai"
+              ? {
+                  path: "fonts/custom_font.ttf",
+                  family: "MicroFlowWenKai",
+                  format: "truetype",
+                }
+              : null;
+        if (snapshotFontConfig) {
           try {
             fontToastId = showNotification(
               "截图",
@@ -12013,7 +12251,7 @@ try {
               2000,
             );
             const fontUrl = new URL(
-              config.value.customFontPath,
+              snapshotFontConfig.path,
               window.location.href,
             ).href;
             const response = await fetch(fontUrl);
@@ -12032,8 +12270,8 @@ try {
             // 加上 !important 强制覆盖原本的 URL 字体
             tempBase64Style.innerHTML = `
                                 @font-face {
-                                    font-family: 'UserCustomFont';
-                                    src: url(${base64Data}) !important;
+                                    font-family: '${snapshotFontConfig.family}';
+                                    src: url(${base64Data}) format('${snapshotFontConfig.format}') !important;
                                 }
                             `;
             document.head.appendChild(tempBase64Style);
@@ -12931,6 +13169,9 @@ try {
         backToSettingsSectionList,
         backFromSettingsSubpage,
         currentFontLabel,
+        themeAppearanceOptions,
+        currentThemeAppearanceDescription,
+        handleThemeAppearanceChange,
         setTrackMode,
         showApiKey,
         networkAccessState,

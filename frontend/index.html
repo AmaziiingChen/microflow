@@ -334,7 +334,7 @@
                           <div class="settings-subpage-kicker">阅读字体</div>
                           <h3 class="settings-subpage-title">字体选择</h3>
                           <p class="settings-subpage-subtitle">
-                            统一管理正文默认字体与外部字体状态。
+                            统一管理正文默认字体与内置、外部字体状态。
                           </p>
                         </div>
                       </header>
@@ -360,6 +360,16 @@
                               <span class="settings-row-label">经典宋体</span>
                               <span class="settings-row-value">
                                 {{ config.fontFamily === 'serif' ? '当前使用' : '' }}
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              class="settings-row settings-row-link"
+                              @click="config.fontFamily = 'wenkai'"
+                            >
+                              <span class="settings-row-label">霞鹜文楷（内置）</span>
+                              <span class="settings-row-value">
+                                {{ config.fontFamily === 'wenkai' ? '当前使用' : '' }}
                               </span>
                             </button>
                             <button
@@ -653,124 +663,6 @@
                   <template v-if="activeSettingsSection === 'software'">
                     <div class="settings-group-block">
                       <div class="settings-group-head">
-                        <div class="settings-group-label">软件更新</div>
-                        <button
-                          type="button"
-                          class="settings-group-tool"
-                          @click="checkSoftwareUpdate(true, true)"
-                          :disabled="isCheckingSoftwareUpdate"
-                        >
-                          {{
-                            isCheckingSoftwareUpdate
-                              ? '检查中…'
-                              : '检查更新'
-                          }}
-                        </button>
-                      </div>
-                      <div class="settings-group-card">
-                        <div class="settings-row">
-                          <span class="settings-row-label">当前版本</span>
-                          <span class="settings-row-value">
-                            {{ softwareUpdateState.currentVersion || '未识别' }}
-                          </span>
-                        </div>
-                        <div class="settings-row">
-                          <span class="settings-row-label">最新版本</span>
-                          <span class="settings-row-trailing">
-                            <span
-                              class="settings-status-dot"
-                              :class="'is-' + (softwareUpdateState.status || 'idle')"
-                            ></span>
-                            <span class="settings-row-value">
-                              {{
-                                softwareUpdateState.latestVersion ||
-                                  softwareUpdateState.label
-                              }}
-                            </span>
-                          </span>
-                        </div>
-                        <div
-                          v-if="softwareUpdateState.releaseDate"
-                          class="settings-row"
-                        >
-                          <span class="settings-row-label">发布时间</span>
-                          <span class="settings-row-value">
-                            {{ softwareUpdateState.releaseDate }}
-                          </span>
-                        </div>
-                        <button
-                          v-if="systemContentEntries.announcement"
-                          type="button"
-                          class="settings-row settings-row-link"
-                          @click="openSystemContentArticle('announcement')"
-                        >
-                          <span class="settings-row-stack">
-                            <span class="settings-row-label">最新公告</span>
-                            <span class="settings-row-note">
-                              {{
-                                systemContentEntries.announcement.title ||
-                                  systemNotice.title
-                              }}
-                            </span>
-                          </span>
-                          <span class="settings-row-trailing">
-                            <span class="settings-row-value">
-                              {{
-                                systemContentEntries.announcement.formattedTime ||
-                                  systemNotice.publish_time
-                              }}
-                            </span>
-                            <span
-                              class="settings-inline-arrow"
-                              aria-hidden="true"
-                            ></span>
-                          </span>
-                        </button>
-                        <div class="settings-row">
-                          <div class="settings-row-stack">
-                            <span class="settings-row-label">更新说明</span>
-                            <span class="settings-row-note">
-                              {{
-                                softwareUpdateState.notes ||
-                                  softwareUpdateState.detail
-                              }}
-                            </span>
-                          </div>
-                        </div>
-                        <div
-                          v-if="softwareUpdateState.downloadSha256"
-                          class="settings-row"
-                        >
-                          <div class="settings-row-stack">
-                            <span class="settings-row-label">SHA256</span>
-                            <span class="settings-row-note">
-                              {{ softwareUpdateState.downloadSha256 }}
-                            </span>
-                          </div>
-                        </div>
-                        <button
-                          v-if="
-                            softwareUpdateState.hasUpdate &&
-                              softwareUpdateState.downloadUrl
-                          "
-                          type="button"
-                          class="settings-row settings-row-action settings-row-action-center"
-                          @click="openSoftwareUpdateDownload($event)"
-                        >
-                          下载更新
-                        </button>
-                      </div>
-                      <p class="settings-group-footer">
-                        {{
-                          formatSoftwareUpdateCheckedAt(
-                            softwareUpdateState.checkedAt
-                          )
-                        }}
-                      </p>
-                    </div>
-
-                    <div class="settings-group-block">
-                      <div class="settings-group-head">
                         <div class="settings-group-label">网络与访问</div>
                         <button
                           type="button"
@@ -810,7 +702,31 @@
                   <template v-else-if="activeSettingsSection === 'ai'">
                     <div class="settings-group-block">
                       <div class="settings-group-head">
-                        <div class="settings-group-label">主模型配置</div>
+                        <div class="settings-group-title">
+                          <div class="settings-group-label">主模型配置</div>
+                          <button
+                            type="button"
+                            class="settings-icon-button"
+                            @click="openBrowser('https://platform.deepseek.com/', $event)"
+                            title="DeepSeek 开放平台"
+                            aria-label="DeepSeek 开放平台"
+                          >
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                            >
+                              <circle cx="12" cy="12" r="10"></circle>
+                              <line x1="12" y1="10" x2="12" y2="16"></line>
+                              <line x1="12" y1="7" x2="12.01" y2="7"></line>
+                            </svg>
+                          </button>
+                        </div>
                         <button
                           type="button"
                           class="settings-group-tool settings-group-tool-connection"
@@ -1005,6 +921,31 @@
                             <span class="settings-inline-arrow" aria-hidden="true"></span>
                           </span>
                         </button>
+                        <div class="settings-row settings-row-form">
+                          <span class="settings-row-stack">
+                            <span class="settings-row-label">界面主题</span>
+                            <span class="settings-row-note">
+                              {{ currentThemeAppearanceDescription }}
+                            </span>
+                          </span>
+                          <div class="settings-row-control">
+                            <div class="apple-select-wrapper">
+                              <select
+                                v-model="config.themeAppearance"
+                                class="apple-select"
+                                @change="handleThemeAppearanceChange"
+                              >
+                                <option
+                                  v-for="item in themeAppearanceOptions"
+                                  :key="item.value"
+                                  :value="item.value"
+                                >
+                                  {{ item.label }}
+                                </option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
@@ -1318,6 +1259,123 @@
                           </span>
                         </button>
                       </div>
+                    </div>
+                    <div class="settings-group-block">
+                      <div class="settings-group-head">
+                        <div class="settings-group-label">软件更新</div>
+                        <button
+                          type="button"
+                          class="settings-group-tool"
+                          @click="checkSoftwareUpdate(true, true)"
+                          :disabled="isCheckingSoftwareUpdate"
+                        >
+                          {{
+                            isCheckingSoftwareUpdate
+                              ? '检查中…'
+                              : '检查更新'
+                          }}
+                        </button>
+                      </div>
+                      <div class="settings-group-card">
+                        <div class="settings-row">
+                          <span class="settings-row-label">当前版本</span>
+                          <span class="settings-row-value">
+                            {{ softwareUpdateState.currentVersion || '未识别' }}
+                          </span>
+                        </div>
+                        <div class="settings-row">
+                          <span class="settings-row-label">最新版本</span>
+                          <span class="settings-row-trailing">
+                            <span
+                              class="settings-status-dot"
+                              :class="'is-' + (softwareUpdateState.status || 'idle')"
+                            ></span>
+                            <span class="settings-row-value">
+                              {{
+                                softwareUpdateState.latestVersion ||
+                                  softwareUpdateState.label
+                              }}
+                            </span>
+                          </span>
+                        </div>
+                        <div
+                          v-if="softwareUpdateState.releaseDate"
+                          class="settings-row"
+                        >
+                          <span class="settings-row-label">发布时间</span>
+                          <span class="settings-row-value">
+                            {{ softwareUpdateState.releaseDate }}
+                          </span>
+                        </div>
+                        <button
+                          v-if="systemContentEntries.announcement"
+                          type="button"
+                          class="settings-row settings-row-link"
+                          @click="openSystemContentArticle('announcement')"
+                        >
+                          <span class="settings-row-stack">
+                            <span class="settings-row-label">最新公告</span>
+                            <span class="settings-row-note">
+                              {{
+                                systemContentEntries.announcement.title ||
+                                  systemNotice.title
+                              }}
+                            </span>
+                          </span>
+                          <span class="settings-row-trailing">
+                            <span class="settings-row-value">
+                              {{
+                                systemContentEntries.announcement.formattedTime ||
+                                  systemNotice.publish_time
+                              }}
+                            </span>
+                            <span
+                              class="settings-inline-arrow"
+                              aria-hidden="true"
+                            ></span>
+                          </span>
+                        </button>
+                        <div class="settings-row">
+                          <div class="settings-row-stack">
+                            <span class="settings-row-label">更新说明</span>
+                            <span class="settings-row-note">
+                              {{
+                                softwareUpdateState.notes ||
+                                  softwareUpdateState.detail
+                              }}
+                            </span>
+                          </div>
+                        </div>
+                        <div
+                          v-if="softwareUpdateState.downloadSha256"
+                          class="settings-row"
+                        >
+                          <div class="settings-row-stack">
+                            <span class="settings-row-label">SHA256</span>
+                            <span class="settings-row-note">
+                              {{ softwareUpdateState.downloadSha256 }}
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          v-if="
+                            softwareUpdateState.hasUpdate &&
+                              softwareUpdateState.downloadUrl
+                          "
+                          type="button"
+                          class="settings-row settings-row-action settings-row-action-center"
+                          @click="openSoftwareUpdateDownload($event)"
+                        >
+                          下载更新
+                        </button>
+                      </div>
+                      <p class="settings-group-footer">
+                        {{
+                          formatSoftwareUpdateCheckedAt(
+                            softwareUpdateState.checkedAt
+                          )
+                        }}
+                      </p>
                     </div>
                   </template>
 
@@ -2350,7 +2408,7 @@
                     style="
                       font-weight: 400;
                       font-size: 15px;
-                      color: #111;
+                      color: var(--color-text-primary);
                       font-family:
                         &quot;Songti SC&quot;, &quot;Noto Serif CJK SC&quot;,
                         &quot;SimSun&quot;, serif;
@@ -2362,6 +2420,25 @@
                     class="ios-toggle"
                     :checked="config.fontFamily === 'serif'"
                     @change="config.fontFamily = 'serif'"
+                  />
+                </div>
+                <div class="list-row-item">
+                  <span
+                    style="
+                      font-weight: 400;
+                      font-size: 15px;
+                      color: var(--color-text-primary);
+                      font-family:
+                        &quot;MicroFlowWenKai&quot;, &quot;LXGW WenKai&quot;,
+                        &quot;Kaiti SC&quot;, serif;
+                    "
+                    >霞鹜文楷（内置）</span
+                  >
+                  <input
+                    type="checkbox"
+                    class="ios-toggle"
+                    :checked="config.fontFamily === 'wenkai'"
+                    @change="config.fontFamily = 'wenkai'"
                   />
                 </div>
                 <div class="list-row-item">
@@ -2377,7 +2454,7 @@
                       style="
                         font-weight: 400;
                         font-size: 15px;
-                        color: #111;
+                        color: var(--color-text-primary);
                         font-family: &quot;UserCustomFont&quot;, sans-serif;
                       "
                       >外部导入</span
@@ -2385,7 +2462,7 @@
                     <span
                       style="
                         font-size: 12px;
-                        color: #9ca3af;
+                        color: var(--color-text-tertiary);
                         white-space: nowrap;
                         overflow: hidden;
                         text-overflow: ellipsis;
@@ -2429,6 +2506,53 @@
                     :checked="config.fontFamily === 'custom'"
                     @change="config.fontFamily = 'custom'"
                   />
+                </div>
+              </div>
+            </div>
+
+            <div class="list-card settings-card" @click.stop>
+              <div class="settings-card-title">界面主题</div>
+              <div class="list-row-group">
+                <div class="list-row-item" style="align-items: flex-start">
+                  <div
+                    style="
+                      display: flex;
+                      flex-direction: column;
+                      gap: 4px;
+                      min-width: 0;
+                      flex: 1;
+                    "
+                  >
+                    <span style="font-weight: 400; font-size: 15px; color: var(--color-text-primary)">
+                      主题配色
+                    </span>
+                    <span
+                      style="
+                        font-size: 12px;
+                        line-height: 1.5;
+                        color: var(--color-text-secondary);
+                      "
+                    >
+                      {{ currentThemeAppearanceDescription }}
+                    </span>
+                  </div>
+                  <div style="width: min(100%, 188px)">
+                    <div class="apple-select-wrapper">
+                      <select
+                        v-model="config.themeAppearance"
+                        class="apple-select"
+                        @change="handleThemeAppearanceChange"
+                      >
+                        <option
+                          v-for="item in themeAppearanceOptions"
+                          :key="item.value"
+                          :value="item.value"
+                        >
+                          {{ item.label }}
+                        </option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -4732,6 +4856,16 @@
                       <span class="settings-row-label">经典宋体</span>
                       <span class="settings-row-value">
                         {{ config.fontFamily === 'serif' ? '当前使用' : '' }}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      class="settings-row settings-row-link"
+                      @click="config.fontFamily = 'wenkai'"
+                    >
+                      <span class="settings-row-label">霞鹜文楷（内置）</span>
+                      <span class="settings-row-value">
+                        {{ config.fontFamily === 'wenkai' ? '当前使用' : '' }}
                       </span>
                     </button>
                     <button
@@ -7574,6 +7708,7 @@
                       :class="{ 'is-active': isDetailSearchExpanded }"
                       :aria-expanded="isDetailSearchExpanded ? 'true' : 'false'"
                       aria-label="页内搜索"
+                      data-tooltip="搜索本文"
                       @click.stop="toggleDetailSearchUI"
                     >
                       <span

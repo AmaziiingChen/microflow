@@ -33,11 +33,11 @@ The project currently uses a lightweight `vX.Y.Z` version style. Before the firs
 - `node --check frontend/js/app.js`
 - `python3 -m py_compile src/api.py src/database.py`
 - `/Users/chen/Code/MicroFlow/.venv/bin/pytest -q`
-- Current default test result: `98 passed`
+- Current default test result: `105 passed`
 
-## [v1.1.3]
+## [v1.0.0]
 
 ### Notes
 
-- Current in-repo development version.
-- Still treated as a pre-release development line rather than a formal public stable release.
+- Current in-repo local release baseline.
+- Used as the unified local version number before syncing the cloud-side release configuration.

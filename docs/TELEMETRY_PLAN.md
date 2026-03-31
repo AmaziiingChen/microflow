@@ -131,7 +131,7 @@
   "ts": 1770000000,
   "install_id": "uuid",
   "session_id": "uuid",
-  "app_version": "v1.1.3",
+  "app_version": "v1.0.0",
   "channel": "stable",
   "platform": "windows",
   "platform_version": "10.0.22631",
@@ -387,7 +387,7 @@
       "ts": 1770000000,
       "install_id": "uuid",
       "session_id": "uuid",
-      "app_version": "v1.1.3",
+      "app_version": "v1.0.0",
       "platform": "windows",
       "arch": "x64",
       "props": {

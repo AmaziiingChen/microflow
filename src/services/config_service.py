@@ -26,6 +26,7 @@ class AppConfig:
     auto_start: bool = False
     mute_mode: bool = False
     track_mode: str = "continuous"
+    theme_appearance: str = "snow-frost"
     font_family: str = "sans-serif"  # 🌟 新增：字体风格
     custom_font_path: str = ""  # 🌟 新增：外部字体路径
     custom_font_name: str = ""  # 🌟 新增：外部字体原始名称
@@ -209,6 +210,9 @@ class ConfigService:
                 auto_start=data.get("autoStart", default.auto_start),
                 mute_mode=data.get("muteMode", default.mute_mode),
                 track_mode=data.get("trackMode", default.track_mode),
+                theme_appearance=data.get(
+                    "themeAppearance", default.theme_appearance
+                ),
                 font_family=data.get("fontFamily", default.font_family),  # 🌟 新增
                 custom_font_path=data.get(
                     "customFontPath", default.custom_font_path
@@ -263,6 +267,9 @@ class ConfigService:
                         auto_start=data.get("autoStart", default.auto_start),
                         mute_mode=data.get("muteMode", default.mute_mode),
                         track_mode=data.get("trackMode", default.track_mode),
+                        theme_appearance=data.get(
+                            "themeAppearance", default.theme_appearance
+                        ),
                         font_family=data.get("fontFamily", default.font_family),
                         custom_font_path=data.get(
                             "customFontPath", default.custom_font_path
@@ -365,6 +372,7 @@ class ConfigService:
                 keep_existing("apiKey", current.api_key)
                 keep_existing("modelName", current.model_name)
                 keep_existing("prompt", current.prompt)
+                keep_existing("themeAppearance", current.theme_appearance)
                 keep_existing("fontFamily", current.font_family)
                 keep_existing("customFontPath", current.custom_font_path)
                 keep_existing("customFontName", current.custom_font_name)
@@ -449,6 +457,7 @@ class ConfigService:
                 auto_start=config_dict.get("autoStart", False),
                 mute_mode=config_dict.get("muteMode", False),
                 track_mode=config_dict.get("trackMode", "continuous"),
+                theme_appearance=config_dict.get("themeAppearance", "snow-frost"),
                 font_family=config_dict.get("fontFamily", "sans-serif"),  # 🌟 新增
                 custom_font_path=config_dict.get("customFontPath", ""),  # 🌟 新增
                 custom_font_name=config_dict.get("customFontName", ""),  # 🌟 新增
@@ -510,6 +519,7 @@ class ConfigService:
             "autoStart": config.auto_start,
             "muteMode": config.mute_mode,
             "trackMode": config.track_mode,
+            "themeAppearance": config.theme_appearance,
             "fontFamily": config.font_family,  # 🌟 新增
             "customFontPath": config.custom_font_path,  # 🌟 新增
             "customFontName": config.custom_font_name,  # 🌟 新增
@@ -564,6 +574,7 @@ class ConfigService:
             "autoStart": "auto_start",
             "muteMode": "mute_mode",
             "trackMode": "track_mode",
+            "themeAppearance": "theme_appearance",
             "fontFamily": "font_family",  # 🌟 新增
             "customFontPath": "custom_font_path",  # 🌟 新增
             "customFontName": "custom_font_name",  # 🌟 新增
