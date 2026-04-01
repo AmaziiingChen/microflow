@@ -49,6 +49,13 @@ class HtmlFetchResult:
     error_message: str = ""
 
 
+@dataclass(frozen=True)
+class BrowserRuntimeSpec:
+    executable: str = ""
+    label: str = ""
+    playwright_channel: str = ""
+
+
 def normalize_fetch_strategy(strategy: Any) -> str:
     normalized = str(strategy or DEFAULT_FETCH_STRATEGY).strip().lower()
     if normalized not in SUPPORTED_FETCH_STRATEGIES:
@@ -63,10 +70,34 @@ def _trim_error_message(message: str, limit: int = 220) -> str:
     return text[:limit].rstrip() + "..."
 
 
-def _find_browser_executable() -> str:
+def _classify_browser_runtime(executable: str) -> BrowserRuntimeSpec:
+    normalized = str(executable or "").strip()
+    lowered = normalized.lower()
+    if "msedge" in lowered or "microsoft edge" in lowered:
+        return BrowserRuntimeSpec(
+            executable=normalized,
+            label="Microsoft Edge",
+            playwright_channel="msedge",
+        )
+    if "chrome" in lowered:
+        return BrowserRuntimeSpec(
+            executable=normalized,
+            label="Google Chrome",
+            playwright_channel="chrome",
+        )
+    if "chromium" in lowered:
+        return BrowserRuntimeSpec(
+            executable=normalized,
+            label="Chromium",
+            playwright_channel="chromium",
+        )
+    return BrowserRuntimeSpec(executable=normalized, label="Chromium Browser")
+
+
+def _find_browser_runtime() -> BrowserRuntimeSpec:
     env_path = str(os.getenv("MICROFLOW_BROWSER_PATH") or "").strip()
     if env_path and os.path.exists(env_path):
-        return env_path
+        return _classify_browser_runtime(env_path)
 
     system = platform.system()
     candidates: list[str] = []
@@ -92,14 +123,14 @@ def _find_browser_executable() -> str:
         for base in filter(None, program_files):
             candidates.extend(
                 [
-                    os.path.join(base, "Google", "Chrome", "Application", "chrome.exe"),
                     os.path.join(
                         base, "Microsoft", "Edge", "Application", "msedge.exe"
                     ),
+                    os.path.join(base, "Google", "Chrome", "Application", "chrome.exe"),
                     os.path.join(base, "Chromium", "Application", "chrome.exe"),
                 ]
             )
-        candidates.extend(["chrome", "msedge", "chromium"])
+        candidates.extend(["msedge", "chrome", "chromium"])
     else:
         candidates.extend(
             [
@@ -114,13 +145,31 @@ def _find_browser_executable() -> str:
     for candidate in candidates:
         if os.path.isabs(candidate):
             if os.path.exists(candidate):
-                return candidate
+                return _classify_browser_runtime(candidate)
             continue
         resolved = shutil.which(candidate)
         if resolved:
-            return resolved
+            return _classify_browser_runtime(resolved)
 
-    return ""
+    return BrowserRuntimeSpec()
+
+
+def build_playwright_launch_kwargs() -> tuple[Dict[str, Any], BrowserRuntimeSpec]:
+    runtime = _find_browser_runtime()
+    launch_kwargs: Dict[str, Any] = {
+        "headless": True,
+        "args": [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-gpu",
+        ],
+    }
+    if runtime.executable:
+        launch_kwargs["executable_path"] = runtime.executable
+    elif runtime.playwright_channel and runtime.playwright_channel != "chromium":
+        launch_kwargs["channel"] = runtime.playwright_channel
+    return launch_kwargs, runtime
 
 
 def _build_browser_command(
@@ -360,9 +409,10 @@ def _render_html_in_browser(
         sync_playwright = None
         playwright_available = False
 
-    executable = _find_browser_executable()
+    browser_runtime = _find_browser_runtime()
+    executable = browser_runtime.executable
     cli_failures: list[HtmlFetchResult] = []
-    if executable and not requires_browser_context and not playwright_available:
+    if executable and not requires_browser_context:
         for headless_flag in ("--headless=new", "--headless"):
             result = _run_subprocess_with_deadline(
                 _build_browser_command(
@@ -501,15 +551,8 @@ def _render_html_in_browser(
                     api_context.dispose()
                 except Exception:
                     pass
-        browser = playwright.chromium.launch(
-            headless=True,
-            args=[
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu",
-            ],
-        )
+        launch_kwargs, launch_runtime = build_playwright_launch_kwargs()
+        browser = playwright.chromium.launch(**launch_kwargs)
         context_kwargs: Dict[str, Any] = {}
         extra_http_headers: Dict[str, str] = {}
         for key, value in normalized_headers.items():
@@ -558,7 +601,11 @@ def _render_html_in_browser(
         return HtmlFetchResult(
             success=True,
             html=html,
-            engine="playwright",
+            engine=(
+                f"playwright:{launch_runtime.label}"
+                if launch_runtime.label
+                else "playwright"
+            ),
             status_code=200,
         )
     except Exception as exc:

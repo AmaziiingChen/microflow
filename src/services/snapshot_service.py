@@ -1,4 +1,4 @@
-"""快照生成服务 - 使用 Playwright 同步 API 将公文摘要渲染为图片"""
+"""快照生成服务 - 使用 Playwright 驱动系统 Chromium 内核渲染公文图片"""
 
 import json
 import logging
@@ -11,16 +11,80 @@ from datetime import datetime
 import mistune
 from src.utils.text_cleaner import strip_emoji
 from src.utils.ai_markdown import resolve_article_summary_payload
+from src.utils.browser_render import build_playwright_launch_kwargs
 
 logger = logging.getLogger(__name__)
 
-# 模板文件路径
-TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "snapshot_template.html")
+# 模板文件相对路径
+TEMPLATE_RELATIVE_PATH = os.path.join("src", "services", "snapshot_template.html")
 
 # 默认星星图标 SVG（当找不到 AI 品牌图标时使用）
 DEFAULT_AI_ICON_SVG = """<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="#FFB800"/>
 </svg>"""
+
+
+def _get_resource_roots() -> List[str]:
+    """返回运行时可能的资源根目录，兼容开发态与 PyInstaller 打包态。"""
+    roots: List[str] = []
+
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        roots.append(meipass)
+
+    executable_dir = os.path.dirname(os.path.abspath(sys.executable))
+    roots.append(executable_dir)
+
+    project_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+    roots.append(project_root)
+
+    service_dir = os.path.dirname(os.path.abspath(__file__))
+    roots.append(service_dir)
+
+    ordered_roots: List[str] = []
+    seen = set()
+    for root in roots:
+        normalized = os.path.normpath(root)
+        if normalized not in seen:
+            seen.add(normalized)
+            ordered_roots.append(normalized)
+    return ordered_roots
+
+
+def _resolve_snapshot_template_path() -> str:
+    """解析快照模板路径，优先命中 bundle 内资源，再回退到源码目录。"""
+    candidate_paths: List[str] = []
+
+    for root in _get_resource_roots():
+        candidate_paths.extend(
+            [
+                os.path.join(root, TEMPLATE_RELATIVE_PATH),
+                os.path.join(root, "snapshot_template.html"),
+                os.path.join(root, "services", "snapshot_template.html"),
+            ]
+        )
+
+    service_dir = os.path.dirname(os.path.abspath(__file__))
+    candidate_paths.append(os.path.join(service_dir, "snapshot_template.html"))
+
+    seen = set()
+    deduped_candidates: List[str] = []
+    for path in candidate_paths:
+        normalized = os.path.normpath(path)
+        if normalized not in seen:
+            seen.add(normalized)
+            deduped_candidates.append(normalized)
+
+    for candidate in deduped_candidates:
+        if os.path.exists(candidate):
+            return candidate
+
+    raise FileNotFoundError(
+        "未找到 snapshot_template.html，可尝试路径: "
+        + " | ".join(deduped_candidates)
+    )
 
 
 def _get_ai_icon_svg(model_name: str) -> str:
@@ -336,7 +400,9 @@ def _generate_html_template(article_data: Dict[str, Any]) -> str:
 
     # 读取模板文件
     try:
-        with open(TEMPLATE_PATH, "r", encoding="utf-8") as f:
+        template_path = _resolve_snapshot_template_path()
+        logger.info(f"📸 snapshot_service - 使用模板文件: {template_path}")
+        with open(template_path, "r", encoding="utf-8") as f:
             template = f.read()
     except Exception as e:
         logger.error(f"读取模板文件失败: {e}")
@@ -556,16 +622,16 @@ def render_article_snapshot(
         try:
             # 每次创建新的 Playwright 实例，避免事件循环冲突
             playwright = sync_playwright().start()
-            browser = playwright.chromium.launch(
-                headless=True,
-                args=[
-                    "--no-sandbox",
-                    "--disable-setuid-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--disable-gpu",
-                    "--disable-software-rasterizer",
-                ],
-            )
+            launch_kwargs, browser_runtime = build_playwright_launch_kwargs()
+            launch_args = list(launch_kwargs.get("args") or [])
+            if "--disable-software-rasterizer" not in launch_args:
+                launch_args.append("--disable-software-rasterizer")
+            launch_kwargs["args"] = launch_args
+            browser = playwright.chromium.launch(**launch_kwargs)
+            if browser_runtime.label:
+                logger.info(f"📸 使用系统浏览器生成快照: {browser_runtime.label}")
+            else:
+                logger.info("📸 未检测到系统 Chromium 浏览器，尝试使用 Playwright 默认浏览器")
 
             # Retina 高清截图
             page = browser.new_page(device_scale_factor=2)

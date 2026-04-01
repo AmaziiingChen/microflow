@@ -12,6 +12,7 @@ from typing import Optional, Dict, Any, List
 from dotenv import load_dotenv
 from src.utils.text_cleaner import strip_emoji
 from src.utils.ai_markdown import build_tag_items, extract_leading_tags, normalize_tags
+from src.utils.llm_safety import sanitize_llm_provider_risk_text
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -58,6 +59,7 @@ class LLMService:
     RSS_CHUNK_TRIGGER_LENGTH = 7000
     RSS_CHUNK_TARGET_LENGTH = 3600
     RSS_CHUNK_HARD_LIMIT = 4600
+    AI_RESULT_CACHE_ENABLED = False
 
     def __init__(
         self,
@@ -244,6 +246,9 @@ class LLMService:
 
         lowered = raw.lower()
 
+        if self._is_content_risk_error(raw):
+            return f"内容触发模型风控：{raw}"
+
         if "401" in lowered or "authentication" in lowered or "invalid api key" in lowered:
             return "API Key 无效或认证失败"
 
@@ -287,6 +292,32 @@ class LLMService:
             return f"AI 服务暂时不可用：{raw}"
 
         return raw
+
+    def _is_content_risk_error(self, error_msg: str) -> bool:
+        raw = str(error_msg or "").strip().lower()
+        if not raw:
+            return False
+        risk_patterns = [
+            "content exists risk",
+            "content risk",
+            "sensitive",
+            "safety system",
+        ]
+        return any(pattern in raw for pattern in risk_patterns)
+
+    def _build_content_risk_retry_payload(self, user_content: str) -> Optional[Dict[str, Any]]:
+        sanitized_text, replacements = sanitize_llm_provider_risk_text(user_content)
+        if not replacements or sanitized_text == str(user_content or ""):
+            return None
+
+        summary = ", ".join(
+            f"{item['label']} x{item['count']}" for item in replacements[:6]
+        )
+        return {
+            "user_content": sanitized_text,
+            "replacements": replacements,
+            "summary": summary,
+        }
 
     def _is_retryable_error(self, error_msg: str) -> bool:
         """
@@ -386,6 +417,8 @@ class LLMService:
         }
 
     def _read_cached_result(self, cache_payload: Dict[str, str]) -> Optional[str]:
+        if not self.AI_RESULT_CACHE_ENABLED:
+            return None
         try:
             cache_entry = _get_database().get_ai_result_cache(
                 cache_payload.get("cache_key", "")
@@ -413,6 +446,8 @@ class LLMService:
         cache_payload: Dict[str, str],
         result_text: str,
     ) -> None:
+        if not self.AI_RESULT_CACHE_ENABLED:
+            return
         cleaned_result = str(result_text or "").strip()
         if not cleaned_result or cleaned_result.startswith(("⚠️", "❌")):
             return
@@ -441,15 +476,19 @@ class LLMService:
         priority: str,
         cancel_event: Optional[threading.Event],
         target_label: str,
+        use_cache: bool = True,
     ) -> str:
-        cache_payload = self._build_ai_cache_payload(
-            cache_scope=cache_scope,
-            system_prompt=system_prompt,
-            user_content=user_content,
-        )
-        cached_result = self._read_cached_result(cache_payload)
-        if cached_result is not None:
-            return cached_result
+        cache_enabled = bool(use_cache and self.AI_RESULT_CACHE_ENABLED)
+        cache_payload: Optional[Dict[str, str]] = None
+        if cache_enabled:
+            cache_payload = self._build_ai_cache_payload(
+                cache_scope=cache_scope,
+                system_prompt=system_prompt,
+                user_content=user_content,
+            )
+            cached_result = self._read_cached_result(cache_payload)
+            if cached_result is not None:
+                return cached_result
 
         result = self._generate_with_retry(
             title=title,
@@ -460,7 +499,8 @@ class LLMService:
             cancel_event=cancel_event,
             target_label=target_label,
         )
-        self._write_cached_result(cache_payload, result)
+        if cache_enabled and cache_payload is not None:
+            self._write_cached_result(cache_payload, result)
         return result
 
     def _split_rss_markdown_chunks(self, markdown_text: str) -> List[str]:
@@ -551,6 +591,7 @@ class LLMService:
         custom_prompt: str,
         priority: str,
         cancel_event: Optional[threading.Event],
+        use_cache: bool = True,
     ) -> Dict[str, Any]:
         chunks = self._split_rss_markdown_chunks(raw_text)
         if len(chunks) <= 1:
@@ -560,6 +601,7 @@ class LLMService:
                 custom_prompt=custom_prompt,
                 priority=priority,
                 cancel_event=cancel_event,
+                use_cache=use_cache,
             )
 
         logger.info("RSS 长文启用分块摘要: title=%s, chunks=%d", title, len(chunks))
@@ -584,6 +626,7 @@ class LLMService:
                 priority=priority,
                 cancel_event=cancel_event,
                 target_label="RSS 分块摘要",
+                use_cache=use_cache,
             )
             if chunk_result.startswith(("⚠️", "❌")):
                 return {
@@ -614,6 +657,7 @@ class LLMService:
             priority=priority,
             cancel_event=cancel_event,
             target_label="RSS 摘要汇总",
+            use_cache=use_cache,
         )
         if markdown.startswith(("⚠️", "❌")):
             return {
@@ -641,6 +685,7 @@ class LLMService:
         custom_prompt: str,
         priority: str,
         cancel_event: Optional[threading.Event],
+        use_cache: bool = True,
     ) -> Dict[str, Any]:
         extra_instruction = (
             f"\n\n源级额外要求：{custom_prompt.strip()}"
@@ -660,6 +705,7 @@ class LLMService:
             priority=priority,
             cancel_event=cancel_event,
             target_label="RSS 摘要生成",
+            use_cache=use_cache,
         )
         if markdown.startswith(("⚠️", "❌")):
             return {
@@ -749,6 +795,7 @@ class LLMService:
         priority: str = "batch",
         cancel_event: Optional[threading.Event] = None,
         content_kind: str = "default",
+        use_cache: bool = True,
     ) -> str:
         """
         调用大模型对公文正文进行结构化总结（带指数退避重试和可中断机制）
@@ -794,6 +841,7 @@ class LLMService:
             priority=priority,
             cancel_event=cancel_event,
             target_label=target_label,
+            use_cache=use_cache,
         )
 
     def format_rss_article(
@@ -803,6 +851,7 @@ class LLMService:
         custom_prompt: str = None,
         priority: str = "batch",
         cancel_event: Optional[threading.Event] = None,
+        use_cache: bool = True,
     ) -> str:
         extra_instruction = (
             f"\n\n源级额外要求：{custom_prompt.strip()}"
@@ -822,6 +871,7 @@ class LLMService:
             priority=priority,
             cancel_event=cancel_event,
             target_label="RSS 排版增强",
+            use_cache=use_cache,
         )
 
     def summarize_rss_article(
@@ -831,6 +881,7 @@ class LLMService:
         custom_prompt: str = None,
         priority: str = "batch",
         cancel_event: Optional[threading.Event] = None,
+        use_cache: bool = True,
     ) -> Dict[str, Any]:
         if self._should_use_chunked_rss_summary(raw_text):
             return self._summarize_rss_article_chunked(
@@ -839,6 +890,7 @@ class LLMService:
                 custom_prompt=custom_prompt or "",
                 priority=priority,
                 cancel_event=cancel_event,
+                use_cache=use_cache,
             )
 
         return self._summarize_rss_article_single_pass(
@@ -847,6 +899,7 @@ class LLMService:
             custom_prompt=custom_prompt or "",
             priority=priority,
             cancel_event=cancel_event,
+            use_cache=use_cache,
         )
 
     def _generate_with_retry(
@@ -901,6 +954,8 @@ class LLMService:
 
             logger.info(f"正在调用 AI 分析{target_label}: {title}")
             last_error = None
+            effective_user_content = user_content
+            content_risk_retry_used = False
             request_timeout = self._resolve_request_timeout(
                 raw_text=raw_text,
                 target_label=target_label,
@@ -922,7 +977,7 @@ class LLMService:
                                 model=self.model_name,
                                 messages=[
                                     {"role": "system", "content": system_prompt},
-                                    {"role": "user", "content": user_content},
+                                    {"role": "user", "content": effective_user_content},
                                 ],
                                 temperature=0.3,
                                 max_tokens=3000,
@@ -1008,6 +1063,29 @@ class LLMService:
                     if "403" in error_lower or "404" in error_lower:
                         logger.error(f"AI 调用失败（不可重试）({title}): {last_error}")
                         return f"❌ {normalized_error}"
+
+                    if self._is_content_risk_error(last_error):
+                        if not content_risk_retry_used:
+                            retry_payload = self._build_content_risk_retry_payload(
+                                effective_user_content
+                            )
+                            if retry_payload:
+                                effective_user_content = str(
+                                    retry_payload.get("user_content") or effective_user_content
+                                )
+                                content_risk_retry_used = True
+                                logger.warning(
+                                    "AI 调用触发内容风控，已启用内置降险重试 (%s): %s",
+                                    title,
+                                    retry_payload.get("summary") or "已替换敏感表述",
+                                )
+                                continue
+
+                        logger.error(f"AI 调用失败（内容风控）({title}): {last_error}")
+                        return (
+                            "⚠️ 当前内容触发模型风控，系统已自动做过一次降险重试仍被拦截。"
+                            "建议切换模型，或在设置里调整提示词后重试。"
+                        )
 
                     if self._is_retryable_error(last_error):
                         if attempt < self.MAX_RETRIES - 1:

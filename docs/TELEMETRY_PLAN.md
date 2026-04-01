@@ -1,6 +1,34 @@
 # MicroFlow 匿名统计与遥测方案
 
-更新时间：2026-03-31
+更新时间：2026-04-01
+
+## 当前落地状态
+
+截至 2026-04-01，MicroFlow 已完成首轮可发布前使用的匿名遥测闭环：
+
+- [x] 本地匿名事件队列表 `telemetry_events`
+- [x] `TelemetryService`：入队、脱敏、采样、批量 flush、失败退避
+- [x] 配置字段：主开关、错误报告开关、同意状态、匿名安装标识
+- [x] 云端 `version.json -> telemetry` 远程配置接入
+- [x] 生命周期事件：`app_launch` / `app_exit` / `startup_check_result`
+- [x] 更新事件：`update_check_result` / `update_available` / `update_download_click`
+- [x] 抓取事件：`source_fetch_result`
+- [x] 阅读事件：`article_open` / `detail_mode_switch` / `article_copy`
+- [x] 详情动作事件：附件下载、查看原文、快照、收藏
+- [x] AI 事件：`ai_regenerate_request` / `ai_regenerate_result`
+- [x] 搜索事件：`search_submit` / `search_result_empty`
+- [x] 笔记事件：`note_create` / `note_delete`
+- [x] 自定义规则事件：`custom_rule_test_result` / `custom_rule_save_result`
+- [x] 错误事件：`error_python` / `error_js` / `error_api`
+- [x] 前端设置入口：开关、状态、立即上报、清空队列
+- [x] 首启匿名统计 consent 提示
+- [x] 自动化验证：新增遥测测试并完成全量 `pytest`
+
+当前仍未做的内容主要是服务端接收端、看板分析和更细的前端链路可视化，这部分不影响本地匿名遥测闭环上线。
+
+如需直接部署接收端与配置云端地址，请继续阅读：
+
+- [TELEMETRY_DEPLOYMENT_GUIDE.md](/Users/chen/Code/MicroFlow/docs/TELEMETRY_DEPLOYMENT_GUIDE.md)
 
 ## 文档目的
 
@@ -17,7 +45,7 @@
 
 - 匿名
 - 最小化
-- 可关闭
+- 默认开启但可关闭
 - 可审计
 - 可灰度
 
@@ -25,8 +53,18 @@
 
 - 只上传产品决策需要的数据
 - 不上传用户正文和敏感内容
-- 用户可在设置中关闭
+- 用户可在设置中关闭，首启只做轻提示不做阻塞确认
 - 服务端可按版本与渠道灰度启用
+
+## 当前客户端策略
+
+当前客户端采用 `opt-out` 策略，而不是阻塞式 `opt-in`：
+
+- `stable`：默认开启匿名使用统计与错误报告，默认采样率为 `0.3`
+- `beta`：默认开启匿名使用统计与错误报告，默认采样率为 `1.0`
+- `internal`：默认开启匿名使用统计与错误报告，默认采样率为 `1.0`
+- 首次启动仅弹出一条轻提示，说明已开启匿名统计且可在设置中关闭
+- 若云端未配置 `telemetry.endpoint`，事件仅保留在本地队列，不会外发
 
 ## 明确允许收集的数据
 

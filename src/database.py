@@ -39,6 +39,7 @@ import logging
 import threading
 import queue
 import re
+import time
 from src.utils.text_cleaner import strip_emoji
 from src.utils.article_identity import canonicalize_article_url
 from src.utils.ai_markdown import compose_tagged_markdown, extract_leading_tags, serialize_tags
@@ -470,6 +471,28 @@ class DatabaseManager:
                     PRIMARY KEY(source_name, section_name)
                 )
             ''')
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS telemetry_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_id TEXT UNIQUE NOT NULL,
+                    event_name TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    retry_count INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                    next_retry_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                    last_error TEXT DEFAULT '',
+                    sent_at INTEGER NOT NULL DEFAULT 0
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_telemetry_events_status_retry
+                ON telemetry_events(status, next_retry_at, id)
+                """
+            )
             return True
 
         # 初始化时使用写线程同步执行
@@ -1915,6 +1938,250 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"按阅读模式删除文章批注失败: {e}")
             return 0
+
+    def enqueue_telemetry_event(
+        self,
+        *,
+        event_id: str,
+        event_name: str,
+        payload_json: str,
+        created_at: Optional[int] = None,
+        next_retry_at: Optional[int] = None,
+    ) -> bool:
+        """写入一条待上报遥测事件。"""
+        safe_created_at = int(created_at or 0) or int(time.time())
+        safe_next_retry_at = int(next_retry_at or 0) or safe_created_at
+
+        def do_insert(cursor: sqlite3.Cursor):
+            cursor.execute(
+                """
+                INSERT OR IGNORE INTO telemetry_events (
+                    event_id,
+                    event_name,
+                    payload_json,
+                    status,
+                    retry_count,
+                    created_at,
+                    next_retry_at,
+                    last_error,
+                    sent_at
+                )
+                VALUES (?, ?, ?, 'pending', 0, ?, ?, '', 0)
+                """,
+                (
+                    str(event_id or "").strip(),
+                    str(event_name or "").strip(),
+                    str(payload_json or "{}"),
+                    safe_created_at,
+                    safe_next_retry_at,
+                ),
+            )
+            return cursor.rowcount > 0
+
+        try:
+            return bool(self._write_worker.submit(do_insert, wait=True, timeout=5.0))
+        except Exception as e:
+            logger.error(f"写入遥测事件失败: {e}")
+            return False
+
+    def get_pending_telemetry_events(
+        self,
+        *,
+        limit: int = 20,
+        now_ts: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """读取待上报或失败后可重试的遥测事件。"""
+        safe_limit = max(int(limit or 20), 1)
+        safe_now = int(now_ts or 0) or int(time.time())
+        with self._get_read_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT *
+                FROM telemetry_events
+                WHERE status IN ('pending', 'failed')
+                  AND next_retry_at <= ?
+                ORDER BY id ASC
+                LIMIT ?
+                """,
+                (safe_now, safe_limit),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
+    def mark_telemetry_events_sent(
+        self,
+        event_ids: List[str],
+        *,
+        sent_at: Optional[int] = None,
+    ) -> int:
+        """批量标记遥测事件已成功发送。"""
+        normalized_ids = [
+            str(event_id or "").strip()
+            for event_id in (event_ids or [])
+            if str(event_id or "").strip()
+        ]
+        if not normalized_ids:
+            return 0
+        safe_sent_at = int(sent_at or 0) or int(time.time())
+
+        def do_update(cursor: sqlite3.Cursor):
+            placeholders = ",".join("?" for _ in normalized_ids)
+            cursor.execute(
+                f"""
+                UPDATE telemetry_events
+                SET status = 'sent',
+                    sent_at = ?,
+                    next_retry_at = 0,
+                    last_error = ''
+                WHERE event_id IN ({placeholders})
+                """,
+                (safe_sent_at, *normalized_ids),
+            )
+            return int(cursor.rowcount or 0)
+
+        try:
+            return int(self._write_worker.submit(do_update, wait=True, timeout=5.0))
+        except Exception as e:
+            logger.error(f"标记遥测事件已发送失败: {e}")
+            return 0
+
+    def mark_telemetry_events_failed(
+        self,
+        failure_items: List[Dict[str, Any]],
+    ) -> int:
+        """批量更新遥测事件失败状态与下次重试时间。"""
+        normalized_items = []
+        for item in failure_items or []:
+            event_id = str((item or {}).get("event_id") or "").strip()
+            if not event_id:
+                continue
+            normalized_items.append(
+                {
+                    "event_id": event_id,
+                    "retry_count": max(int((item or {}).get("retry_count") or 0), 0),
+                    "next_retry_at": max(
+                        int((item or {}).get("next_retry_at") or 0),
+                        int(time.time()),
+                    ),
+                    "last_error": str((item or {}).get("last_error") or "").strip(),
+                }
+            )
+        if not normalized_items:
+            return 0
+
+        def do_update(cursor: sqlite3.Cursor):
+            updated = 0
+            for item in normalized_items:
+                cursor.execute(
+                    """
+                    UPDATE telemetry_events
+                    SET status = 'failed',
+                        retry_count = ?,
+                        next_retry_at = ?,
+                        last_error = ?
+                    WHERE event_id = ?
+                    """,
+                    (
+                        item["retry_count"],
+                        item["next_retry_at"],
+                        item["last_error"],
+                        item["event_id"],
+                    ),
+                )
+                updated += int(cursor.rowcount or 0)
+            return updated
+
+        try:
+            return int(self._write_worker.submit(do_update, wait=True, timeout=5.0))
+        except Exception as e:
+            logger.error(f"更新遥测事件失败状态失败: {e}")
+            return 0
+
+    def clear_telemetry_events(self, statuses: Optional[List[str]] = None) -> int:
+        """清空遥测事件队列，可按状态过滤。"""
+        normalized_statuses = [
+            str(status or "").strip()
+            for status in (statuses or [])
+            if str(status or "").strip()
+        ]
+
+        def do_delete(cursor: sqlite3.Cursor):
+            if normalized_statuses:
+                placeholders = ",".join("?" for _ in normalized_statuses)
+                cursor.execute(
+                    f"DELETE FROM telemetry_events WHERE status IN ({placeholders})",
+                    tuple(normalized_statuses),
+                )
+            else:
+                cursor.execute("DELETE FROM telemetry_events")
+            return int(cursor.rowcount or 0)
+
+        try:
+            return int(self._write_worker.submit(do_delete, wait=True, timeout=5.0))
+        except Exception as e:
+            logger.error(f"清空遥测事件失败: {e}")
+            return 0
+
+    def prune_sent_telemetry_events(self, older_than_ts: int) -> int:
+        """清理过旧的已发送遥测事件。"""
+
+        def do_delete(cursor: sqlite3.Cursor):
+            cursor.execute(
+                """
+                DELETE FROM telemetry_events
+                WHERE status = 'sent'
+                  AND sent_at > 0
+                  AND sent_at < ?
+                """,
+                (int(older_than_ts or 0),),
+            )
+            return int(cursor.rowcount or 0)
+
+        try:
+            return int(self._write_worker.submit(do_delete, wait=True, timeout=5.0))
+        except Exception as e:
+            logger.error(f"清理已发送遥测事件失败: {e}")
+            return 0
+
+    def get_telemetry_queue_stats(self, now_ts: Optional[int] = None) -> Dict[str, int]:
+        """返回遥测队列统计。"""
+        safe_now = int(now_ts or 0) or int(time.time())
+        with self._get_read_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT
+                    COUNT(*) AS total_count,
+                    SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
+                    SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed_count,
+                    SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent_count,
+                    SUM(
+                        CASE
+                            WHEN status IN ('pending', 'failed')
+                                 AND next_retry_at <= ?
+                            THEN 1 ELSE 0
+                        END
+                    ) AS ready_count
+                FROM telemetry_events
+                """,
+                (safe_now,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return {
+                    "total_count": 0,
+                    "pending_count": 0,
+                    "failed_count": 0,
+                    "sent_count": 0,
+                    "ready_count": 0,
+                }
+            return {
+                "total_count": int(row["total_count"] or 0),
+                "pending_count": int(row["pending_count"] or 0),
+                "failed_count": int(row["failed_count"] or 0),
+                "sent_count": int(row["sent_count"] or 0),
+                "ready_count": int(row["ready_count"] or 0),
+            }
 
     def sync_rss_rule_ai_config(
         self,

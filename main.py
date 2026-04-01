@@ -10,6 +10,7 @@ import requests
 import urllib3
 from datetime import datetime
 import threading
+import time
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -31,6 +32,8 @@ try:
     from Foundation import NSObject, NSRunLoop, NSDate  # type: ignore
     from AppKit import NSApplication, NSApp, NSImageLoadStatusCompleted  # type: ignore
     from PyObjCTools import AppHelper  # type: ignore
+    import AppKit  # type: ignore
+    import Foundation  # type: ignore
     import objc  # type: ignore
 
     HAS_PYOBJC = True
@@ -49,11 +52,52 @@ logger = logging.getLogger(__name__)
 from src.api import Api
 
 
+APP_BOOT_TS = time.time()
+
+
 def get_main_module():
     """获取主模块引用（解决 __main__ 模块名问题）"""
     import sys
 
     return sys.modules.get("__main__")
+
+
+def install_global_exception_hooks(api: Api) -> None:
+    """安装 Python 全局异常钩子，将致命错误写入匿名遥测。"""
+    original_sys_excepthook = sys.excepthook
+    original_threading_excepthook = getattr(threading, "excepthook", None)
+
+    def handle_main_exception(exc_type, exc_value, exc_traceback):
+        try:
+            api.telemetry_service.record_python_error(
+                exc_type,
+                exc_value,
+                exc_traceback,
+                is_fatal=True,
+                thread_name="main",
+            )
+            api.telemetry_service.flush(force=True)
+        except Exception:
+            pass
+        original_sys_excepthook(exc_type, exc_value, exc_traceback)
+
+    def handle_thread_exception(args):
+        try:
+            api.telemetry_service.record_python_error(
+                args.exc_type,
+                args.exc_value,
+                args.exc_traceback,
+                is_fatal=False,
+                thread_name=getattr(args.thread, "name", ""),
+            )
+        except Exception:
+            pass
+        if original_threading_excepthook is not None:
+            original_threading_excepthook(args)
+
+    sys.excepthook = handle_main_exception
+    if original_threading_excepthook is not None:
+        threading.excepthook = handle_thread_exception
 
 
 # ================= 托盘状态管理 =================
@@ -93,6 +137,443 @@ def run_on_main_thread(func):
             func()
     else:
         func()
+
+
+def ensure_pywebview_cocoa_drag_patch():
+    """为 pywebview 的 Cocoa 后端补齐顶部原生拖动热区逻辑。"""
+    if not HAS_PYOBJC or sys.platform != "darwin":
+        return False
+
+    try:
+        import webview.platforms.cocoa as cocoa  # type: ignore
+    except Exception as e:
+        logger.warning(f"加载 pywebview Cocoa 后端失败，无法安装拖动补丁: {e}")
+        return False
+
+    if getattr(cocoa, "_microflow_drag_patch_installed", False):
+        return True
+
+    if hasattr(cocoa, "_install_native_top_drag_region") and hasattr(
+        cocoa, "PYWEBVIEW_ROOT_CONTAINER_ID"
+    ):
+        logger.info(
+            "检测到 pywebview 自带 macOS 拖动实现，改为使用 MicroFlow 自定义版本"
+        )
+
+    pywebview_root_container_id = "pywebview-root-container"
+    pywebview_drag_strip_id = "pywebview-drag-strip"
+    pywebview_default_top_drag_height = 5.0
+
+    try:
+        drag_strip_view_cls = objc.lookUpClass("PywebviewWindowDragStripView")
+    except objc.error:
+
+        class PywebviewWindowDragStripView(AppKit.NSView):
+            def initWithFrame_(self, frame):
+                self = super(PywebviewWindowDragStripView, self).initWithFrame_(frame)
+                if self is None:
+                    return None
+
+                self.setWantsLayer_(True)
+                if self.layer() is not None:
+                    self.layer().setBackgroundColor_(
+                        AppKit.NSColor.clearColor().CGColor()
+                    )
+
+                self.setAutoresizingMask_(
+                    AppKit.NSViewWidthSizable | AppKit.NSViewMinYMargin
+                )
+                self._exclusion_rects = []
+                return self
+
+            def isOpaque(self):
+                return False
+
+            def setExclusionRects_(self, rects):
+                self._exclusion_rects = list(rects or [])
+
+            def _point_hits_exclusion_rect(self, point):
+                rects = getattr(self, "_exclusion_rects", None) or []
+                if not rects:
+                    return False
+
+                parent_view = self.superview()
+                root_point = (
+                    self.convertPoint_toView_(point, parent_view)
+                    if parent_view is not None
+                    else point
+                )
+                x = float(root_point.x)
+                y = float(root_point.y)
+                for rect in rects:
+                    try:
+                        rect_x = float(rect.get("x", 0.0))
+                        rect_y = float(rect.get("y", 0.0))
+                        rect_w = float(rect.get("width", 0.0))
+                        rect_h = float(rect.get("height", 0.0))
+                    except Exception:
+                        continue
+
+                    if rect_w <= 0 or rect_h <= 0:
+                        continue
+
+                    if (
+                        rect_x <= x <= rect_x + rect_w
+                        and rect_y <= y <= rect_y + rect_h
+                    ):
+                        return True
+
+                return False
+
+            def hitTest_(self, point):
+                bounds = self.bounds()
+                if (
+                    point.x < 0
+                    or point.y < 0
+                    or point.x > bounds.size.width
+                    or point.y > bounds.size.height
+                ):
+                    return None
+                if self._point_hits_exclusion_rect(point):
+                    return None
+                return self
+
+            def acceptsFirstMouse_(self, event):
+                return Foundation.YES
+
+            def mouseDownCanMoveWindow(self):
+                return Foundation.YES
+
+            def mouseDown_(self, event):
+                local_point = self.convertPoint_fromView_(
+                    event.locationInWindow(), None
+                )
+                if self._point_hits_exclusion_rect(local_point):
+                    return
+
+                native_window = self.window()
+                if native_window is not None and hasattr(
+                    native_window, "performWindowDragWithEvent_"
+                ):
+                    native_window.performWindowDragWithEvent_(event)
+                    return
+
+                super(PywebviewWindowDragStripView, self).mouseDown_(event)
+
+        drag_strip_view_cls = PywebviewWindowDragStripView
+
+    def _find_subview_by_identifier(parent_view, identifier):
+        if parent_view is None:
+            return None
+
+        for subview in parent_view.subviews() or []:
+            try:
+                current_identifier = subview.identifier()
+            except Exception:
+                current_identifier = None
+
+            if current_identifier == identifier:
+                return subview
+
+        return None
+
+    def _resolve_top_drag_height(pywebview_window):
+        height = getattr(pywebview_window, "_macos_top_drag_strip_height", 0) or 0
+
+        try:
+            height = float(height)
+        except Exception:
+            height = 0.0
+
+        if height <= 0:
+            return pywebview_default_top_drag_height
+
+        return max(height, 8.0)
+
+    def _normalize_drag_exclusion_rects(pywebview_window):
+        raw_rects = getattr(pywebview_window, "_macos_drag_exclusion_rects", None) or []
+        normalized_rects = []
+
+        if not isinstance(raw_rects, (list, tuple)):
+            return normalized_rects
+
+        for item in raw_rects:
+            if not isinstance(item, dict):
+                continue
+
+            try:
+                rect_x = float(item.get("x", 0.0))
+                rect_y = float(item.get("y", 0.0))
+                rect_w = float(item.get("width", 0.0))
+                rect_h = float(item.get("height", 0.0))
+            except Exception:
+                continue
+
+            if rect_w <= 0 or rect_h <= 0:
+                continue
+
+            normalized_rects.append(
+                {
+                    "x": rect_x,
+                    "y": rect_y,
+                    "width": rect_w,
+                    "height": rect_h,
+                }
+            )
+
+        return normalized_rects
+
+    def _install_native_top_drag_region(native_window, webview_view, pywebview_window):
+        if native_window is None or webview_view is None or pywebview_window is None:
+            return
+
+        if getattr(pywebview_window, "frameless", False):
+            return
+
+        drag_height = _resolve_top_drag_height(pywebview_window)
+        if drag_height <= 0:
+            return
+
+        current_content_view = native_window.contentView()
+        if current_content_view is None:
+            return
+
+        root_container = None
+        if (
+            hasattr(current_content_view, "identifier")
+            and current_content_view.identifier() == pywebview_root_container_id
+        ):
+            root_container = current_content_view
+        else:
+            content_bounds = current_content_view.bounds()
+            root_container = AppKit.NSView.alloc().initWithFrame_(
+                Foundation.NSMakeRect(
+                    0.0,
+                    0.0,
+                    float(content_bounds.size.width),
+                    float(content_bounds.size.height),
+                )
+            )
+            if root_container is None:
+                return
+
+            root_container.setIdentifier_(pywebview_root_container_id)
+            root_container.setAutoresizingMask_(
+                AppKit.NSViewWidthSizable | AppKit.NSViewHeightSizable
+            )
+            root_container.setAutoresizesSubviews_(True)
+            root_container.setWantsLayer_(True)
+            if root_container.layer() is not None:
+                root_container.layer().setBackgroundColor_(
+                    AppKit.NSColor.clearColor().CGColor()
+                )
+
+            native_window.setContentView_(root_container)
+
+        if webview_view.superview() != root_container:
+            if webview_view.superview() is not None:
+                webview_view.removeFromSuperview()
+            root_container.addSubview_(webview_view)
+
+        root_bounds = root_container.bounds()
+        root_width = float(root_bounds.size.width)
+        root_height = float(root_bounds.size.height)
+        strip_height = min(max(drag_height, 5.0), max(root_height, drag_height))
+
+        layout_mode = get_macos_drag_layout_mode(pywebview_window)
+        if layout_mode in {
+            MACOS_DRAG_STRIP_LAYOUT_DUAL,
+            MACOS_DRAG_STRIP_LAYOUT_SETTINGS_SPLIT,
+        }:
+            leading_inset = min(MACOS_DRAG_STRIP_LEADING_INSET, max(root_width, 0.0))
+            available_width = max(root_width - leading_inset - 24.0, 0.0)
+            strip_width = min(MACOS_DRAG_STRIP_DUAL_WIDTH, available_width)
+            if strip_width <= 0:
+                leading_inset = 0.0
+                strip_width = min(root_width, MACOS_DRAG_STRIP_DUAL_WIDTH)
+        else:
+            leading_inset = min(MACOS_DRAG_STRIP_LEADING_INSET, max(root_width, 0.0))
+            trailing_reserved = min(
+                MACOS_DRAG_STRIP_TRAILING_RESERVED,
+                max(root_width - leading_inset, 0.0),
+            )
+            strip_width = max(root_width - leading_inset - trailing_reserved, 0.0)
+
+            if strip_width <= 0:
+                leading_inset = 0.0
+                strip_width = root_width
+
+        drag_strip_frame = Foundation.NSMakeRect(
+            leading_inset,
+            max(root_height - strip_height, 0.0),
+            strip_width,
+            strip_height,
+        )
+        webview_frame = Foundation.NSMakeRect(
+            0.0,
+            0.0,
+            root_width,
+            max(root_height, 1.0),
+        )
+
+        drag_strip = _find_subview_by_identifier(
+            root_container, pywebview_drag_strip_id
+        )
+        if drag_strip is None:
+            drag_strip = drag_strip_view_cls.alloc().initWithFrame_(drag_strip_frame)
+            if drag_strip is None:
+                return
+            drag_strip.setIdentifier_(pywebview_drag_strip_id)
+        else:
+            drag_strip.setFrame_(drag_strip_frame)
+
+        exclusion_rects = _normalize_drag_exclusion_rects(pywebview_window)
+        if hasattr(drag_strip, "setExclusionRects_"):
+            drag_strip.setExclusionRects_(exclusion_rects)
+        else:
+            setattr(drag_strip, "_exclusion_rects", exclusion_rects)
+
+        webview_view.setFrame_(webview_frame)
+        webview_view.setAutoresizingMask_(
+            AppKit.NSViewWidthSizable | AppKit.NSViewHeightSizable
+        )
+
+        if drag_strip.superview() != root_container:
+            if drag_strip.superview() is not None:
+                drag_strip.removeFromSuperview()
+            root_container.addSubview_positioned_relativeTo_(
+                drag_strip, AppKit.NSWindowAbove, webview_view
+            )
+        else:
+            root_container.addSubview_positioned_relativeTo_(
+                drag_strip, AppKit.NSWindowAbove, webview_view
+            )
+
+        native_window.makeFirstResponder_(webview_view)
+
+    browser_view_cls = getattr(cocoa, "BrowserView", None)
+    if browser_view_cls is None:
+        logger.warning("未找到 pywebview BrowserView，跳过拖动补丁")
+        return False
+
+    window_delegate_cls = getattr(browser_view_cls, "WindowDelegate", None)
+    browser_delegate_cls = getattr(browser_view_cls, "BrowserDelegate", None)
+
+    if window_delegate_cls is None or browser_delegate_cls is None:
+        logger.warning("pywebview Cocoa 结构不符合预期，跳过拖动补丁")
+        return False
+
+    if not getattr(window_delegate_cls, "_microflow_drag_resize_patched", False):
+        original_resize = window_delegate_cls.windowDidResize_
+
+        def patched_window_did_resize(self, notification):
+            original_resize(self, notification)
+            try:
+                instance = browser_view_cls.get_instance(
+                    "window", notification.object()
+                )
+                if instance:
+                    _install_native_top_drag_region(
+                        instance.window, instance.webview, instance.pywebview_window
+                    )
+            except Exception:
+                pass
+
+        window_delegate_cls.windowDidResize_ = patched_window_did_resize
+        setattr(window_delegate_cls, "_microflow_drag_resize_patched", True)
+
+    if not getattr(browser_delegate_cls, "_microflow_drag_nav_patched", False):
+        original_finish = browser_delegate_cls.webView_didFinishNavigation_
+
+        def patched_webview_did_finish_navigation(self, webview_view, nav):
+            original_finish(self, webview_view, nav)
+            try:
+                instance = browser_view_cls.get_instance("webview", webview_view)
+                if instance:
+                    _install_native_top_drag_region(
+                        instance.window, webview_view, instance.pywebview_window
+                    )
+            except Exception:
+                pass
+
+        browser_delegate_cls.webView_didFinishNavigation_ = (
+            patched_webview_did_finish_navigation
+        )
+        setattr(browser_delegate_cls, "_microflow_drag_nav_patched", True)
+
+    setattr(cocoa, "WindowDragStripView", drag_strip_view_cls)
+    setattr(cocoa, "PYWEBVIEW_ROOT_CONTAINER_ID", pywebview_root_container_id)
+    setattr(cocoa, "PYWEBVIEW_DRAG_STRIP_ID", pywebview_drag_strip_id)
+    setattr(
+        cocoa,
+        "PYWEBVIEW_DEFAULT_TOP_DRAG_HEIGHT",
+        pywebview_default_top_drag_height,
+    )
+    setattr(cocoa, "_find_subview_by_identifier", _find_subview_by_identifier)
+    setattr(cocoa, "_resolve_top_drag_height", _resolve_top_drag_height)
+    setattr(cocoa, "_install_native_top_drag_region", _install_native_top_drag_region)
+    setattr(cocoa, "_microflow_drag_patch_installed", True)
+
+    logger.info("已注入 pywebview Cocoa 顶部拖动补丁")
+    return True
+
+
+def apply_macos_full_size_content(window):
+    """macOS: 启用原生全尺寸内容视图，移除默认白色标题栏底板。"""
+    if not HAS_PYOBJC or sys.platform != "darwin" or window is None:
+        return
+
+    def _apply():
+        try:
+            native_window = getattr(window, "native", None)
+            if native_window is None:
+                return
+
+            full_size_mask = getattr(
+                AppKit, "NSFullSizeContentViewWindowMask", 0
+            ) or getattr(AppKit, "NSWindowStyleMaskFullSizeContentView", 0)
+            title_hidden = getattr(AppKit, "NSWindowTitleHidden", 0)
+
+            current_mask = native_window.styleMask()
+            if full_size_mask:
+                native_window.setStyleMask_(current_mask | full_size_mask)
+
+            native_window.setTitleVisibility_(title_hidden)
+            native_window.setTitlebarAppearsTransparent_(True)
+            if hasattr(native_window, "setMovableByWindowBackground_"):
+                native_window.setMovableByWindowBackground_(False)
+
+            if hasattr(native_window, "setToolbarStyle_") and hasattr(
+                AppKit, "NSWindowToolbarStyleUnifiedCompact"
+            ):
+                native_window.setToolbarStyle_(
+                    AppKit.NSWindowToolbarStyleUnifiedCompact
+                )
+
+            configure_macos_scroll_views(native_window)
+
+            titlebar_container = get_macos_titlebar_container(native_window)
+            if titlebar_container is not None and hasattr(
+                titlebar_container, "setBackgroundColor_"
+            ):
+                titlebar_container.setBackgroundColor_(AppKit.NSColor.clearColor())
+
+            install_macos_drag_strip(window)
+
+            for button_type in (
+                AppKit.NSWindowCloseButton,
+                AppKit.NSWindowMiniaturizeButton,
+                AppKit.NSWindowZoomButton,
+            ):
+                button = native_window.standardWindowButton_(button_type)
+                if button is not None:
+                    button.setHidden_(False)
+
+            logger.info("已启用 macOS 全尺寸内容视图")
+        except Exception as e:
+            logger.warning(f"启用 macOS 全尺寸内容视图失败: {e}")
+
+    run_on_main_thread(_apply)
 
 
 def update_tray_status(unread: int = None, sync_time: str = None):  # type:ignore
@@ -358,13 +839,13 @@ def get_html_path():
 
 
 def get_icon_path():
-    """获取本地 png 图标的绝对路径"""
+    """获取运行时托盘图标路径。macOS 保持白色模板图标，其他平台使用彩色图标。"""
     # 采用 PyInstaller 打包后的路径兼容方案
     meipass = getattr(sys, "_MEIPASS", None)
     base_path = meipass if meipass else os.path.dirname(os.path.abspath(__file__))
 
-    # 图标文件已移动到 frontend/icons/ 目录
-    return os.path.join(base_path, "frontend", "icons", "icon_white.png")
+    icon_name = "icon_white.png" if sys.platform == "darwin" else "icon.png"
+    return os.path.join(base_path, "frontend", "icons", icon_name)
 
 
 def load_tray_icon_native():
@@ -423,19 +904,24 @@ def load_tray_icon():
             )
             source_img.thumbnail((target_size, target_size), Image.Resampling.LANCZOS)
 
-            white_img = Image.new("RGBA", source_img.size, (0, 0, 0, 0))
-            pixels = source_img.load()
-            white_pixels = white_img.load()
+            if sys.platform == "darwin":
+                white_img = Image.new("RGBA", source_img.size, (0, 0, 0, 0))
+                pixels = source_img.load()
+                white_pixels = white_img.load()
 
-            if pixels is not None and white_pixels is not None:
-                for y in range(source_img.height):
-                    for x in range(source_img.width):
-                        # 🌟 修复：告诉 Pylance 强制解包没问题
-                        r, g, b, a = pixels[x, y]  # type: ignore
-                        white_pixels[x, y] = (255, 255, 255, a)
+                if pixels is not None and white_pixels is not None:
+                    for y in range(source_img.height):
+                        for x in range(source_img.width):
+                            # 🌟 修复：告诉 Pylance 强制解包没问题
+                            r, g, b, a = pixels[x, y]  # type: ignore
+                            white_pixels[x, y] = (255, 255, 255, a)
 
-            _base_icon_256 = white_img.resize((72, 72), Image.Resampling.LANCZOS)
-            return white_img
+                _base_icon_256 = white_img.resize((72, 72), Image.Resampling.LANCZOS)
+                return white_img
+
+            colored_img = source_img.copy()
+            _base_icon_256 = colored_img.resize((72, 72), Image.Resampling.LANCZOS)
+            return colored_img
 
         except Exception as e:
             print(f"❌ 托盘图标处理失败: {e}")
@@ -464,6 +950,10 @@ if HAS_PYOBJC:
                 def do_show():
                     try:
                         if main_mod._window_instance:
+                            apply_macos_full_size_content(main_mod._window_instance)
+                            schedule_macos_drag_region_refresh(
+                                main_mod._window_instance
+                            )
                             main_mod._window_instance.show()
                             main_mod._window_instance.restore()
                             main_mod._window_instance.on_top = True
@@ -536,6 +1026,10 @@ if HAS_PYOBJC:
                 def do_open():
                     try:
                         if main_mod._window_instance:
+                            apply_macos_full_size_content(main_mod._window_instance)
+                            schedule_macos_drag_region_refresh(
+                                main_mod._window_instance
+                            )
                             main_mod._window_instance.show()
                             main_mod._window_instance.restore()
                             main_mod._window_instance.on_top = True
@@ -556,6 +1050,383 @@ if HAS_PYOBJC:
                     main_mod._api_instance.is_running = False
                     main_mod._api_instance.force_quit()
                 os._exit(0)
+
+    try:
+        WindowDragStripView = objc.lookUpClass("WindowDragStripView")
+    except objc.error:
+
+        class WindowDragStripView(AppKit.NSView):
+            def initWithFrame_(self, frame):
+                self = super(WindowDragStripView, self).initWithFrame_(frame)
+                if self is None:
+                    return None
+
+                self.setWantsLayer_(True)
+                if self.layer() is not None:
+                    self.layer().setBackgroundColor_(
+                        AppKit.NSColor.clearColor().CGColor()
+                    )
+
+                if hasattr(self, "setAutoresizingMask_"):
+                    self.setAutoresizingMask_(
+                        AppKit.NSViewWidthSizable | AppKit.NSViewMinYMargin
+                    )
+                self._exclusion_rects = []
+
+                return self
+
+            def isOpaque(self):
+                return False
+
+            def setExclusionRects_(self, rects):
+                self._exclusion_rects = list(rects or [])
+
+            def _point_hits_exclusion_rect(self, point):
+                rects = getattr(self, "_exclusion_rects", None) or []
+                if not rects:
+                    return False
+
+                parent_view = self.superview()
+                root_point = (
+                    self.convertPoint_toView_(point, parent_view)
+                    if parent_view is not None
+                    else point
+                )
+                x = float(root_point.x)
+                y = float(root_point.y)
+                for rect in rects:
+                    try:
+                        rect_x = float(rect.get("x", 0.0))
+                        rect_y = float(rect.get("y", 0.0))
+                        rect_w = float(rect.get("width", 0.0))
+                        rect_h = float(rect.get("height", 0.0))
+                    except Exception:
+                        continue
+
+                    if rect_w <= 0 or rect_h <= 0:
+                        continue
+
+                    if (
+                        rect_x <= x <= rect_x + rect_w
+                        and rect_y <= y <= rect_y + rect_h
+                    ):
+                        return True
+
+                return False
+
+            def hitTest_(self, point):
+                bounds = self.bounds()
+                if (
+                    point.x < 0
+                    or point.y < 0
+                    or point.x > bounds.size.width
+                    or point.y > bounds.size.height
+                ):
+                    return None
+                if self._point_hits_exclusion_rect(point):
+                    return None
+                return self
+
+            def mouseDownCanMoveWindow(self):
+                return True
+
+            def acceptsFirstMouse_(self, event):
+                return True
+
+            def mouseDown_(self, event):
+                local_point = self.convertPoint_fromView_(
+                    event.locationInWindow(), None
+                )
+                if self._point_hits_exclusion_rect(local_point):
+                    return
+
+                try:
+                    native_window = self.window()
+                    if native_window is not None and hasattr(
+                        native_window, "performWindowDragWithEvent_"
+                    ):
+                        native_window.performWindowDragWithEvent_(event)
+                        return
+                except Exception:
+                    pass
+
+                super(WindowDragStripView, self).mouseDown_(event)
+
+
+MACOS_DRAG_STRIP_TAG = 24101
+MACOS_ROOT_CONTAINER_TAG = 24102
+MACOS_DRAG_STRIP_HEIGHT = 5.0
+MACOS_DRAG_STRIP_LEADING_INSET = 84.0
+MACOS_DRAG_STRIP_TRAILING_RESERVED = 208.0
+MACOS_DRAG_STRIP_DUAL_WIDTH = 252.0
+MACOS_DRAG_STRIP_LAYOUT_SINGLE = "single"
+MACOS_DRAG_STRIP_LAYOUT_DUAL = "dual"
+MACOS_DRAG_STRIP_LAYOUT_SETTINGS_SPLIT = "settings_split"
+
+
+def get_macos_drag_layout_mode(window) -> str:
+    layout_mode = (
+        str(
+            getattr(window, "_macos_drag_layout_mode", MACOS_DRAG_STRIP_LAYOUT_SINGLE)
+            or MACOS_DRAG_STRIP_LAYOUT_SINGLE
+        )
+        .strip()
+        .lower()
+    )
+    if layout_mode in {
+        MACOS_DRAG_STRIP_LAYOUT_DUAL,
+        MACOS_DRAG_STRIP_LAYOUT_SETTINGS_SPLIT,
+    }:
+        return layout_mode
+    return MACOS_DRAG_STRIP_LAYOUT_SINGLE
+
+
+def get_macos_frame_view(native_window):
+    if native_window is None:
+        return None
+
+    content_view = native_window.contentView()
+    if content_view is None:
+        return None
+
+    return content_view.superview()
+
+
+def is_macos_webview_view(view):
+    if view is None:
+        return False
+
+    try:
+        class_name = str(view.className())
+    except Exception:
+        return False
+
+    return "WKWebView" in class_name or "WebKitHost" in class_name
+
+
+def find_macos_subview_by_tag(parent_view, tag):
+    if parent_view is None:
+        return None
+
+    for subview in parent_view.subviews() or []:
+        if hasattr(subview, "tag") and subview.tag() == tag:
+            return subview
+
+    return None
+
+
+def find_macos_webview_subview(parent_view):
+    if parent_view is None:
+        return None
+
+    def _walk(view, depth=0):
+        if view is None or depth > 12:
+            return None
+
+        for subview in view.subviews() or []:
+            if is_macos_webview_view(subview):
+                return subview
+
+            nested = _walk(subview, depth + 1)
+            if nested is not None:
+                return nested
+
+        return None
+
+    return _walk(parent_view)
+
+
+def get_macos_scroll_views(parent_view):
+    if parent_view is None:
+        return []
+
+    scroll_views = []
+    ns_scroll_view_cls = getattr(AppKit, "NSScrollView", None)
+
+    def _walk(view, depth=0):
+        if view is None or depth > 12:
+            return
+
+        for subview in view.subviews() or []:
+            try:
+                if ns_scroll_view_cls is not None and subview.isKindOfClass_(
+                    ns_scroll_view_cls
+                ):
+                    scroll_views.append(subview)
+            except Exception:
+                try:
+                    class_name = str(subview.className())
+                except Exception:
+                    class_name = ""
+                if "NSScrollView" in class_name:
+                    scroll_views.append(subview)
+
+            _walk(subview, depth + 1)
+
+    _walk(parent_view)
+    return scroll_views
+
+
+def configure_macos_scroll_views(native_window, webview_view=None):
+    if not HAS_PYOBJC or sys.platform != "darwin" or native_window is None:
+        return
+
+    overlay_style = getattr(AppKit, "NSScrollerStyleOverlay", None)
+    no_border = getattr(AppKit, "NSNoBorder", 0)
+
+    parent_view = webview_view or native_window.contentView()
+    scroll_views = get_macos_scroll_views(parent_view)
+    if not scroll_views and parent_view is not native_window.contentView():
+        scroll_views = get_macos_scroll_views(native_window.contentView())
+
+    for scroll_view in scroll_views:
+        try:
+            if hasattr(scroll_view, "setAutohidesScrollers_"):
+                scroll_view.setAutohidesScrollers_(True)
+            if overlay_style is not None and hasattr(scroll_view, "setScrollerStyle_"):
+                scroll_view.setScrollerStyle_(overlay_style)
+            if hasattr(scroll_view, "setBorderType_"):
+                scroll_view.setBorderType_(no_border)
+            if hasattr(scroll_view, "setDrawsBackground_"):
+                scroll_view.setDrawsBackground_(False)
+        except Exception as e:
+            logger.debug(f"配置 macOS overlay 滚动条失败: {e}")
+
+
+def force_install_macos_drag_strip(window):
+    if not HAS_PYOBJC or sys.platform != "darwin" or window is None:
+        return False
+
+    try:
+        import webview.platforms.cocoa as cocoa  # type: ignore
+    except Exception as e:
+        logger.debug(f"加载 Cocoa 后端失败，无法主动重装拖动热区: {e}")
+        return False
+
+    installer = getattr(cocoa, "_install_native_top_drag_region", None)
+    browser_view_cls = getattr(cocoa, "BrowserView", None)
+    if not callable(installer) or browser_view_cls is None:
+        return False
+
+    instance = browser_view_cls.get_instance("pywebview_window", window)
+    if instance is None:
+        native_window = getattr(window, "native", None)
+        if native_window is not None:
+            instance = browser_view_cls.get_instance("window", native_window)
+
+    native_window = getattr(window, "native", None)
+    webview_view = None
+    pywebview_window = window
+
+    if instance is not None:
+        native_window = getattr(instance, "window", native_window)
+        webview_view = getattr(instance, "webview", None)
+        pywebview_window = getattr(instance, "pywebview_window", window)
+
+    if native_window is None:
+        return False
+
+    if webview_view is None:
+        webview_view = find_macos_webview_subview(native_window.contentView())
+
+    if webview_view is None:
+        configure_macos_scroll_views(native_window)
+        return False
+
+    try:
+        installer(native_window, webview_view, pywebview_window)
+        configure_macos_scroll_views(native_window, webview_view)
+        return True
+    except Exception as e:
+        logger.debug(f"主动重装 macOS 拖动热区失败: {e}")
+        return False
+
+
+def get_macos_titlebar_container(native_window):
+    if native_window is None:
+        return None
+
+    content_view = native_window.contentView()
+    if content_view is None:
+        return None
+
+    frame_view = get_macos_frame_view(native_window)
+    if frame_view is None:
+        return None
+
+    subviews = frame_view.subviews()
+    if subviews is None or len(subviews) <= 0:
+        return frame_view
+
+    titlebar_height = 0.0
+    if hasattr(native_window, "titlebarHeight"):
+        try:
+            titlebar_height = float(native_window.titlebarHeight())
+        except Exception:
+            titlebar_height = 0.0
+
+    fallback_view = frame_view
+    for subview in subviews:
+        if subview is None or subview == content_view:
+            continue
+
+        class_name = ""
+        try:
+            class_name = str(subview.className())
+        except Exception:
+            class_name = ""
+
+        if "Titlebar" in class_name or "Toolbar" in class_name:
+            return subview
+
+        try:
+            subview_height = float(subview.bounds().size.height)
+        except Exception:
+            subview_height = 0.0
+
+        if (
+            titlebar_height > 0
+            and 0 < subview_height <= titlebar_height + 18.0
+            and fallback_view is frame_view
+        ):
+            fallback_view = subview
+
+    return fallback_view
+
+
+def install_macos_drag_strip(window):
+    """macOS: 向 pywebview Cocoa 层声明顶部原生拖动带高度。"""
+    if not HAS_PYOBJC or sys.platform != "darwin" or window is None:
+        return
+
+    try:
+        setattr(window, "_macos_top_drag_strip_height", MACOS_DRAG_STRIP_HEIGHT)
+        force_install_macos_drag_strip(window)
+    except Exception as e:
+        logger.warning(f"声明 macOS 拖动热区失败: {e}")
+
+
+def schedule_macos_drag_region_refresh(window, delays=None):
+    """macOS: 在启动后多次重装原生拖动区域，避免被 pywebview 后续层级变更覆盖。"""
+    if not HAS_PYOBJC or sys.platform != "darwin" or window is None:
+        return
+
+    refresh_delays = delays or (0.15, 0.45, 0.9, 1.6, 2.8)
+
+    def _schedule(delay_seconds):
+        def _runner():
+            try:
+                import time
+
+                time.sleep(delay_seconds)
+                apply_macos_full_size_content(window)
+            except Exception as e:
+                logger.warning(f"延迟刷新 macOS 拖动热区失败: {e}")
+
+        threading.Thread(target=_runner, daemon=True).start()
+
+    for delay in refresh_delays:
+        _schedule(delay)
 
 
 def create_native_menu(api, window):
@@ -703,12 +1574,15 @@ def run_native_tray(api, window):
 if __name__ == "__main__":
     # 实例化后端桥接 API
     api = Api()
+    install_global_exception_hooks(api)
 
     # 获取前端页面路径
     html_url = get_html_path()
 
     # 🌟 检测启动参数：如果是开机自启（带了 --minimized 参数），则初始隐藏
     start_minimized = "--minimized" in sys.argv
+
+    ensure_pywebview_cocoa_drag_patch()
 
     # 创建原生窗口
     window = webview.create_window(
@@ -775,6 +1649,8 @@ if __name__ == "__main__":
             def do_show():
                 try:
                     if main_mod._window_instance:
+                        apply_macos_full_size_content(main_mod._window_instance)
+                        schedule_macos_drag_region_refresh(main_mod._window_instance)
                         main_mod._window_instance.show()
                         main_mod._window_instance.restore()
                         main_mod._window_instance.on_top = True
@@ -835,6 +1711,8 @@ if __name__ == "__main__":
             def do_open():
                 try:
                     if main_mod._window_instance:
+                        apply_macos_full_size_content(main_mod._window_instance)
+                        schedule_macos_drag_region_refresh(main_mod._window_instance)
                         main_mod._window_instance.show()
                         main_mod._window_instance.restore()
                         main_mod._window_instance.on_top = True
@@ -872,7 +1750,7 @@ if __name__ == "__main__":
                 pystray.MenuItem("退出应用", on_quit_app),
             )
 
-        # 初始化 pystray 托盘
+        # 初始化 pystray 托盘q
         icon_image = load_tray_icon()
         tray_icon = pystray.Icon(
             "MicroFlow", icon_image, "MicroFlow 监控中", create_tray_menu()
@@ -913,9 +1791,23 @@ if __name__ == "__main__":
 
     # 启动应用
     def on_app_start():
+        apply_macos_full_size_content(window)
+        schedule_macos_drag_region_refresh(window)
+        try:
+            api.telemetry_service.track(
+                "app_launch",
+                {
+                    "start_minimized": bool(start_minimized),
+                    "platform": sys.platform,
+                    "has_pyobjc": bool(HAS_PYOBJC),
+                    "cold_start_ms": int(max((time.time() - APP_BOOT_TS) * 1000, 0)),
+                },
+            )
+        except Exception:
+            pass
         if not start_minimized:
             if window is not None:
                 window.restore()
                 window.show()
 
-    webview.start(func=on_app_start, debug=True, http_server=True)
+    webview.start(func=on_app_start, debug=False, http_server=True)

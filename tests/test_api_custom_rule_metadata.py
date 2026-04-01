@@ -206,6 +206,30 @@ class ApiCustomRuleMetadataTests(unittest.TestCase):
             "html_1", "ver_1"
         )
 
+    def test_on_task_complete_notifies_ai_failure_even_when_fallback_insert_succeeds(self):
+        api = self.make_api([])
+        api._article_processor = Mock()
+        api._article_processor.get_stats.return_value = {
+            "processed": 1,
+            "submitted": 1,
+            "ai_total": 1,
+            "ai_completed": 1,
+        }
+        api._notify_ai_task_failed = Mock()
+        api._enqueue_js = Mock()
+
+        api._on_task_complete(
+            True,
+            "ai_failed_fallback",
+            {
+                "title": "音乐学院文章",
+                "message": "请求过于频繁",
+            },
+        )
+
+        api._notify_ai_task_failed.assert_called_once()
+        api._enqueue_js.assert_called_once()
+
     def test_export_custom_spider_rules_writes_json_file(self):
         api = self.make_api([])
         api._rules_manager.build_rules_export_payload.return_value = {

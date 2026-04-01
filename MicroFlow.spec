@@ -1,11 +1,22 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.building.datastruct import TOC
+
 block_cipher = None
 
 # 1. 精准排除无关的重型库（保持体积小巧）
 excluded_modules = [
-    'pandas', 'numpy', 'matplotlib', 'streamlit', 
-    'scipy', 'sympy', 'notebook', 'PyQt5', 'PySide6', 'tkinter'
+    'pandas', 'numpy', 'matplotlib', 'streamlit',
+    'scipy', 'sympy', 'notebook', 'PyQt5', 'PySide6', 'tkinter',
+    'pystray', 'pystray._win32', 'webview.platforms.winforms',
+    'webview.platforms.edgechromium', 'clr',
+    'pytest', '_pytest', 'py', 'IPython',
+    'boto3', 'botocore', 's3transfer',
+    'sqlalchemy', 'fsspec',
+    'langchain_aws', 'langchain_community',
+    'langchain_mistralai', 'langchain_ollama',
+    'rich', 'babel', 'dateparser',
+    'tensorflow', 'torch'
 ]
 
 # 2. 补全动态加载的隐藏依赖
@@ -22,7 +33,11 @@ a = Analysis(
     pathex=[],
     binaries=[],
     # 如果你已经清理了字体，这里的 frontend 和 data 文件夹体积应该很小了
-    datas=[('frontend', 'frontend'), ('data', 'data')],
+    datas=[
+        ('frontend', 'frontend'),
+        ('data', 'data'),
+        ('src/services/snapshot_template.html', 'src/services'),
+    ],
     hiddenimports=hidden_modules,
     hookspath=[],
     hooksconfig={},
@@ -33,6 +48,35 @@ a = Analysis(
     cipher=block_cipher,
     noarchive=False,
 )
+
+# Playwright 下载的浏览器运行时体积极大，且在 macOS 下会触发复杂的嵌套签名问题。
+# 发布包统一改为调用用户本机的 Edge / Chrome / Chromium，因此这里直接从 bundle 中排除。
+PLAYWRIGHT_BROWSER_MARKER = "playwright/driver/package/.local-browsers/"
+EXCLUDED_DATA_MARKERS = (
+    PLAYWRIGHT_BROWSER_MARKER,
+    "frontend/icons/.DS_Store",
+    "frontend/icons/1034.png",
+    "frontend/icons/1034.ico",
+    "frontend/icons/1034.icns",
+    "frontend/icons/icon.ico",
+    "frontend/icons/icon.icns",
+    "frontend/fonts/custom_font.ttf",
+)
+filtered_binaries = []
+filtered_datas = []
+
+for dest_name, src_name, typecode in a.binaries:
+    normalized_target = f"{dest_name}::{src_name}".replace("\\", "/")
+    if PLAYWRIGHT_BROWSER_MARKER not in normalized_target:
+        filtered_binaries.append((dest_name, src_name, typecode))
+
+a.binaries = TOC(filtered_binaries)
+for dest_name, src_name, typecode in a.datas:
+    normalized_target = f"{dest_name}::{src_name}".replace("\\", "/")
+    if not any(marker in normalized_target for marker in EXCLUDED_DATA_MARKERS):
+        filtered_datas.append((dest_name, src_name, typecode))
+
+a.datas = TOC(filtered_datas)
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
@@ -49,7 +93,7 @@ exe = EXE(
     upx=False,             # 坚决不开启 UPX，保护 macOS 签名
     console=False,         # 关闭终端黑框
     disable_windowed_traceback=False,
-    argv_emulation=True,   # 允许 macOS 将文件拖拽到图标上打开
+    argv_emulation=False,  # 关闭 argv emulation，避免 macOS GUI 启动阶段异常中止
     target_arch='arm64',   # 直接指定为 Apple Silicon 原生架构，运行极其流畅
     codesign_identity=None,
     entitlements_file=None,
@@ -72,10 +116,12 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='MicroFlow.app',
-    icon='frontend/icons/icon_white.png', # 推荐换成 .icns 格式体验更好
+    icon='frontend/icons/icon.icns',
     bundle_identifier='com.microflow.app', # 替换为你自己的标识符
     info_plist={
-        'NSHighResolutionCapable': 'True', # 开启 Retina 屏幕高清渲染
-        'LSUIElement': 'False',            # 如果你只想做状态栏菜单，设为 True 会隐藏 Dock 图标
+        'CFBundleShortVersionString': '1.0.0',
+        'CFBundleVersion': '1.0.0',
+        'NSHighResolutionCapable': True,  # 开启 Retina 屏幕高清渲染
+        'LSUIElement': False,             # 保留 Dock 图标与正常应用形态
     },
 )

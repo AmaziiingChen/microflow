@@ -6,12 +6,22 @@
   --accent-color: var(--color-accent-primary);
   --border-color: var(--color-border-subtle);
   --dual-pane-master-width: 392px;
+  --mac-titlebar-safe-top: 0px;
+  --mac-titlebar-safe-left: 0px;
+  --overlay-scrollbar-size: 6px;
+  --overlay-scrollbar-thumb: rgba(0, 0, 0, 0.14);
+  --overlay-scrollbar-thumb-hover: rgba(0, 0, 0, 0.28);
   /* Apple Store 级物理回弹曲线 */
   --curve-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
   /* 丝滑位移曲线：专管布局推拉，绝对不过冲，防止元素越界 */
   --curve-apple-move: cubic-bezier(0.32, 0.72, 0, 1);
   /* 专属果冻曲线：专管被挤压时的 Q 弹形变 */
   --curve-apple-squish: cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+:root[data-platform="macos"] {
+  --mac-titlebar-safe-top: 28px;
+  --mac-titlebar-safe-left: 0px;
 }
 
 /* 🌟 细节：专属的果冻高光选中态 */
@@ -77,7 +87,7 @@ textarea {
 
 @font-face {
   font-family: "MicroFlowWenKai";
-  src: url("../fonts/custom_font.ttf") format("truetype");
+  src: url("../fonts/custom_font.woff") format("woff");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -170,6 +180,21 @@ body {
   color: var(--text-main);
 }
 
+@supports (color: color-mix(in srgb, white 50%, black 50%)) {
+  :root {
+    --overlay-scrollbar-thumb: color-mix(
+      in srgb,
+      var(--color-text-secondary) 26%,
+      transparent
+    );
+    --overlay-scrollbar-thumb-hover: color-mix(
+      in srgb,
+      var(--color-text-secondary) 42%,
+      transparent
+    );
+  }
+}
+
 .app-workspace {
   flex: 1;
   min-height: 0;
@@ -187,14 +212,19 @@ body {
 .list-view {
   flex: 1;
   overflow-y: auto; /* 允许纵向滚动 */
-  padding: 12px;
+  position: relative;
+  padding-top: calc(12px + var(--mac-titlebar-safe-top));
+  padding-right: 12px;
   padding-bottom: 42px; /* 为底部悬浮功能栏留出空间 */
+  padding-left: 12px;
   /* 优化：平滑滚动 */
   scroll-behavior: smooth;
   min-height: 0 !important;
   -webkit-overflow-scrolling: touch !important;
   /* 开启原生弹性阻尼 */
   overscroll-behavior-y: contain;
+  scrollbar-width: none;
+  scrollbar-color: transparent transparent;
 }
 
 .app-workspace.is-dual-pane > .list-view.is-dual-pane {
@@ -209,8 +239,8 @@ body {
 
 /* 列表视图滚动条样式 - 与详情视图保持一致 */
 .list-view::-webkit-scrollbar {
-  width: 6px;
-  height: 4px;
+  width: 0;
+  height: 0;
 }
 
 /* ================= 绝杀 7：魔术底线 ================= */
@@ -245,13 +275,28 @@ body {
 }
 
 .list-view::-webkit-scrollbar-thumb {
-  background-color: rgba(0, 0, 0, 0.1);
+  background-color: transparent;
   border-radius: 3px;
-  transition: background-color 0.3s;
+  transition: background-color 0.25s ease;
 }
 
-.list-view::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(0, 0, 0, 0.3);
+.list-view.is-scrollbar-active {
+  scrollbar-width: thin;
+  scrollbar-color: var(--overlay-scrollbar-thumb) transparent;
+}
+
+.list-view.is-scrollbar-active::-webkit-scrollbar {
+  width: var(--overlay-scrollbar-size);
+  height: 4px;
+}
+
+.list-view.is-scrollbar-active::-webkit-scrollbar-thumb {
+  background-color: var(--overlay-scrollbar-thumb);
+}
+
+.list-view::-webkit-scrollbar-thumb:hover,
+.list-view.is-scrollbar-active::-webkit-scrollbar-thumb:hover {
+  background-color: var(--overlay-scrollbar-thumb-hover);
 }
 /* 1. 顶部交互容器重构 */
 .header-action {
@@ -772,6 +817,20 @@ body {
   filter: grayscale(0.5);
 }
 
+.announcement-card .list-card-title,
+.list-card.announcement-card .list-card-title {
+  color: var(--accent-color);
+}
+
+.announcement-card .meta-tag-gray {
+  color: var(--accent-color);
+  background-color: color-mix(in srgb, var(--accent-color) 10%, transparent);
+}
+
+.announcement-card .list-date {
+  color: var(--accent-color);
+}
+
 .article-stack {
   opacity: 1;
   transform: translateY(0);
@@ -1119,6 +1178,18 @@ body {
   overflow: visible;
 }
 
+:root[data-platform="macos"]
+  .app-workspace:not(.is-dual-pane)
+  .detail-view
+  > .detail-header {
+  padding-top: calc(16px + var(--mac-titlebar-safe-top));
+}
+
+.settings-pane-header,
+.settings-detail-pane {
+  position: relative;
+}
+
 /* 顶部 DEEPSEEK 与 附件标识栏 */
 .provider-row {
   display: flex;
@@ -1131,8 +1202,8 @@ body {
 }
 .provider-info {
   display: inline-flex;
-  align-items: baseline;
-  gap: 3px;
+  align-items: center;
+  gap: 6px;
   padding: 0;
   border-radius: 0;
   font-size: 12px;
@@ -1149,28 +1220,35 @@ body {
     background-color 0.28s ease,
     color 0.28s ease;
   margin-left: 0;
-  margin-top: 1px;
+  margin-top: 0;
   flex: 1;
   flex-shrink: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
 }
 .provider-info:hover {
   background-color: rgba(0, 0, 0, 0.02);
   color: #7b8494;
+}
+.provider-info-label {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.15;
 }
 /* 🌟 核心补丁：确保内联 SVG 图标完美对齐文字 */
 .inline-ai-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
+  width: 17px;
+  height: 17px;
   flex-shrink: 0; /* 🌟 强制图标不许被挤压 */
-  overflow: hidden; /* 🌟 核心：即便里面是长文本，也绝对不许溢出到外面 */
+  overflow: visible;
   vertical-align: middle; /* 🌟 物理级垂直对齐 */
-  transform: translateY(1px);
+  transform: none;
   text-shadow: none;
   box-shadow: none;
   filter: none;
@@ -1181,13 +1259,13 @@ body {
 .inline-ai-icon-fallback {
   font-size: 12px;
   line-height: 1;
-  transform: translateY(1px);
+  transform: none;
 }
 .provider-info:hover .inline-ai-icon {
-  transform: scale(1.08);
+  transform: scale(1.04);
 }
 .provider-info:hover .inline-ai-icon-fallback {
-  transform: scale(1.06);
+  transform: scale(1.03);
 }
 
 /* 强制 SVG 充满容器，彻底解决快照时尺寸丢失导致的"白框"Bug */
@@ -1195,6 +1273,7 @@ body {
   width: 100% !important;
   height: 100% !important;
   display: block;
+  overflow: visible;
 }
 /* 1. 修改原有的附件按钮基础样式 */
 .badge-attachment {
@@ -1568,6 +1647,16 @@ body {
 .top-actions .badge-edit .icon-svg {
   width: 16px !important;
   height: 16px !important;
+}
+.top-actions .badge-attachment {
+  padding: 0 7px !important;
+  gap: 5px !important;
+  font-size: 12px !important;
+}
+.top-actions .badge-attachment .icon-svg {
+  width: 16px !important;
+  height: 16px !important;
+  flex-shrink: 0;
 }
 
 /* ============================================================
@@ -1979,17 +2068,16 @@ body {
 .detail-inline-search-panel-icon {
   width: 14px;
   height: 14px;
-  display: inline-block;
+  display: block;
   flex-shrink: 0;
-  background-color: currentColor;
-  mask-image: url("../icons/search.svg");
-  -webkit-mask-image: url("../icons/search.svg");
-  mask-repeat: no-repeat;
-  -webkit-mask-repeat: no-repeat;
-  mask-position: center;
-  -webkit-mask-position: center;
-  mask-size: contain;
-  -webkit-mask-size: contain;
+  overflow: visible;
+}
+
+.detail-inline-search-trigger-icon circle,
+.detail-inline-search-trigger-icon path,
+.detail-inline-search-panel-icon circle,
+.detail-inline-search-panel-icon path {
+  vector-effect: non-scaling-stroke;
 }
 
 .detail-inline-search-trigger-icon {
@@ -2392,16 +2480,15 @@ body {
   user-select: text;
   -webkit-user-select: text;
   cursor: auto;
+  scrollbar-width: none;
+  scrollbar-color: transparent transparent;
 }
 
 body.is-capturing .detail-footer {
   background:
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.92) 0%,
-      rgba(248, 250, 252, 0.98) 100%
-    ),
-    rgba(250, 250, 252, 0.96) !important;
+    linear-gradient(180deg, var(--material-panel-thick) 0%, var(--material-panel-soft) 100%),
+    var(--dock-bg) !important;
+  border-color: var(--dock-border) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   box-shadow:
@@ -2420,17 +2507,13 @@ body.is-capturing .detail-footer::after {
 
 body.is-capturing .detail-footer .action-btn {
   background:
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.9) 0%,
-      rgba(248, 250, 252, 0.82) 100%
-    ),
+    linear-gradient(180deg, var(--material-panel-thick) 0%, var(--material-panel-soft) 100%),
     linear-gradient(
       180deg,
       rgba(var(--action-rgb), 0.12) 0%,
       rgba(var(--action-rgb), 0.07) 100%
     ) !important;
-  border-color: rgba(255, 255, 255, 0.74) !important;
+  border-color: var(--dock-border) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   box-shadow:
@@ -3131,25 +3214,34 @@ body.is-capturing .detail-footer .action-btn::after {
 }
 
 /* 统一细滚动条 */
-.detail-content,
 .settings-view,
 .rss-floating-toc,
 .image-preview-canvas,
 .image-preview-thumbnails {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(0, 0, 0, 0.14) transparent;
+  scrollbar-width: none;
+  scrollbar-color: transparent transparent;
 }
 
-.detail-content::-webkit-scrollbar,
+.settings-view:hover,
+.settings-view:focus-within,
+.rss-floating-toc:hover,
+.rss-floating-toc:focus-within,
+.image-preview-canvas:hover,
+.image-preview-canvas:focus-within,
+.image-preview-thumbnails:hover,
+.image-preview-thumbnails:focus-within {
+  scrollbar-width: thin;
+  scrollbar-color: var(--overlay-scrollbar-thumb) transparent;
+}
+
 .settings-view::-webkit-scrollbar,
 .rss-floating-toc::-webkit-scrollbar,
 .image-preview-canvas::-webkit-scrollbar,
 .image-preview-thumbnails::-webkit-scrollbar {
-  width: 6px;
-  height: 4px;
+  width: 0;
+  height: 0;
 }
 
-.detail-content::-webkit-scrollbar-track,
 .settings-view::-webkit-scrollbar-track,
 .rss-floating-toc::-webkit-scrollbar-track,
 .image-preview-canvas::-webkit-scrollbar-track,
@@ -3157,23 +3249,109 @@ body.is-capturing .detail-footer .action-btn::after {
   background: transparent;
 }
 
-.detail-content::-webkit-scrollbar-thumb,
 .settings-view::-webkit-scrollbar-thumb,
 .rss-floating-toc::-webkit-scrollbar-thumb,
 .image-preview-canvas::-webkit-scrollbar-thumb,
 .image-preview-thumbnails::-webkit-scrollbar-thumb {
-  background-color: rgba(0, 0, 0, 0.1);
+  background-color: transparent;
   border-radius: 3px;
   transition: background-color 0.3s ease;
 }
 
-.detail-content::-webkit-scrollbar-thumb:hover,
+.settings-view:hover::-webkit-scrollbar,
+.settings-view:focus-within::-webkit-scrollbar,
+.rss-floating-toc:hover::-webkit-scrollbar,
+.rss-floating-toc:focus-within::-webkit-scrollbar,
+.image-preview-canvas:hover::-webkit-scrollbar,
+.image-preview-canvas:focus-within::-webkit-scrollbar,
+.image-preview-thumbnails:hover::-webkit-scrollbar,
+.image-preview-thumbnails:focus-within::-webkit-scrollbar {
+  width: var(--overlay-scrollbar-size);
+  height: 4px;
+}
+
+.settings-view:hover::-webkit-scrollbar-thumb,
+.settings-view:focus-within::-webkit-scrollbar-thumb,
+.rss-floating-toc:hover::-webkit-scrollbar-thumb,
+.rss-floating-toc:focus-within::-webkit-scrollbar-thumb,
+.image-preview-canvas:hover::-webkit-scrollbar-thumb,
+.image-preview-canvas:focus-within::-webkit-scrollbar-thumb,
+.image-preview-thumbnails:hover::-webkit-scrollbar-thumb,
+.image-preview-thumbnails:focus-within::-webkit-scrollbar-thumb {
+  background-color: var(--overlay-scrollbar-thumb);
+}
+
 .settings-view::-webkit-scrollbar-thumb:hover,
 .rss-floating-toc::-webkit-scrollbar-thumb:hover,
 .image-preview-canvas::-webkit-scrollbar-thumb:hover,
 .image-preview-thumbnails::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(0, 0, 0, 0.3);
+  background-color: var(--overlay-scrollbar-thumb-hover);
 }
+
+.detail-content::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.detail-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.detail-content::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 3px;
+  transition: background-color 0.32s ease, opacity 0.32s ease;
+}
+
+.detail-content.is-scrollbar-active {
+  scrollbar-color: var(--overlay-scrollbar-thumb) transparent;
+}
+
+.detail-content.is-scrollbar-active::-webkit-scrollbar {
+  width: var(--overlay-scrollbar-size);
+  height: 4px;
+}
+
+.detail-content.is-scrollbar-active::-webkit-scrollbar-thumb {
+  background-color: var(--overlay-scrollbar-thumb);
+}
+
+.detail-content.is-scrollbar-active::-webkit-scrollbar-thumb:hover {
+  background-color: var(--overlay-scrollbar-thumb-hover);
+}
+
+:root[data-platform="macos"] .list-view::-webkit-scrollbar,
+:root[data-platform="macos"] .detail-content::-webkit-scrollbar {
+  width: var(--overlay-scrollbar-size);
+  height: var(--overlay-scrollbar-size);
+}
+
+:root[data-platform="macos"] .list-view::-webkit-scrollbar-track,
+:root[data-platform="macos"] .detail-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+:root[data-platform="macos"] .list-view::-webkit-scrollbar-thumb,
+:root[data-platform="macos"] .detail-content::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition:
+    background-color 0.24s ease,
+    opacity 0.24s ease;
+}
+
+:root[data-platform="macos"] .list-view.is-scrollbar-active::-webkit-scrollbar-thumb,
+:root[data-platform="macos"] .detail-content.is-scrollbar-active::-webkit-scrollbar-thumb {
+  background-color: var(--overlay-scrollbar-thumb);
+}
+
+:root[data-platform="macos"] .list-view.is-scrollbar-active::-webkit-scrollbar-thumb:hover,
+:root[data-platform="macos"] .detail-content.is-scrollbar-active::-webkit-scrollbar-thumb:hover {
+  background-color: var(--overlay-scrollbar-thumb-hover);
+}
+
 .markdown-body strong {
   color: #0f172a;
   font-weight: 600;
@@ -4174,11 +4352,7 @@ body.is-capturing .detail-footer .action-btn::after {
   z-index: 14;
   padding: 6px 8px 6px 12px;
   background:
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.16) 0%,
-      rgba(255, 255, 255, 0.06) 100%
-    ),
+    linear-gradient(180deg, var(--material-panel-thick) 0%, var(--material-panel-soft) 100%),
     var(--dock-bg);
   border: 1px solid var(--dock-border);
   border-radius: 30px;
@@ -4270,16 +4444,12 @@ body.is-capturing .detail-footer .action-btn::after {
   width: 60px; /* 强制固定为宽胶囊 */
   height: 38px;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.52);
+  border: 1px solid var(--dock-border);
   border-radius: 18px;
   cursor: pointer;
   color: rgb(var(--action-rgb));
   background:
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.64) 0%,
-      rgba(255, 255, 255, 0.28) 100%
-    ),
+    linear-gradient(180deg, var(--material-panel-thick) 0%, var(--material-panel-soft) 100%),
     linear-gradient(
       180deg,
       rgba(var(--action-rgb), 0.16) 0%,
@@ -4301,13 +4471,18 @@ body.is-capturing .detail-footer .action-btn::after {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  backdrop-filter: blur(12px) saturate(165%);
-  -webkit-backdrop-filter: blur(12px) saturate(165%);
+  background-clip: padding-box;
+  isolation: isolate;
+  contain: paint;
+  backface-visibility: hidden;
+  -webkit-mask-image: -webkit-radial-gradient(white, black);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .action-btn:hover {
   transform: translateY(-1px) scale(1.05);
-  border-color: rgba(255, 255, 255, 0.68);
+  border-color: var(--dock-border);
   box-shadow:
     0 14px 26px rgba(15, 23, 42, 0.1),
     0 4px 10px rgba(15, 23, 42, 0.05),
@@ -7048,6 +7223,9 @@ body.is-capturing .rss-detail-mode-btn,
 body.is-capturing .rss-detail-mode-btn:hover,
 body.is-capturing .rss-detail-mode-btn:active,
 body.is-capturing .rss-detail-mode-btn.active,
+body.is-capturing .detail-inline-search-trigger,
+body.is-capturing .detail-inline-search-trigger:hover,
+body.is-capturing .detail-inline-search-trigger:active,
 body.is-capturing .rss-detail-mode-btn.active:hover {
   transform: none !important;
   box-shadow: none !important;
@@ -7055,7 +7233,8 @@ body.is-capturing .rss-detail-mode-btn.active:hover {
   will-change: auto !important;
 }
 
-body.is-capturing .rss-detail-mode-btn {
+body.is-capturing .rss-detail-mode-btn,
+body.is-capturing .detail-inline-search-trigger {
   background-color: rgba(0, 0, 0, 0.04) !important;
   color: var(--top-action-cancel) !important;
 }
@@ -7071,13 +7250,22 @@ body.is-capturing .rss-detail-mode-btn .rss-detail-mode-icon,
 body.is-capturing .rss-detail-mode-btn:hover .rss-detail-mode-icon,
 body.is-capturing .rss-detail-mode-btn:active .rss-detail-mode-icon,
 body.is-capturing .rss-detail-mode-btn.active .rss-detail-mode-icon,
-body.is-capturing .rss-detail-mode-btn.active:hover .rss-detail-mode-icon {
-  transform: scale(var(--rss-icon-scale)) !important;
+body.is-capturing .rss-detail-mode-btn.active:hover .rss-detail-mode-icon,
+body.is-capturing .detail-inline-search-trigger .detail-inline-search-trigger-icon,
+body.is-capturing
+  .detail-inline-search-trigger:hover
+  .detail-inline-search-trigger-icon,
+body.is-capturing
+  .detail-inline-search-trigger:active
+  .detail-inline-search-trigger-icon {
+  transform: scale(1) !important;
   filter: none !important;
 }
 
 body.is-capturing .rss-detail-mode-btn::before,
-body.is-capturing .rss-detail-mode-btn::after {
+body.is-capturing .rss-detail-mode-btn::after,
+body.is-capturing .detail-inline-search-trigger::before,
+body.is-capturing .detail-inline-search-trigger::after {
   display: none !important;
 }
 
@@ -8106,13 +8294,14 @@ body.is-capturing .rss-detail-mode-btn::after {
 .toast-title {
   font-size: 14px;
   font-weight: 600;
-  color: var(--gray-900);
+  color: var(--accent-color);
   line-height: 1.2;
 }
 .toast-message {
   font-size: 12px;
   font-weight: 400;
-  color: var(--color-text-tertiary);
+  color: var(--accent-color);
+  opacity: 0.84;
   margin-top: 2px;
   white-space: nowrap;
 }
@@ -10701,7 +10890,7 @@ body.is-capturing .rss-detail-mode-btn::after {
   flex-direction: column;
   gap: 8px;
   margin-bottom: 0;
-  padding: 22px 24px 14px;
+  padding: calc(22px + var(--mac-titlebar-safe-top)) 24px 14px;
   background: var(--settings-shell-bg-local);
 }
 
@@ -11149,8 +11338,8 @@ body.is-capturing .rss-detail-mode-btn::after {
 
 .settings-master-pane,
 .settings-detail-pane {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(15, 23, 42, 0.18) transparent;
+  scrollbar-width: none;
+  scrollbar-color: transparent transparent;
 }
 
 .settings-subpage-body,
@@ -11158,8 +11347,26 @@ body.is-capturing .rss-detail-mode-btn::after {
 .settings-subpage-body .CodeMirror-scroll,
 .settings-subpage-body .editor-preview,
 .settings-subpage-body .editor-preview-side {
+  scrollbar-width: none;
+  scrollbar-color: transparent transparent;
+}
+
+.settings-master-pane:hover,
+.settings-master-pane:focus-within,
+.settings-detail-pane:hover,
+.settings-detail-pane:focus-within,
+.settings-subpage-body:hover,
+.settings-subpage-body:focus-within,
+.settings-subpage-body textarea:hover,
+.settings-subpage-body textarea:focus,
+.settings-subpage-body .CodeMirror-scroll:hover,
+.settings-subpage-body .CodeMirror-scroll:focus-within,
+.settings-subpage-body .editor-preview:hover,
+.settings-subpage-body .editor-preview:focus-within,
+.settings-subpage-body .editor-preview-side:hover,
+.settings-subpage-body .editor-preview-side:focus-within {
   scrollbar-width: thin;
-  scrollbar-color: rgba(15, 23, 42, 0.18) transparent;
+  scrollbar-color: var(--overlay-scrollbar-thumb) transparent;
 }
 
 .settings-master-pane::-webkit-scrollbar,
@@ -11169,8 +11376,8 @@ body.is-capturing .rss-detail-mode-btn::after {
 .settings-subpage-body .CodeMirror-scroll::-webkit-scrollbar,
 .settings-subpage-body .editor-preview::-webkit-scrollbar,
 .settings-subpage-body .editor-preview-side::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 0;
+  height: 0;
 }
 
 .settings-master-pane::-webkit-scrollbar-track,
@@ -11190,8 +11397,43 @@ body.is-capturing .rss-detail-mode-btn::after {
 .settings-subpage-body .CodeMirror-scroll::-webkit-scrollbar-thumb,
 .settings-subpage-body .editor-preview::-webkit-scrollbar-thumb,
 .settings-subpage-body .editor-preview-side::-webkit-scrollbar-thumb {
-  background: rgba(15, 23, 42, 0.16);
+  background: transparent;
   border-radius: 999px;
+}
+
+.settings-master-pane:hover::-webkit-scrollbar,
+.settings-master-pane:focus-within::-webkit-scrollbar,
+.settings-detail-pane:hover::-webkit-scrollbar,
+.settings-detail-pane:focus-within::-webkit-scrollbar,
+.settings-subpage-body:hover::-webkit-scrollbar,
+.settings-subpage-body:focus-within::-webkit-scrollbar,
+.settings-subpage-body textarea:hover::-webkit-scrollbar,
+.settings-subpage-body textarea:focus::-webkit-scrollbar,
+.settings-subpage-body .CodeMirror-scroll:hover::-webkit-scrollbar,
+.settings-subpage-body .CodeMirror-scroll:focus-within::-webkit-scrollbar,
+.settings-subpage-body .editor-preview:hover::-webkit-scrollbar,
+.settings-subpage-body .editor-preview:focus-within::-webkit-scrollbar,
+.settings-subpage-body .editor-preview-side:hover::-webkit-scrollbar,
+.settings-subpage-body .editor-preview-side:focus-within::-webkit-scrollbar {
+  width: var(--overlay-scrollbar-size);
+  height: var(--overlay-scrollbar-size);
+}
+
+.settings-master-pane:hover::-webkit-scrollbar-thumb,
+.settings-master-pane:focus-within::-webkit-scrollbar-thumb,
+.settings-detail-pane:hover::-webkit-scrollbar-thumb,
+.settings-detail-pane:focus-within::-webkit-scrollbar-thumb,
+.settings-subpage-body:hover::-webkit-scrollbar-thumb,
+.settings-subpage-body:focus-within::-webkit-scrollbar-thumb,
+.settings-subpage-body textarea:hover::-webkit-scrollbar-thumb,
+.settings-subpage-body textarea:focus::-webkit-scrollbar-thumb,
+.settings-subpage-body .CodeMirror-scroll:hover::-webkit-scrollbar-thumb,
+.settings-subpage-body .CodeMirror-scroll:focus-within::-webkit-scrollbar-thumb,
+.settings-subpage-body .editor-preview:hover::-webkit-scrollbar-thumb,
+.settings-subpage-body .editor-preview:focus-within::-webkit-scrollbar-thumb,
+.settings-subpage-body .editor-preview-side:hover::-webkit-scrollbar-thumb,
+.settings-subpage-body .editor-preview-side:focus-within::-webkit-scrollbar-thumb {
+  background: var(--overlay-scrollbar-thumb);
 }
 
 .settings-master-pane::-webkit-scrollbar-thumb:hover,
@@ -11201,7 +11443,7 @@ body.is-capturing .rss-detail-mode-btn::after {
 .settings-subpage-body .CodeMirror-scroll::-webkit-scrollbar-thumb:hover,
 .settings-subpage-body .editor-preview::-webkit-scrollbar-thumb:hover,
 .settings-subpage-body .editor-preview-side::-webkit-scrollbar-thumb:hover {
-  background: rgba(15, 23, 42, 0.24);
+  background: var(--overlay-scrollbar-thumb-hover);
 }
 
 .settings-group-card > * {
@@ -11493,6 +11735,24 @@ body.is-capturing .rss-detail-mode-btn::after {
   color: var(--color-text-tertiary);
 }
 
+.telemetry-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.telemetry-action-row {
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.telemetry-action-row .settings-inline-button {
+  min-width: 92px;
+}
+
 .settings-health-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -11565,6 +11825,7 @@ body.is-capturing .rss-detail-mode-btn::after {
   text-align: center;
   background: var(--settings-card-bg);
 }
+
 
 .settings-inline-arrow {
   width: 7px;
@@ -11710,8 +11971,24 @@ body.is-capturing .rss-detail-mode-btn::after {
 .custom-rule-textarea,
 .selector-tuning-body,
 .tuning-content {
+  scrollbar-width: none;
+  scrollbar-color: transparent transparent;
+}
+
+.settings-sheet-body:hover,
+.settings-sheet-body:focus-within,
+.custom-rule-inline-preview:hover,
+.custom-rule-inline-preview:focus-within,
+.detail-preview-markdown:hover,
+.detail-preview-markdown:focus-within,
+.custom-rule-textarea:hover,
+.custom-rule-textarea:focus,
+.selector-tuning-body:hover,
+.selector-tuning-body:focus-within,
+.tuning-content:hover,
+.tuning-content:focus-within {
   scrollbar-width: thin;
-  scrollbar-color: rgba(15, 23, 42, 0.18) transparent;
+  scrollbar-color: var(--overlay-scrollbar-thumb) transparent;
 }
 
 .settings-sheet-body::-webkit-scrollbar,
@@ -11720,8 +11997,8 @@ body.is-capturing .rss-detail-mode-btn::after {
 .custom-rule-textarea::-webkit-scrollbar,
 .selector-tuning-body::-webkit-scrollbar,
 .tuning-content::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 0;
+  height: 0;
 }
 
 .settings-sheet-body::-webkit-scrollbar-track,
@@ -11739,8 +12016,39 @@ body.is-capturing .rss-detail-mode-btn::after {
 .custom-rule-textarea::-webkit-scrollbar-thumb,
 .selector-tuning-body::-webkit-scrollbar-thumb,
 .tuning-content::-webkit-scrollbar-thumb {
-  background: rgba(15, 23, 42, 0.16);
+  background: transparent;
   border-radius: 999px;
+}
+
+.settings-sheet-body:hover::-webkit-scrollbar,
+.settings-sheet-body:focus-within::-webkit-scrollbar,
+.custom-rule-inline-preview:hover::-webkit-scrollbar,
+.custom-rule-inline-preview:focus-within::-webkit-scrollbar,
+.detail-preview-markdown:hover::-webkit-scrollbar,
+.detail-preview-markdown:focus-within::-webkit-scrollbar,
+.custom-rule-textarea:hover::-webkit-scrollbar,
+.custom-rule-textarea:focus::-webkit-scrollbar,
+.selector-tuning-body:hover::-webkit-scrollbar,
+.selector-tuning-body:focus-within::-webkit-scrollbar,
+.tuning-content:hover::-webkit-scrollbar,
+.tuning-content:focus-within::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.settings-sheet-body:hover::-webkit-scrollbar-thumb,
+.settings-sheet-body:focus-within::-webkit-scrollbar-thumb,
+.custom-rule-inline-preview:hover::-webkit-scrollbar-thumb,
+.custom-rule-inline-preview:focus-within::-webkit-scrollbar-thumb,
+.detail-preview-markdown:hover::-webkit-scrollbar-thumb,
+.detail-preview-markdown:focus-within::-webkit-scrollbar-thumb,
+.custom-rule-textarea:hover::-webkit-scrollbar-thumb,
+.custom-rule-textarea:focus::-webkit-scrollbar-thumb,
+.selector-tuning-body:hover::-webkit-scrollbar-thumb,
+.selector-tuning-body:focus-within::-webkit-scrollbar-thumb,
+.tuning-content:hover::-webkit-scrollbar-thumb,
+.tuning-content:focus-within::-webkit-scrollbar-thumb {
+  background: var(--overlay-scrollbar-thumb);
 }
 
 .settings-sheet-body::-webkit-scrollbar-thumb:hover,
@@ -11749,7 +12057,7 @@ body.is-capturing .rss-detail-mode-btn::after {
 .custom-rule-textarea::-webkit-scrollbar-thumb:hover,
 .selector-tuning-body::-webkit-scrollbar-thumb:hover,
 .tuning-content::-webkit-scrollbar-thumb:hover {
-  background: rgba(15, 23, 42, 0.24);
+  background: var(--overlay-scrollbar-thumb-hover);
 }
 
 .settings-sheet-stack {
@@ -12204,7 +12512,7 @@ body.is-capturing .rss-detail-mode-btn::after {
   }
 
   .settings-master-pane.is-compact .settings-pane-header {
-    padding: 20px 20px 12px;
+    padding: calc(20px + var(--mac-titlebar-safe-top)) 20px 12px;
     margin-bottom: 0;
   }
 
@@ -12226,7 +12534,7 @@ body.is-capturing .rss-detail-mode-btn::after {
   .settings-detail-pane.is-compact {
     min-height: 0;
     height: 100%;
-    padding: 22px 20px 26px;
+    padding: calc(22px + var(--mac-titlebar-safe-top)) 20px 26px;
     border: none;
     box-shadow: none;
     background: var(--settings-shell-bg-local);
@@ -12294,6 +12602,7 @@ body.is-capturing .rss-detail-mode-btn::after {
     min-height: 34px;
     padding: 0 12px;
   }
+
 }
 
 /* 按钮基础样式 */

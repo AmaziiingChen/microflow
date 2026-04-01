@@ -153,6 +153,113 @@ class SchedulerIncrementalGuardrailsTests(unittest.TestCase):
             fake_db.frontiers[("未来技术学院", "行政通知")],
             "https://example.com/new",
         )
+        self.assertEqual(
+            fake_db.frontiers[("未来技术学院", "新闻中心")],
+            "https://example.com/old",
+        )
+
+    def test_manual_continuous_mode_does_not_backfill_unselected_sections_after_cold_start(self):
+        processor = DummyProcessor()
+        scheduler = self.make_scheduler(processor)
+        spider = DummySpider(
+            "未来技术学院",
+            {
+                "校园通知": [
+                    {
+                        "title": "首次选中的最新文章",
+                        "url": "https://example.com/selected-frontier",
+                        "date": "2026-04-02",
+                    },
+                    {
+                        "title": "不该被回捞的旧文章",
+                        "url": "https://example.com/selected-older",
+                        "date": "2026-04-01",
+                    },
+                ],
+                "新闻中心": [
+                    {
+                        "title": "未入库板块的顶部旧文章",
+                        "url": "https://example.com/unselected-frontier",
+                        "date": "2026-04-01",
+                    },
+                    {
+                        "title": "更旧历史文章",
+                        "url": "https://example.com/unselected-older",
+                        "date": "2026-03-31",
+                    },
+                ],
+            },
+        )
+
+        fake_db = FakeDB(existing_count=0)
+        with patch("src.core.scheduler.db", fake_db):
+            _source_name, cold_count, cold_errors = scheduler._process_spider(
+                spider=spider,
+                mode="continuous",
+                today_str="2026-04-02",
+                is_manual=False,
+            )
+
+            self.assertEqual(cold_errors, [])
+            self.assertEqual(cold_count, 1)
+            self.assertEqual(
+                fake_db.frontiers[("未来技术学院", "新闻中心")],
+                "https://example.com/unselected-frontier",
+            )
+
+            processor.submitted.clear()
+            processor.skip_existing_urls = {"https://example.com/selected-frontier"}
+            fake_db.existing_count = 1
+            fake_db.latest_cursor = "2026-04-02 09:00:00"
+
+            _source_name, count, errors = scheduler._process_spider(
+                spider=spider,
+                mode="continuous",
+                today_str="2026-04-02",
+                is_manual=True,
+            )
+
+        self.assertEqual(errors, [])
+        self.assertEqual(count, 0)
+        self.assertEqual(processor.submitted, [])
+
+    def test_continuous_mode_auto_seeds_missing_frontier_without_backfilling_old_section(self):
+        processor = DummyProcessor()
+        scheduler = self.make_scheduler(processor)
+        spider = DummySpider(
+            "未来技术学院",
+            {
+                "新闻中心": [
+                    {
+                        "title": "历史顶部文章",
+                        "url": "https://example.com/missing-frontier-top",
+                        "date": "2026-03-30",
+                    },
+                    {
+                        "title": "历史更旧文章",
+                        "url": "https://example.com/missing-frontier-old",
+                        "date": "2026-03-29",
+                    },
+                ]
+            },
+        )
+
+        fake_db = FakeDB(existing_count=1, latest_cursor="2026-04-01 09:00:00")
+        with patch("src.core.scheduler.db", fake_db):
+            _source_name, count, errors = scheduler._process_spider(
+                spider=spider,
+                mode="continuous",
+                today_str="2026-04-02",
+                is_manual=True,
+            )
+
+        self.assertEqual(errors, [])
+        self.assertEqual(count, 0)
+        self.assertEqual(processor.submitted, [])
+        self.assertEqual(
+            fake_db.frontiers[("未来技术学院", "新闻中心")],
+            "https://example.com/missing-frontier-top",
+        )
 
     def test_continuous_mode_recovers_gap_article_within_repair_window(self):
         processor = DummyProcessor()
@@ -271,6 +378,114 @@ class SchedulerIncrementalGuardrailsTests(unittest.TestCase):
         self.assertEqual(
             [item["url"] for item in processor.submitted],
             ["https://example.com/gap-10"],
+        )
+
+    def test_manual_continuous_mode_uses_seed_frontier_guard_after_college_cold_start(self):
+        processor = DummyProcessor()
+        processor.skip_existing_urls = {"https://example.com/frontier"}
+        scheduler = self.make_scheduler(processor)
+        spider = DummySpider(
+            "未来技术学院",
+            {
+                "校园通知": [
+                    {
+                        "title": "冷启动后新增文章",
+                        "url": "https://example.com/new",
+                        "date": "2026-04-02",
+                    },
+                    {
+                        "title": "冷启动边界",
+                        "url": "https://example.com/frontier",
+                        "date": "2026-04-01",
+                    },
+                    {
+                        "title": "边界外旧文章",
+                        "url": "https://example.com/older-than-frontier",
+                        "date": "2026-03-31",
+                    },
+                ]
+            },
+        )
+
+        fake_db = FakeDB(existing_count=1, latest_cursor="2026-04-01 09:00:00")
+        fake_db.frontiers[("未来技术学院", "校园通知")] = "https://example.com/frontier"
+        with patch("src.core.scheduler.db", fake_db):
+            _source_name, count, errors = scheduler._process_spider(
+                spider=spider,
+                mode="continuous",
+                today_str="2026-04-02",
+                is_manual=True,
+            )
+
+        self.assertEqual(errors, [])
+        self.assertEqual(count, 1)
+        self.assertEqual(
+            processor.url_checks,
+            ["https://example.com/new", "https://example.com/frontier"],
+        )
+        self.assertEqual(
+            [item["url"] for item in processor.submitted],
+            ["https://example.com/new"],
+        )
+
+    def test_continuous_mode_repairs_gap_within_seed_frontier_range_without_crossing_boundary(self):
+        processor = DummyProcessor()
+        processor.skip_existing_urls = {"https://example.com/frontier"}
+        scheduler = self.make_scheduler(processor)
+        spider = DummySpider(
+            "未来技术学院",
+            {
+                "校园通知": [
+                    {
+                        "title": "冷启动后新增文章",
+                        "url": "https://example.com/new",
+                        "date": "2026-04-02",
+                    },
+                    {
+                        "title": "冷启动期缺口",
+                        "url": "https://example.com/gap-inside-frontier",
+                        "date": "2026-04-01",
+                    },
+                    {
+                        "title": "冷启动边界",
+                        "url": "https://example.com/frontier",
+                        "date": "2026-04-01",
+                    },
+                    {
+                        "title": "边界外旧文章",
+                        "url": "https://example.com/older-than-frontier",
+                        "date": "2026-03-31",
+                    },
+                ]
+            },
+        )
+
+        fake_db = FakeDB(existing_count=1, latest_cursor="2026-04-01 09:00:00")
+        fake_db.frontiers[("未来技术学院", "校园通知")] = "https://example.com/frontier"
+        with patch("src.core.scheduler.db", fake_db):
+            _source_name, count, errors = scheduler._process_spider(
+                spider=spider,
+                mode="continuous",
+                today_str="2026-04-02",
+                is_manual=False,
+            )
+
+        self.assertEqual(errors, [])
+        self.assertEqual(count, 2)
+        self.assertEqual(
+            processor.url_checks,
+            [
+                "https://example.com/new",
+                "https://example.com/gap-inside-frontier",
+                "https://example.com/frontier",
+            ],
+        )
+        self.assertEqual(
+            [item["url"] for item in processor.submitted],
+            [
+                "https://example.com/new",
+                "https://example.com/gap-inside-frontier",
+            ],
         )
 
     def test_continuous_mode_recovers_undated_gap_article_by_detail_time(self):

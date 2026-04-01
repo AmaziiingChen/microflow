@@ -36,6 +36,11 @@ class AppConfig:
     is_locked: bool = False  # 🌟 新增：配置锁定状态（用于防止修改）
     api_balance_ok: bool = True  # 🌟 新增：API 余额状态（默认正常）
     channel: str = "stable"  # 🌟 新增：发布渠道 (stable / beta / internal)
+    telemetry_enabled: bool = True  # 匿名使用统计主开关
+    telemetry_error_reports_enabled: bool = True  # 稳定性与错误报告开关
+    telemetry_consent_status: str = "enabled"  # enabled / disabled
+    telemetry_install_id: str = ""  # 匿名安装标识
+    telemetry_notice_shown: bool = False  # 首启轻提示是否已展示
     # 🔐 安全字段：防篡改签名
     config_sign: str = ""  # HMAC-SHA256 签名
     last_cloud_sync_time: float = 0.0  # 最后一次成功获取云端授权的时间戳
@@ -158,6 +163,71 @@ class ConfigService:
 
         return normalized
 
+    @staticmethod
+    def _normalize_channel(channel: Any) -> str:
+        normalized = str(channel or "stable").strip().lower()
+        if normalized not in {"stable", "beta", "internal"}:
+            return "stable"
+        return normalized
+
+    @classmethod
+    def _get_telemetry_bootstrap_defaults(cls, channel: Any) -> Dict[str, Any]:
+        normalized_channel = cls._normalize_channel(channel)
+        return {
+            "channel": normalized_channel,
+            "telemetryEnabled": True,
+            "telemetryErrorReportsEnabled": True,
+            "telemetryConsentStatus": "enabled",
+            "telemetryNoticeShown": False,
+        }
+
+    @classmethod
+    def _apply_telemetry_bootstrap_defaults(
+        cls,
+        data: Dict[str, Any],
+        *,
+        default: AppConfig,
+    ) -> Dict[str, Any]:
+        normalized = dict(data or {})
+        channel = cls._normalize_channel(normalized.get("channel", default.channel))
+        policy = cls._get_telemetry_bootstrap_defaults(channel)
+        normalized["channel"] = channel
+
+        consent_status = str(
+            normalized.get("telemetryConsentStatus", default.telemetry_consent_status)
+            or ""
+        ).strip().lower()
+        if consent_status not in {"enabled", "disabled"}:
+            consent_status = ""
+
+        if not consent_status:
+            normalized["telemetryEnabled"] = policy["telemetryEnabled"]
+            normalized["telemetryErrorReportsEnabled"] = policy[
+                "telemetryErrorReportsEnabled"
+            ]
+            normalized["telemetryConsentStatus"] = policy["telemetryConsentStatus"]
+        else:
+            normalized["telemetryConsentStatus"] = consent_status
+            if consent_status == "enabled":
+                normalized["telemetryEnabled"] = bool(
+                    normalized.get("telemetryEnabled", True)
+                )
+                normalized["telemetryErrorReportsEnabled"] = bool(
+                    normalized.get("telemetryErrorReportsEnabled", True)
+                )
+            else:
+                normalized["telemetryEnabled"] = bool(
+                    normalized.get("telemetryEnabled", False)
+                )
+                normalized["telemetryErrorReportsEnabled"] = bool(
+                    normalized.get("telemetryErrorReportsEnabled", False)
+                )
+
+        normalized["telemetryNoticeShown"] = bool(
+            normalized.get("telemetryNoticeShown", False)
+        )
+        return normalized
+
     def load(self) -> AppConfig:
         """
         从文件加载配置
@@ -178,6 +248,7 @@ class ConfigService:
         try:
             with open(self.config_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
+            data = self._apply_telemetry_bootstrap_defaults(data, default=default)
 
             # 🔐 安全检查：验证签名
             stored_sign = data.get("configSign", "")
@@ -233,6 +304,23 @@ class ConfigService:
                 api_balance_ok=data.get(
                     "apiBalanceOk", default.api_balance_ok
                 ),  # 🌟 新增：API 余额状态
+                channel=data.get("channel", default.channel),
+                telemetry_enabled=data.get(
+                    "telemetryEnabled", default.telemetry_enabled
+                ),
+                telemetry_error_reports_enabled=data.get(
+                    "telemetryErrorReportsEnabled",
+                    default.telemetry_error_reports_enabled,
+                ),
+                telemetry_consent_status=data.get(
+                    "telemetryConsentStatus", default.telemetry_consent_status
+                ),
+                telemetry_install_id=data.get(
+                    "telemetryInstallId", default.telemetry_install_id
+                ),
+                telemetry_notice_shown=data.get(
+                    "telemetryNoticeShown", default.telemetry_notice_shown
+                ),
                 # 🔐 安全字段
                 config_sign=data.get("configSign", ""),
                 last_cloud_sync_time=data.get("lastCloudSyncTime", 0.0),
@@ -259,6 +347,7 @@ class ConfigService:
                 if os.path.exists(backup_path):
                     with open(backup_path, "r", encoding="utf-8") as f:
                         data = json.load(f)
+                    data = self._apply_telemetry_bootstrap_defaults(data, default=default)
                     self._config = AppConfig(
                         base_url=data.get("baseUrl", default.base_url),
                         api_key=data.get("apiKey", default.api_key),
@@ -288,6 +377,24 @@ class ConfigService:
                         ),
                         is_locked=data.get("isLocked", False),
                         api_balance_ok=data.get("apiBalanceOk", default.api_balance_ok),
+                        channel=data.get("channel", default.channel),
+                        telemetry_enabled=data.get(
+                            "telemetryEnabled", default.telemetry_enabled
+                        ),
+                        telemetry_error_reports_enabled=data.get(
+                            "telemetryErrorReportsEnabled",
+                            default.telemetry_error_reports_enabled,
+                        ),
+                        telemetry_consent_status=data.get(
+                            "telemetryConsentStatus",
+                            default.telemetry_consent_status,
+                        ),
+                        telemetry_install_id=data.get(
+                            "telemetryInstallId", default.telemetry_install_id
+                        ),
+                        telemetry_notice_shown=data.get(
+                            "telemetryNoticeShown", default.telemetry_notice_shown
+                        ),
                         config_sign=data.get("configSign", ""),
                         last_cloud_sync_time=data.get("lastCloudSyncTime", 0.0),
                         device_id=data.get("deviceId", ""),
@@ -325,10 +432,19 @@ class ConfigService:
             是否保存成功
         """
         try:
+            config_dict = self._apply_telemetry_bootstrap_defaults(
+                config_dict,
+                default=AppConfig(prompt=self._default_prompt),
+            )
+
             # 🔐 安全步骤 0：检查锁定状态
+            # 仅允许一种特例：云端恢复后把 isLocked 从 true 写回 false。
             if self._config and self._config.is_locked:
-                logger.warning("⚠️ 配置已锁定，拒绝保存操作")
-                return False
+                target_locked = bool(config_dict.get("isLocked", True))
+                if target_locked:
+                    logger.warning("⚠️ 配置已锁定，拒绝保存操作")
+                    return False
+                logger.info("🔓 检测到恢复性解锁写入，允许覆盖锁定配置")
 
             # 🌟 类型转换：确保数值字段是正确的类型
             if "max_items" in config_dict and config_dict["max_items"] is not None:
@@ -377,6 +493,10 @@ class ConfigService:
                 keep_existing("customFontPath", current.custom_font_path)
                 keep_existing("customFontName", current.custom_font_name)
                 keep_existing("subscribedSources", current.subscribed_sources)
+                keep_existing("channel", current.channel)
+                keep_existing("telemetryConsentStatus", current.telemetry_consent_status)
+                keep_existing("telemetryInstallId", current.telemetry_install_id)
+                keep_existing("telemetryNoticeShown", current.telemetry_notice_shown)
                 keep_existing("secondaryModels", current.secondary_models)
                 keep_existing("smtpHost", current.smtp_host)
                 keep_existing("smtpUser", current.smtp_user)
@@ -470,6 +590,18 @@ class ConfigService:
                 api_balance_ok=config_dict.get(
                     "apiBalanceOk", True
                 ),  # 🌟 新增：API 余额状态
+                channel=config_dict.get("channel", "stable"),
+                telemetry_enabled=config_dict.get("telemetryEnabled", False),
+                telemetry_error_reports_enabled=config_dict.get(
+                    "telemetryErrorReportsEnabled", False
+                ),
+                telemetry_consent_status=config_dict.get(
+                    "telemetryConsentStatus", "enabled"
+                ),
+                telemetry_install_id=config_dict.get("telemetryInstallId", ""),
+                telemetry_notice_shown=config_dict.get(
+                    "telemetryNoticeShown", False
+                ),
                 # 🔐 安全字段
                 config_sign=signature,
                 last_cloud_sync_time=config_dict.get("lastCloudSyncTime", 0.0),
@@ -528,6 +660,12 @@ class ConfigService:
             "updateCooldown": config.update_cooldown,  # 🌟 新增：冷却时间
             "isLocked": config.is_locked,  # 🌟 新增：配置锁定状态
             "apiBalanceOk": config.api_balance_ok,  # 🌟 新增：API 余额状态
+            "channel": config.channel,
+            "telemetryEnabled": config.telemetry_enabled,
+            "telemetryErrorReportsEnabled": config.telemetry_error_reports_enabled,
+            "telemetryConsentStatus": config.telemetry_consent_status,
+            "telemetryInstallId": config.telemetry_install_id,
+            "telemetryNoticeShown": config.telemetry_notice_shown,
             # 🔐 安全字段
             "configSign": config.config_sign,
             "lastCloudSyncTime": config.last_cloud_sync_time,
@@ -583,6 +721,12 @@ class ConfigService:
             "updateCooldown": "update_cooldown",  # 🌟 新增：冷却时间
             "isLocked": "is_locked",  # 🌟 新增：配置锁定状态
             "apiBalanceOk": "api_balance_ok",  # 🌟 新增：API 余额状态
+            "channel": "channel",
+            "telemetryEnabled": "telemetry_enabled",
+            "telemetryErrorReportsEnabled": "telemetry_error_reports_enabled",
+            "telemetryConsentStatus": "telemetry_consent_status",
+            "telemetryInstallId": "telemetry_install_id",
+            "telemetryNoticeShown": "telemetry_notice_shown",
             # 🔐 安全字段
             "configSign": "config_sign",
             "lastCloudSyncTime": "last_cloud_sync_time",

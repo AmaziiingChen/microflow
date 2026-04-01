@@ -1,7 +1,7 @@
 # ============================================================
 # MicroFlow 依赖清单
 # 更新时间: 2026-03-26
-# 版本: v1.1.3
+# 版本: v1.0.0
 # ============================================================
 
 # === 核心框架 ===
@@ -23,13 +23,9 @@ mistune>=3.0                # Markdown 渲染（邮件快照）
 python-dateutil>=2.8.0        # 增强的日期解析（支持多种日期格式）
 python-dotenv>=1.0          # 环境变量加载
 
-# === 系统托盘（macOS 原生）===
-# 注意：PyObjC 仅适用于 macOS，其他系统请使用 pystray
-pyobjc>=10.0                # macOS 原生 API 绑定
-
-# === 系统托盘（跨平台备选）===
-# Windows/Linux 请取消下行注释
-# pystray>=0.19
+# === 系统托盘 ===
+pyobjc>=10.0; sys_platform == "darwin"   # macOS 原生 API 绑定
+pystray>=0.19; sys_platform != "darwin"  # Windows/Linux 托盘备选
 
 # === 桌面通知 ===
 plyer>=2.1                  # 跨平台桌面通知

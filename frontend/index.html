@@ -159,8 +159,14 @@
           v-show="showListPane && !isSettingsOpen"
           class="list-view"
           :class="{ 'is-dual-pane': isDualPaneActive }"
+          ref="listScrollContainerRef"
           @mousedown.capture="handleListPanePointerDown"
           @click="handleListClick"
+          @scroll.passive="handleListScrollbarInteraction"
+          @mousemove="handleListScrollbarInteraction"
+          @mouseenter="handleListScrollbarInteraction"
+          @wheel.passive="handleListScrollbarInteraction"
+          @touchstart.passive="handleListScrollbarInteraction"
         >
         <div v-if="statusMsg" class="status-center">{{ statusMsg }}</div>
 
@@ -1039,6 +1045,117 @@
                         </div>
                       </div>
                     </div>
+
+                    <div class="settings-group-block">
+                      <div class="settings-group-label">匿名统计与诊断</div>
+                      <div class="settings-group-card">
+                        <div
+                          class="settings-row settings-row-link settings-row-choice"
+                          role="button"
+                          tabindex="0"
+                          @click="setTelemetryToggle('telemetryEnabled', !config.telemetryEnabled)"
+                          @keydown.enter.prevent="setTelemetryToggle('telemetryEnabled', !config.telemetryEnabled)"
+                          @keydown.space.prevent="setTelemetryToggle('telemetryEnabled', !config.telemetryEnabled)"
+                        >
+                          <span class="settings-row-stack">
+                            <span class="settings-row-label">匿名使用统计</span>
+                            <span class="settings-row-note">
+                              记录详情打开、复制、下载、更新检查等匿名功能事件。
+                            </span>
+                          </span>
+                          <input
+                            type="checkbox"
+                            class="ios-toggle"
+                            :checked="config.telemetryEnabled"
+                            @click.stop="setTelemetryToggle('telemetryEnabled', !config.telemetryEnabled)"
+                            @change.stop
+                          />
+                        </div>
+                        <div
+                          class="settings-row settings-row-link settings-row-choice"
+                          role="button"
+                          tabindex="0"
+                          @click="setTelemetryToggle('telemetryErrorReportsEnabled', !config.telemetryErrorReportsEnabled)"
+                          @keydown.enter.prevent="setTelemetryToggle('telemetryErrorReportsEnabled', !config.telemetryErrorReportsEnabled)"
+                          @keydown.space.prevent="setTelemetryToggle('telemetryErrorReportsEnabled', !config.telemetryErrorReportsEnabled)"
+                        >
+                          <span class="settings-row-stack">
+                            <span class="settings-row-label">稳定性与错误报告</span>
+                            <span class="settings-row-note">
+                              记录匿名崩溃、前端异常与接口失败，帮助快速定位问题。
+                            </span>
+                          </span>
+                          <input
+                            type="checkbox"
+                            class="ios-toggle"
+                            :checked="config.telemetryErrorReportsEnabled"
+                            @click.stop="setTelemetryToggle('telemetryErrorReportsEnabled', !config.telemetryErrorReportsEnabled)"
+                            @change.stop
+                          />
+                        </div>
+                        <div class="settings-row settings-row-form">
+                          <span class="settings-row-stack">
+                            <span class="settings-row-label">上报状态</span>
+                            <span class="settings-row-note">
+                              {{ telemetryQueueSummary }}
+                            </span>
+                          </span>
+                          <span class="settings-row-trailing telemetry-status-pill">
+                            <span
+                              class="settings-status-dot"
+                              :class="{
+                                'is-success': telemetryStatus.endpoint_configured && telemetryStatus.remote_enabled !== false,
+                                'is-error': telemetryStatus.remote_enabled === false || !telemetryStatus.endpoint_configured
+                              }"
+                            ></span>
+                            <span class="settings-row-value">
+                              {{ telemetryRemoteStatusText }}
+                            </span>
+                          </span>
+                        </div>
+                        <div class="settings-row settings-row-form">
+                          <span class="settings-row-stack">
+                            <span class="settings-row-label">渠道与采样</span>
+                            <span class="settings-row-note">
+                              {{ config.channel ? config.channel.toUpperCase() : 'STABLE' }}
+                              渠道当前 {{ telemetryConsentLabel }}，批量
+                              {{ telemetryStatus.batch_size || 30 }} 条，每
+                              {{ Math.max(Math.round((telemetryStatus.flush_interval_sec || 1800) / 60), 1) }}
+                              分钟自动尝试一次。
+                            </span>
+                          </span>
+                          <span class="settings-row-value">
+                            采样 {{ Math.round((telemetryStatus.sample_rate || 0) * 100) }}%
+                          </span>
+                        </div>
+                        <div class="settings-row telemetry-action-row">
+                          <button
+                            type="button"
+                            class="settings-inline-button"
+                            :disabled="isTelemetryFlushing || !telemetryUploadAvailable"
+                            @click="flushTelemetryNow"
+                          >
+                            {{
+                              isTelemetryFlushing
+                                ? '正在上报…'
+                                : telemetryUploadAvailable
+                                  ? '立即上报'
+                                  : '等待接入'
+                            }}
+                          </button>
+                          <button
+                            type="button"
+                            class="settings-inline-button"
+                            @click="clearTelemetryQueueNow"
+                          >
+                            清空队列
+                          </button>
+                        </div>
+                      </div>
+                      <div class="settings-group-footer">
+                        仅上传匿名事件，不包含正文、批注、API Key、SMTP 密码、提示词与完整规则内容。
+                      </div>
+                    </div>
                   </template>
 
                   <template v-else-if="activeSettingsSection === 'subscriptions'">
@@ -1335,8 +1452,12 @@
                             ></span>
                           </span>
                         </button>
-                        <div class="settings-row">
-                          <div class="settings-row-stack">
+                        <button
+                          type="button"
+                          class="settings-row settings-row-link"
+                          @click="openSoftwareUpdateNotes"
+                        >
+                          <span class="settings-row-stack">
                             <span class="settings-row-label">更新说明</span>
                             <span class="settings-row-note">
                               {{
@@ -1344,8 +1465,15 @@
                                   softwareUpdateState.detail
                               }}
                             </span>
-                          </div>
-                        </div>
+                          </span>
+                          <span class="settings-row-trailing">
+                            <span class="settings-row-value">查看详情</span>
+                            <span
+                              class="settings-inline-arrow"
+                              aria-hidden="true"
+                            ></span>
+                          </span>
+                        </button>
                         <div
                           v-if="softwareUpdateState.downloadSha256"
                           class="settings-row"
@@ -7403,7 +7531,7 @@
                 >
                   ✨
                 </span>
-                {{ aiIntelligenceTitle }}
+                <span class="provider-info-label">{{ aiIntelligenceTitle }}</span>
               </span>
 
               <div class="top-actions">
@@ -7711,10 +7839,28 @@
                       data-tooltip="搜索本文"
                       @click.stop="toggleDetailSearchUI"
                     >
-                      <span
+                      <svg
                         class="detail-inline-search-trigger-icon"
+                        viewBox="0 0 16 16"
+                        xmlns="http://www.w3.org/2000/svg"
                         aria-hidden="true"
-                      ></span>
+                      >
+                        <circle
+                          cx="7"
+                          cy="7"
+                          r="4.2"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.8"
+                        />
+                        <path
+                          d="M10.2 10.2L13.2 13.2"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.8"
+                          stroke-linecap="round"
+                        />
+                      </svg>
                     </button>
                     <div
                       v-if="activeArticle && !isEditingSummary"
@@ -7727,10 +7873,28 @@
                       @mousedown.stop
                       @click.stop
                     >
-                      <span
+                      <svg
                         class="detail-inline-search-panel-icon"
+                        viewBox="0 0 16 16"
+                        xmlns="http://www.w3.org/2000/svg"
                         aria-hidden="true"
-                      ></span>
+                      >
+                        <circle
+                          cx="7"
+                          cy="7"
+                          r="4.2"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.8"
+                        />
+                        <path
+                          d="M10.2 10.2L13.2 13.2"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.8"
+                          stroke-linecap="round"
+                        />
+                      </svg>
                       <input
                         ref="detailSearchInputRef"
                         v-model="detailSearchQuery"
@@ -8079,6 +8243,10 @@
             ref="detailScrollContainerRef"
             @mousedown="handleDetailContentPointerDown"
             @click="handleDetailContentClick"
+            @mousemove="handleDetailScrollbarInteraction"
+            @mouseenter="handleDetailScrollbarInteraction"
+            @wheel.passive="handleDetailScrollbarInteraction"
+            @touchstart.passive="handleDetailScrollbarInteraction"
             @scroll="handleDetailContentScroll"
           >
             <!-- 预览模式 -->
@@ -8960,7 +9128,7 @@
                 >
                   ✨
                 </span>
-                {{ aiIntelligenceTitle }}
+                <span class="provider-info-label">{{ aiIntelligenceTitle }}</span>
               </span>
 
               <!-- 右侧：操作按钮 -->

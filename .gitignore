@@ -22,6 +22,8 @@ __pycache__/
 build/
 develop-eggs/
 dist/
+.pyinstaller-cache/
+release/
 downloads/
 eggs/
 .eggs/
@@ -41,6 +43,7 @@ wheels/
 
 # === 虚拟环境 ===
 .venv/
+.venv-pack*/
 venv/
 ENV/
 env/

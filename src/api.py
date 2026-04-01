@@ -42,7 +42,7 @@ import io
 from typing import Dict, Any, Optional, List, Callable
 import time
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlsplit, urlunsplit
 from src.database import db
 from src.llm_service import LLMService
 from src.utils.text_cleaner import strip_emoji
@@ -51,6 +51,7 @@ from src.utils.ai_markdown import (
     compose_tagged_markdown,
     extract_leading_tags,
 )
+from src.utils.content_text import resolve_effective_article_text
 from src.utils.rss_preview import analyze_rss_preview_content
 from src.utils.rule_ai_config import normalize_rule_ai_config
 from src.utils.rss_strategy import (
@@ -67,7 +68,7 @@ from src.utils.http_rule_config import (
     normalize_request_headers,
     normalize_request_method,
 )
-from src.services import SystemService, DownloadService, ConfigService
+from src.services import SystemService, DownloadService, ConfigService, TelemetryService
 from src.services.rule_generator import RuleGeneratorService
 from src.services.custom_spider_rules_manager import get_rules_manager
 from src.core import DaemonManager, SpiderScheduler, ArticleProcessor
@@ -92,6 +93,7 @@ class Api:
     _SYSTEM_CONTENT_RULE_PREFIX = "system:"
     _SYSTEM_CONTENT_SOURCE_NAME = "系统内容"
     _SYSTEM_CONTENT_DEFAULT_FEEDBACK_EMAIL = "amaziiingchen@qq.com"
+    _MIN_EFFECTIVE_UPDATE_COOLDOWN_SECONDS = 60
     _SYSTEM_CONTENT_ORDER = (
         "announcement",
         "changelog",
@@ -113,6 +115,51 @@ class Api:
     def config_service(self):
         """兼容旧调用入口，统一返回当前配置服务实例。"""
         return self._config_service
+
+    @property
+    def telemetry_service(self):
+        """暴露匿名遥测服务，供主程序与前端复用。"""
+        return self._telemetry
+
+    def _refresh_telemetry_remote_config(self, version_data: Optional[Dict[str, Any]]) -> None:
+        telemetry_config = {}
+        if isinstance(version_data, dict):
+            telemetry_config = (
+                version_data.get("telemetry")
+                if isinstance(version_data.get("telemetry"), dict)
+                else {}
+            )
+        try:
+            self._telemetry.update_remote_config(telemetry_config)
+        except Exception as e:
+            logger.debug(f"同步遥测远程配置失败: {e}")
+
+    def _track_telemetry(
+        self,
+        event_name: str,
+        props: Optional[Dict[str, Any]] = None,
+        *,
+        force: bool = False,
+    ) -> None:
+        try:
+            self._telemetry.track(event_name, props, force=force)
+        except Exception as e:
+            logger.debug(f"记录遥测事件失败 ({event_name}): {e}")
+
+    def _on_source_fetch_result(self, payload: Dict[str, Any]) -> None:
+        self._track_telemetry("source_fetch_result", payload)
+
+    def _get_effective_update_cooldown_seconds(self) -> int:
+        """后端强制冷却下限，避免配置文件中的值过低。"""
+        raw_value = self._config_service.get(
+            "updateCooldown",
+            self._MIN_EFFECTIVE_UPDATE_COOLDOWN_SECONDS,
+        )
+        try:
+            normalized = int(raw_value)
+        except (TypeError, ValueError):
+            normalized = self._MIN_EFFECTIVE_UPDATE_COOLDOWN_SECONDS
+        return max(normalized, self._MIN_EFFECTIVE_UPDATE_COOLDOWN_SECONDS)
 
     def __init__(self):
         # 当前软件版本号（从 version.py 统一导入）
@@ -139,6 +186,11 @@ class Api:
         self._system_service = SystemService()
         self._download_service = DownloadService()
         self._config_service = ConfigService(str(CONFIG_PATH), self._llm.system_prompt)
+        self._telemetry = TelemetryService(
+            self._config_service,
+            db,
+            self.CURRENT_VERSION,
+        )
 
         # 🌟 核心组件：文章处理器（传入回调函数用于唤醒窗口）
         self._article_processor = ArticleProcessor(
@@ -153,13 +205,14 @@ class Api:
             article_processor=self._article_processor,
             progress_callback=self._push_progress,
             config_service=self._config_service,
+            source_result_callback=self._on_source_fetch_result,
         )
 
         # 🌟 核心组件：守护进程管理器
         self._daemon_manager = DaemonManager()
         # 🌟 设置冷却时间获取器（从配置服务动态读取）
         self._daemon_manager.set_cooldown_getter(
-            lambda: self._config_service.get("updateCooldown", 60)
+            self._get_effective_update_cooldown_seconds
         )
 
         # 🌟 核心组件：动态爬虫规则生成器和规则管理器
@@ -470,7 +523,12 @@ class Api:
                 f"任务完成回调: success={success}, reason={reason}, processed={processed}/{submitted}, ai={ai_completed}/{ai_total}"
             )
 
-            if not success and reason in {"ai_failed", "ai_error"}:
+            if reason in {
+                "ai_failed",
+                "ai_error",
+                "ai_failed_fallback",
+                "ai_error_fallback",
+            }:
                 self._notify_ai_task_failed(article_data)
 
             # 如果所有任务都处理完了
@@ -553,7 +611,51 @@ class Api:
         Returns:
             {"status": "success/error", "submitted_count": int, "queue_size": int, "data": list, "cooldown_remaining": int}
         """
-        # 🌟 拦截只读模式：完全切断爬虫触发
+        # 🌟 拦截只读模式前，先尝试向云端做一次恢复探测
+        if self._config_service.current.is_locked:
+            logger.info("当前处于只读模式，先尝试向云端探测是否已恢复可用")
+            try:
+                latest_version_data = self.get_version_info(force_refresh=True)
+                if latest_version_data.get("status") == "success":
+                    if latest_version_data.get("is_active") is False:
+                        kill_reason = latest_version_data.get(
+                            "kill_message", "该软件已被禁用"
+                        )
+                        self._execute_self_destruct(kill_reason)
+                        msg = f"服务已暂停: {kill_reason}"
+                        logger.warning(f"拦截爬虫请求：{msg}")
+                        return {
+                            "status": "read_only",
+                            "message": msg,
+                            "submitted_count": 0,
+                            "queue_size": 0,
+                            "cooldown_remaining": 0,
+                        }
+
+                    self._config_service.load()
+                    logger.info("云端已恢复可用，已从只读模式恢复")
+                else:
+                    msg = "服务已暂停，当前为只读模式，仅可查看和利用 AI 分析历史公文"
+                    logger.warning(f"只读恢复探测失败，继续拦截：{msg}")
+                    return {
+                        "status": "read_only",
+                        "message": msg,
+                        "submitted_count": 0,
+                        "queue_size": 0,
+                        "cooldown_remaining": 0,
+                    }
+            except Exception as e:
+                msg = "服务已暂停，当前为只读模式，仅可查看和利用 AI 分析历史公文"
+                logger.warning(f"只读恢复探测异常 ({e})，继续拦截：{msg}")
+                return {
+                    "status": "read_only",
+                    "message": msg,
+                    "submitted_count": 0,
+                    "queue_size": 0,
+                    "cooldown_remaining": 0,
+                }
+
+        # 🌟 二次确认：恢复探测后仍锁定，则继续只读拦截
         if self._config_service.current.is_locked:
             msg = "服务已暂停，当前为只读模式，仅可查看和利用 AI 分析历史公文"
             logger.warning(f"拦截爬虫请求：{msg}")
@@ -626,9 +728,7 @@ class Api:
         # 🌟 终极防御：如果前端的锁失效了，后端在这里强行拦截
         if is_manual:
             last_fetch = self._daemon_manager._get_last_fetch_time()
-            cooldown_seconds = self._config_service.get(
-                "updateCooldown", 60
-            )  # 🌟 动态获取冷却时间
+            cooldown_seconds = self._get_effective_update_cooldown_seconds()
             remaining = cooldown_seconds - (time.time() - last_fetch)
             if remaining > 0:
                 logger.warning(f"拦截高频手动刷新，剩余冷却 {remaining:.1f} 秒")
@@ -1748,6 +1848,22 @@ class Api:
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
+    def _clear_residual_ai_cancel_flags(self) -> None:
+        """清理上一次手动中断后残留的全局取消标记。"""
+        try:
+            article_processor = getattr(self, "_article_processor", None)
+            if article_processor and hasattr(article_processor, "clear_cancel"):
+                article_processor.clear_cancel()
+        except Exception as e:
+            logger.debug(f"清理 ArticleProcessor 取消标记失败: {e}")
+
+        try:
+            llm_service = getattr(self, "_llm", None)
+            if llm_service and hasattr(llm_service, "clear_cancel"):
+                llm_service.clear_cancel()
+        except Exception as e:
+            logger.debug(f"清理 LLMService 取消标记失败: {e}")
+
     def close_app(self):
         """隐藏窗口到后台"""
         if webview.windows:
@@ -1977,6 +2093,11 @@ class Api:
     def load_config(self) -> dict:
         """暴露给前端：获取配置"""
         config_data = self._config_service.to_dict()
+        config_data.pop("updateCooldown", None)
+        config_data.pop("max_items", None)
+        channel = str(config_data.get("channel", "stable") or "stable").strip().lower()
+        if channel not in {"stable", "beta", "internal"}:
+            channel = "stable"
 
         # 🌟 修复：确保所有字段存在（提供默认值），避免设置界面空白
         default_config = {
@@ -1995,10 +2116,15 @@ class Api:
             "fontFamily": "sans-serif",
             "customFontPath": "",
             "customFontName": "",
+            "telemetryEnabled": False,
+            "telemetryErrorReportsEnabled": False,
+            "telemetryConsentStatus": "undecided",
+            "telemetryInstallId": "",
             "subscribedSources": [],
             "pollingInterval": 60,
             "isPinned": False,
             "readNoticeTime": "",
+            "channel": channel,
             "emailNotifyEnabled": False,
             "smtpHost": "",
             "smtpPort": 465,
@@ -2006,10 +2132,17 @@ class Api:
             "smtpPassword": "",
             "subscriberList": [],
             "secondaryModels": [],
-            "max_items": 20,
             "body_field": "content",
             "skip_detail": False,
         }
+        default_config.update(
+            {
+                "telemetryEnabled": True,
+                "telemetryErrorReportsEnabled": True,
+                "telemetryConsentStatus": "enabled",
+                "telemetryNoticeShown": False,
+            }
+        )
         for key, default in default_config.items():
             if key not in config_data or (
                 isinstance(default, str) and config_data.get(key) in (None, "")
@@ -2025,22 +2158,84 @@ class Api:
     def save_config(self, new_config: dict) -> dict:
         """暴露给前端：保存配置"""
         try:
+            previous_config = self._config_service.to_dict()
+            normalized_config = dict(new_config or {})
+            normalized_config.pop("max_items", None)
+
+            # 安全/运行时字段只允许后端维护，避免前端带着旧状态把配置重新锁回去。
+            protected_runtime_fields = (
+                "updateCooldown",
+                "isLocked",
+                "apiBalanceOk",
+                "configSign",
+                "lastCloudSyncTime",
+                "deviceId",
+            )
+            for key in protected_runtime_fields:
+                if key in previous_config:
+                    normalized_config[key] = previous_config.get(key)
+                else:
+                    normalized_config.pop(key, None)
+
+            if normalized_config.get("telemetryEnabled") or normalized_config.get(
+                "telemetryErrorReportsEnabled"
+            ):
+                normalized_config["telemetryConsentStatus"] = "enabled"
+            else:
+                normalized_config["telemetryConsentStatus"] = "disabled"
+
             # 🌟 检查配置锁定状态
             if self._config_service.current and self._config_service.current.is_locked:
                 logger.warning("⚠️ 配置已锁定，拒绝保存操作")
                 return {"status": "error", "message": "配置已锁定，无法保存"}
 
-            if not self._config_service.save(new_config):
+            if not self._config_service.save(normalized_config):
                 return {
                     "status": "error",
                     "message": "保存配置文件失败，请检查文件权限",
                 }
 
             # 应用开机自启设置
-            self._set_autostart(new_config.get("autoStart", False))
+            self._set_autostart(normalized_config.get("autoStart", False))
 
             # 热更新 LLM 配置
             self._apply_config()
+
+            tracked_keys = [
+                "themeAppearance",
+                "fontFamily",
+                "trackMode",
+                "pollingInterval",
+                "autoStart",
+                "muteMode",
+                "telemetryEnabled",
+                "telemetryErrorReportsEnabled",
+            ]
+            changed_keys = [
+                key
+                for key in tracked_keys
+                if previous_config.get(key) != normalized_config.get(key)
+            ]
+            if changed_keys:
+                self._track_telemetry(
+                    "settings_changed",
+                    {
+                        "changed_keys": changed_keys,
+                        "theme": normalized_config.get("themeAppearance", ""),
+                        "font_family": normalized_config.get("fontFamily", ""),
+                        "track_mode": normalized_config.get("trackMode", ""),
+                        "polling_interval": normalized_config.get("pollingInterval", 0),
+                        "mute_mode": bool(normalized_config.get("muteMode", False)),
+                        "telemetry_enabled": bool(
+                            normalized_config.get("telemetryEnabled", False)
+                        ),
+                        "error_reports_enabled": bool(
+                            normalized_config.get(
+                                "telemetryErrorReportsEnabled", False
+                            )
+                        ),
+                    },
+                )
 
             logger.info("系统配置已成功保存并热更新")
             return {"status": "success"}
@@ -2061,6 +2256,54 @@ class Api:
         if is_ok:
             return {"status": "success"}
         return {"status": "error", "message": msg}
+
+    def track_telemetry_event(
+        self,
+        event_name: str,
+        props: Optional[Dict[str, Any]] = None,
+        force: bool = False,
+    ) -> Dict[str, Any]:
+        """供前端调用：记录匿名遥测事件。"""
+        try:
+            return self._telemetry.track(event_name, props, force=bool(force))
+        except Exception as e:
+            logger.debug(f"前端记录遥测事件失败 ({event_name}): {e}")
+            return {"status": "error", "message": str(e)}
+
+    def report_frontend_error(
+        self,
+        payload: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """供前端调用：上报未捕获 JS / Promise 错误。"""
+        try:
+            return self._telemetry.record_frontend_error(payload)
+        except Exception as e:
+            logger.debug(f"前端错误上报失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def flush_telemetry(self, force: bool = False) -> Dict[str, Any]:
+        """手动触发一次遥测上报。"""
+        try:
+            return self._telemetry.flush(force=bool(force))
+        except Exception as e:
+            logger.debug(f"手动上报遥测失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def get_telemetry_status(self) -> Dict[str, Any]:
+        """获取当前遥测配置与队列状态。"""
+        try:
+            return self._telemetry.get_status_payload()
+        except Exception as e:
+            logger.debug(f"读取遥测状态失败: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def clear_telemetry_queue(self) -> Dict[str, Any]:
+        """清空本地待上报遥测队列。"""
+        try:
+            return self._telemetry.clear_queue()
+        except Exception as e:
+            logger.debug(f"清空遥测队列失败: {e}")
+            return {"status": "error", "message": str(e)}
 
     def get_api_balance_status(self) -> dict:
         """获取 API 余额状态"""
@@ -2216,7 +2459,7 @@ class Api:
 
     def get_cooldown_config(self) -> dict:
         """获取冷却时间配置"""
-        cooldown_seconds = self._config_service.get("updateCooldown", 60)
+        cooldown_seconds = self._get_effective_update_cooldown_seconds()
         return {"status": "success", "cooldown_seconds": cooldown_seconds}
 
     # ==================== 📧 邮件推送 API ====================
@@ -2596,9 +2839,14 @@ class Api:
     def force_quit(self):
         """彻底退出"""
         logger.info("程序彻底退出")
+        self._track_telemetry("app_exit", {"reason": "force_quit"})
         self.is_running = False
         self._daemon_manager.request_stop()
         self._article_processor.shutdown(wait=False)
+        try:
+            self._telemetry.shutdown(flush=True)
+        except Exception:
+            pass
         os._exit(0)
 
     def get_all_sources(self) -> dict:
@@ -2945,6 +3193,8 @@ class Api:
             {"status": "success/error", "summary": str, "message": str}
         """
         try:
+            self._clear_residual_ai_cancel_flags()
+
             # 1. 从数据库获取文章
             article = db.get_article_by_id(article_id)
             if not article:
@@ -2966,6 +3216,12 @@ class Api:
             raw_text = article.get("raw_text", "")
             title = article.get("title", "未知标题")
 
+            if not raw_text or len(raw_text.strip()) < 10:
+                raw_text = resolve_effective_article_text(
+                    raw_text=raw_text,
+                    raw_markdown=article.get("raw_markdown", ""),
+                    body_html=article.get("body_html", ""),
+                )
             if not raw_text or len(raw_text.strip()) < 10:
                 return {
                     "status": "error",
@@ -3020,6 +3276,7 @@ class Api:
                         formatting_prompt,
                         priority="manual",
                         cancel_event=summary_cancel_event,
+                        use_cache=False,
                     )
                     if enhanced_markdown.startswith(
                         "⚠️"
@@ -3038,6 +3295,7 @@ class Api:
                                 summary_prompt,
                                 priority="manual",
                                 cancel_event=summary_cancel_event,
+                                use_cache=False,
                             )
                             if rss_summary_result.get("status") != "success":
                                 new_summary = str(
@@ -3067,6 +3325,7 @@ class Api:
                             summary_prompt,
                             priority="manual",
                             cancel_event=summary_cancel_event,
+                            use_cache=False,
                         )
                         if rss_summary_result.get("status") != "success":
                             new_summary = str(
@@ -3087,6 +3346,7 @@ class Api:
                     priority="manual",
                     cancel_event=summary_cancel_event,
                     content_kind="default",
+                    use_cache=False,
                 )
 
             # 5. 检查是否生成成功
@@ -3242,6 +3502,35 @@ class Api:
     def _system_content_internal_url(self, key: str) -> str:
         return f"microflow://system/{str(key or '').strip()}"
 
+    def _build_system_content_storage_url(self, key: str, raw_url: str) -> str:
+        """
+        为系统内容生成可落库的唯一 URL。
+
+        articles.url 使用唯一索引，而系统公告 / 关于 / 免责声明经常共用同一个
+        version.json 地址。直接写入会发生 REPLACE 覆盖，导致系统内容只剩部分条目。
+        这里对 http(s) URL 追加稳定 query 参数；项目内部的 URL 规范化会移除 fragment，
+        但会保留普通 query，因此 query 方式能稳定穿透到数据库层。
+        """
+        clean_url = str(raw_url or "").strip()
+        if not clean_url:
+            return self._system_content_internal_url(key)
+
+        parsed = urlsplit(clean_url)
+        if parsed.scheme in {"http", "https"}:
+            query_items = list(parse_qsl(parsed.query, keep_blank_values=True))
+            normalized_key = str(key or "").strip()
+            query_items = [
+                (name, value)
+                for name, value in query_items
+                if str(name or "").strip() != "__microflow_system"
+            ]
+            query_items.append(("__microflow_system", normalized_key))
+            query = urlencode(query_items, doseq=True)
+            return urlunsplit(
+                (parsed.scheme, parsed.netloc, parsed.path, query, parsed.fragment)
+            )
+        return clean_url
+
     def _normalize_system_publish_time(self, value: Any, fallback: str = "") -> str:
         text = str(value or "").strip()
         if not text:
@@ -3261,6 +3550,56 @@ class Api:
             if text:
                 return text
         return ""
+
+    def _append_system_content_media_markdown(
+        self,
+        content: str,
+        payload: Dict[str, Any],
+        *,
+        fallback_alt: str = "",
+    ) -> str:
+        body = str(content or "").strip()
+        image_markdown = self._extract_system_content_text(
+            payload, "image_markdown", "media_markdown"
+        )
+        if image_markdown:
+            if image_markdown not in body:
+                return f"{body}\n\n{image_markdown}".strip()
+            return body
+
+        image_url = self._extract_system_content_text(
+            payload,
+            "image_url",
+            "hero_image_url",
+            "cover_image_url",
+            "qr_image_url",
+            "donate_image_url",
+        )
+        if not image_url:
+            return body
+        if image_url in body:
+            return body
+
+        image_alt = (
+            self._extract_system_content_text(
+                payload,
+                "image_alt",
+                "hero_image_alt",
+                "cover_image_alt",
+            )
+            or str(fallback_alt or "").strip()
+            or "系统内容配图"
+        )
+        image_caption = self._extract_system_content_text(
+            payload,
+            "image_caption",
+            "hero_image_caption",
+            "cover_image_caption",
+        )
+        image_block = f"![{image_alt}]({image_url})"
+        if image_caption:
+            image_block = f"{image_block}\n\n{image_caption}"
+        return f"{body}\n\n{image_block}".strip()
 
     def _normalize_system_content_tags(
         self, value: Any, fallback_tags: Optional[List[str]] = None
@@ -3467,12 +3806,18 @@ class Api:
         title = self._extract_system_content_text(merged, "title") or str(
             default_payload.get("title") or key
         ).strip()
+        content = self._append_system_content_media_markdown(
+            content,
+            merged,
+            fallback_alt=title,
+        )
         category = self._extract_system_content_text(
             merged, "category", "version", "label"
         ) or str(default_payload.get("category") or "").strip()
         url = self._extract_system_content_text(merged, "url") or str(
             default_payload.get("url") or self._system_content_internal_url(key)
         ).strip()
+        url = self._build_system_content_storage_url(key, url)
         department = self._extract_system_content_text(merged, "department") or str(
             default_payload.get("department") or title
         ).strip()
@@ -3556,7 +3901,11 @@ class Api:
             str(item.get("rule_id") or "").strip(): item
             for item in db.get_articles_by_rule_prefix(self._SYSTEM_CONTENT_RULE_PREFIX)
         }
-        if not version_data and existing_articles:
+        has_complete_existing_entries = all(
+            self._system_content_rule_id(key) in existing_articles
+            for key in self._SYSTEM_CONTENT_ORDER
+        )
+        if not version_data and has_complete_existing_entries:
             return
 
         entries = self._build_system_content_entries(version_data or {})
@@ -3728,6 +4077,29 @@ class Api:
                 "announcement": dict  # 公告信息，供前端使用
             }
         """
+        started_at = time.time()
+
+        def finalize(response_payload: Dict[str, Any]) -> Dict[str, Any]:
+            response = dict(response_payload or {})
+            has_update = bool(response.get("has_update", False))
+            force_update = bool(response.get("force_update", False))
+            status = str(response.get("status") or "success").strip() or "success"
+            mode = str(response.get("mode") or "").strip()
+            if mode == "read_only":
+                result_label = "read_only"
+            else:
+                result_label = status
+            self._track_telemetry(
+                "startup_check_result",
+                {
+                    "result": result_label,
+                    "has_update": has_update,
+                    "force_update": force_update,
+                    "response_ms": int(max((time.time() - started_at) * 1000, 0)),
+                },
+            )
+            return response
+
         # 🌟 步骤 1：重新加载本地配置（触发签名验证）
         self._config_service.load()
 
@@ -3747,6 +4119,7 @@ class Api:
 
             # 🌟 缓存版本信息（供后续 check_software_update 和前端使用）
             self._version_info = data
+            self._refresh_telemetry_remote_config(data)
 
             # 🌟 步骤 3：检查 is_active 字段（云端最高仲裁）
             is_active = data.get("is_active", True)
@@ -3763,7 +4136,7 @@ class Api:
                 response = self._build_success_response(data)
                 response["mode"] = "read_only"
                 response["reason"] = kill_reason
-                return response
+                return finalize(response)
 
             # 🌟 步骤 4：云端验证成功，解除本地锁定状态
             self._unlock_if_needed()
@@ -3772,23 +4145,23 @@ class Api:
             self._update_cloud_sync_time()
 
             # 🌟 步骤 6：一切正常，返回成功响应
-            return self._build_success_response(data)
+            return finalize(self._build_success_response(data))
 
         except requests.exceptions.Timeout:
             logger.warning("启动检查：请求超时，检查离线 TTL")
-            return self._check_offline_ttl()
+            return finalize(self._check_offline_ttl())
 
         except requests.exceptions.RequestException as e:
             logger.warning(f"启动检查：网络请求失败 ({e})，检查离线 TTL")
-            return self._check_offline_ttl()
+            return finalize(self._check_offline_ttl())
 
         except json.JSONDecodeError as e:
             logger.warning(f"启动检查：JSON 解析失败 ({e})，检查离线 TTL")
-            return self._check_offline_ttl()
+            return finalize(self._check_offline_ttl())
 
         except Exception as e:
             logger.error(f"启动检查：未知错误 ({e})，检查离线 TTL")
-            return self._check_offline_ttl()
+            return finalize(self._check_offline_ttl())
 
     def _check_offline_ttl(self) -> Dict[str, Any]:
         """
@@ -3837,7 +4210,7 @@ class Api:
         logger.info(f"离线检查：TTL 有效，剩余 {remaining_days:.1f} 天")
         return self._build_success_response({})
 
-    def _unlock_if_needed(self) -> None:
+    def _unlock_if_needed(self) -> bool:
         """
         解除本地锁定状态（云端验证成功后调用）
 
@@ -3847,10 +4220,22 @@ class Api:
             try:
                 current_config = self._config_service.to_dict()
                 current_config["isLocked"] = False
-                self._config_service.save(current_config)
+                saved = self._config_service.save(current_config)
+                if not saved:
+                    logger.error("解除锁定失败：配置服务拒绝写回解锁状态")
+                    return False
+                self._config_service.load()
                 logger.info("🔓 云端验证成功，已解除只读锁定，恢复正常模式")
+                try:
+                    self._enqueue_js(
+                        "if(window.onReadOnlyRecovered) window.onReadOnlyRecovered();"
+                    )
+                except Exception as notify_err:
+                    logger.debug(f"通知前端退出只读模式失败: {notify_err}")
+                return True
             except Exception as e:
                 logger.error(f"解除锁定失败: {e}")
+        return False
 
     def _update_cloud_sync_time(self) -> None:
         """
@@ -3910,6 +4295,7 @@ class Api:
         """获取云端版本信息（支持 ETag 304 缓存协商）"""
         # 1. 优先使用内存缓存（如果不强制刷新）
         if self._version_info and not force_refresh:
+            self._refresh_telemetry_remote_config(self._version_info)
             self._sync_system_content_entries(self._version_info)
             return {
                 "status": "success",
@@ -3928,6 +4314,10 @@ class Api:
             # 3. 命中 304 缓存，云端文件未变，直接返回内存数据
             if response.status_code == 304:
                 logger.debug("🌐 安全心跳：命中 304 缓存，云端配置未变更，免流放行")
+                if self._version_info and self._version_info.get("is_active", True):
+                    self._unlock_if_needed()
+                    self._update_cloud_sync_time()
+                self._refresh_telemetry_remote_config(self._version_info)
                 self._sync_system_content_entries(self._version_info)
                 return {
                     "status": "success",
@@ -3940,6 +4330,10 @@ class Api:
                 data = response.json()
                 self._version_info = data
                 self._version_etag = response.headers.get("ETag")  # 记录最新 ETag
+                if data.get("is_active", True):
+                    self._unlock_if_needed()
+                    self._update_cloud_sync_time()
+                self._refresh_telemetry_remote_config(data)
                 self._sync_system_content_entries(data)
                 return {
                     "status": "success",
@@ -3955,6 +4349,7 @@ class Api:
             logger.debug(f"获取版本信息网络异常: {e}")
             # 弱网兜底：如果曾经成功获取过，退级使用旧缓存
             if self._version_info:
+                self._refresh_telemetry_remote_config(self._version_info)
                 self._sync_system_content_entries(self._version_info)
                 return {
                     "status": "success",
@@ -3998,10 +4393,109 @@ class Api:
             logger.error(f"设置窗口置顶失败: {e}")
             return {"status": "error", "message": str(e)}
 
+    def ensure_macos_drag_region(self, options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """前端加载完成后重装 macOS 原生拖动热区。"""
+        if platform.system() != "Darwin":
+            return {"status": "ignored", "message": "non-macos"}
+
+        if not self._window:
+            return {"status": "error", "message": "窗口未初始化"}
+
+        try:
+            main_mod = sys.modules.get("__main__")
+            if main_mod is None:
+                return {"status": "error", "message": "主模块不可用"}
+
+            layout_mode = "single"
+            exclusion_rects = []
+            if isinstance(options, dict):
+                raw_layout = str(options.get("layout") or "").strip().lower()
+                if raw_layout in {"dual", "settings_split"}:
+                    layout_mode = raw_layout
+
+                raw_exclusion_rects = options.get("exclusion_rects")
+                if isinstance(raw_exclusion_rects, list):
+                    for item in raw_exclusion_rects:
+                        if not isinstance(item, dict):
+                            continue
+                        try:
+                            rect_x = float(item.get("x", 0.0))
+                            rect_y = float(item.get("y", 0.0))
+                            rect_w = float(item.get("width", 0.0))
+                            rect_h = float(item.get("height", 0.0))
+                        except Exception:
+                            continue
+
+                        if rect_w <= 0 or rect_h <= 0:
+                            continue
+
+                        exclusion_rects.append(
+                            {
+                                "x": rect_x,
+                                "y": rect_y,
+                                "width": rect_w,
+                                "height": rect_h,
+                            }
+                        )
+
+            try:
+                setattr(self._window, "_macos_drag_layout_mode", layout_mode)
+                setattr(self._window, "_macos_drag_exclusion_rects", exclusion_rects)
+            except Exception:
+                pass
+
+            apply_full_size = getattr(main_mod, "apply_macos_full_size_content", None)
+            install_drag_strip = getattr(main_mod, "install_macos_drag_strip", None)
+
+            if callable(apply_full_size):
+                apply_full_size(self._window)
+            elif callable(install_drag_strip):
+                install_drag_strip(self._window)
+            else:
+                return {"status": "error", "message": "拖动热区安装器不可用"}
+
+            return {"status": "success", "layout": layout_mode}
+        except Exception as e:
+            logger.error(f"重装 macOS 拖动热区失败: {e}", exc_info=True)
+            return {"status": "error", "message": str(e)}
+
     def get_local_ai_icon(self, model_name: str) -> Dict[str, Any]:
         """
         🌟 增强版图标检索：支持模糊匹配与打包路径兼容
         """
+        def normalize_svg_markup(raw_svg: str) -> str:
+            svg_text = str(raw_svg or "").strip()
+            if not svg_text:
+                return ""
+
+            # 清理 XML 声明 / DOCTYPE / 注释，避免嵌入 HTML 后干扰截图序列化
+            svg_text = re.sub(r"<\?xml[^>]*\?>\s*", "", svg_text, flags=re.IGNORECASE)
+            svg_text = re.sub(r"<!DOCTYPE[^>]*>\s*", "", svg_text, flags=re.IGNORECASE)
+            svg_text = re.sub(r"<!--.*?-->\s*", "", svg_text, flags=re.DOTALL)
+
+            match = re.search(r"<svg\b([^>]*)>", svg_text, flags=re.IGNORECASE)
+            if not match:
+                return svg_text
+
+            svg_attrs = match.group(1) or ""
+            if "width=" not in svg_attrs:
+                svg_attrs += ' width="100%"'
+            if "height=" not in svg_attrs:
+                svg_attrs += ' height="100%"'
+            if "preserveAspectRatio=" not in svg_attrs:
+                svg_attrs += ' preserveAspectRatio="xMidYMid meet"'
+            if "overflow=" not in svg_attrs:
+                svg_attrs += ' overflow="visible"'
+
+            normalized_open_tag = f"<svg{svg_attrs}>"
+            return re.sub(
+                r"<svg\b[^>]*>",
+                normalized_open_tag,
+                svg_text,
+                count=1,
+                flags=re.IGNORECASE,
+            )
+
         # 1. 提取品牌关键词
         brand_key = model_name.lower().split("-")[0]
 
@@ -4061,11 +4555,7 @@ class Api:
                     ) as f:
                         f.write(svg_content)
 
-            # 6. 尺寸加固：确保截图必现
-            if svg_content and "width=" not in svg_content:
-                svg_content = svg_content.replace(
-                    "<svg", '<svg width="100%" height="100%"'
-                )
+            svg_content = normalize_svg_markup(svg_content)
 
             return {"status": "success", "svg_raw": svg_content or ""}
 

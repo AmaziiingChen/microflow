@@ -8,7 +8,7 @@ class LLMServiceRssCacheAndChunkingTests(unittest.TestCase):
     def setUp(self):
         self.service = LLMService(api_key="", base_url="https://example.com/v1")
 
-    def test_rss_formatting_hits_cache_before_calling_model(self):
+    def test_rss_formatting_ignores_cache_when_global_cache_disabled(self):
         cached_markdown = "### 已缓存排版正文"
         fake_db = Mock()
         fake_db.get_ai_result_cache.return_value = {
@@ -20,7 +20,7 @@ class LLMServiceRssCacheAndChunkingTests(unittest.TestCase):
             patch.object(
                 self.service,
                 "_generate_with_retry",
-                side_effect=AssertionError("命中缓存时不应再调用模型"),
+                return_value="### 最新排版正文",
             ),
         ):
             result = self.service.format_rss_article(
@@ -30,8 +30,37 @@ class LLMServiceRssCacheAndChunkingTests(unittest.TestCase):
                 priority="manual",
             )
 
-        self.assertEqual(result, cached_markdown)
-        fake_db.get_ai_result_cache.assert_called_once()
+        self.assertEqual(result, "### 最新排版正文")
+        fake_db.get_ai_result_cache.assert_not_called()
+
+    def test_rss_formatting_can_bypass_cache_when_requested(self):
+        fake_db = Mock()
+        fake_db.get_ai_result_cache.return_value = {
+            "result_text": "### 已缓存排版正文"
+        }
+
+        with (
+            patch("src.llm_service._get_database", return_value=fake_db),
+            patch.object(self.service, "_read_cached_result") as read_cache_mock,
+            patch.object(self.service, "_write_cached_result") as write_cache_mock,
+            patch.object(
+                self.service,
+                "_generate_with_retry",
+                return_value="### 最新排版正文",
+            ) as generate_mock,
+        ):
+            result = self.service.format_rss_article(
+                "Cached RSS",
+                "原始正文",
+                custom_prompt="排版提示词",
+                priority="manual",
+                use_cache=False,
+            )
+
+        self.assertEqual(result, "### 最新排版正文")
+        read_cache_mock.assert_not_called()
+        generate_mock.assert_called_once()
+        write_cache_mock.assert_not_called()
 
     def test_long_rss_summary_uses_chunk_pipeline(self):
         with (

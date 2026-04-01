@@ -3,6 +3,34 @@ const isIgnorableResizeObserverError = (value) =>
     "ResizeObserver loop completed with undelivered notifications.",
   );
 
+const TELEMETRY_DIRECT_METHODS = new Set([
+  "track_telemetry_event",
+  "report_frontend_error",
+  "flush_telemetry",
+  "get_telemetry_status",
+  "clear_telemetry_queue",
+]);
+
+const callApiDirectIfReady = (methodName, ...args) => {
+  try {
+    const api = window.pywebview?.api;
+    if (!api || typeof api[methodName] !== "function") return;
+    const result = api[methodName](...args);
+    if (result && typeof result.then === "function") {
+      void result.catch(() => {});
+    }
+  } catch (_error) {
+    void _error;
+  }
+};
+
+const reportFrontendError = (payload = {}) => {
+  callApiDirectIfReady("report_frontend_error", {
+    page: "main",
+    ...payload,
+  });
+};
+
 // 全局错误捕获
 window.onerror = function (msg, url, line, col, error) {
   if (
@@ -12,6 +40,13 @@ window.onerror = function (msg, url, line, col, error) {
     return true;
   }
   console.error("JS错误:", msg, "行:", line);
+  reportFrontendError({
+    error_type: "window.onerror",
+    message: String(msg || error?.message || "未知 JS 错误"),
+    line: Number(line || 0),
+    column: Number(col || 0),
+    stack: String(error?.stack || ""),
+  });
   return false;
 };
 
@@ -29,6 +64,13 @@ window.addEventListener(
 
 window.addEventListener("unhandledrejection", function (event) {
   console.error("Promise错误:", event.reason);
+  reportFrontendError({
+    error_type: "unhandledrejection",
+    message: String(
+      event?.reason?.message || event?.reason || "未知 Promise 错误",
+    ),
+    stack: String(event?.reason?.stack || ""),
+  });
 });
 
 const EMOJI_STRIP_RE =
@@ -75,6 +117,44 @@ const readRootCssToken = (tokenName, fallbackValue = "") => {
     .trim();
   return value || fallbackValue;
 };
+
+const detectDesktopPlatform = () => {
+  if (typeof navigator === "undefined") {
+    return "other";
+  }
+
+  const platformHints = [
+    navigator.userAgentData?.platform,
+    navigator.platform,
+    navigator.userAgent,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (
+    platformHints.includes("mac") ||
+    platformHints.includes("darwin") ||
+    platformHints.includes("os x")
+  ) {
+    return "macos";
+  }
+
+  if (platformHints.includes("win")) {
+    return "windows";
+  }
+
+  return "other";
+};
+
+const applyPlatformDataAttribute = (platform = detectDesktopPlatform()) => {
+  if (typeof document !== "undefined" && document.documentElement) {
+    document.documentElement.dataset.platform = platform;
+  }
+  return platform;
+};
+
+const DESKTOP_PLATFORM = applyPlatformDataAttribute();
 
 const getSourceChipTokenByIndex = (index) =>
   FILTER_CHIP_TOKENS[index] ||
@@ -411,9 +491,28 @@ const safeApiCall = async (methodName, ...args) => {
       return { status: "error", message: `API 方法 ${methodName} 未就绪` };
     }
 
-    return await api[methodName](...args);
+    const result = await api[methodName](...args);
+    if (
+      !TELEMETRY_DIRECT_METHODS.has(String(methodName || "")) &&
+      result &&
+      result.status === "error"
+    ) {
+      callApiDirectIfReady("track_telemetry_event", "error_api", {
+        method: String(methodName || ""),
+        status: String(result.status || "error"),
+        message: String(result.message || "API 返回错误"),
+      });
+    }
+    return result;
   } catch (e) {
     console.error(`API 调用 ${methodName} 异常:`, e);
+    if (!TELEMETRY_DIRECT_METHODS.has(String(methodName || ""))) {
+      callApiDirectIfReady("track_telemetry_event", "error_api", {
+        method: String(methodName || ""),
+        status: "exception",
+        message: String(e || "API 调用异常"),
+      });
+    }
     return { status: "error", message: String(e) };
   }
 };
@@ -511,8 +610,12 @@ try {
         return;
       }
 
-      // 新增：System Prompt 编辑状态
+      // 新增：设置页子页面导航状态
       const isPromptEditorOpen = ref(false); // 是否打开 prompt 编辑视图
+      const isFontSheetOpen = ref(false);
+      const isSecondaryModelsSheetOpen = ref(false);
+      const showCustomRuleModal = ref(false); // 自定义数据源编辑子页面
+      const editingRuleId = ref(null); // 正在编辑的规则ID（null表示新增模式）
       const tempPromptContent = ref(""); // 编辑中的临时内容
       let promptEasyMDE = null; // EasyMDE 实例
 
@@ -1112,6 +1215,105 @@ try {
           ? true
           : Boolean(String(activeSettingsSection.value || "").trim()),
       );
+      const resolveMacosDragRegionLayout = () => {
+        if (isSettingsOpen.value && isSettingsSplitView.value) {
+          return "settings_split";
+        }
+        if (isDualPaneActive.value) {
+          return "dual";
+        }
+        return "single";
+      };
+      const refreshMacosDragRegion = () => {
+        if (DESKTOP_PLATFORM !== "macos") return;
+        const collectRectsFromSelectors = (selector, rects, seenKeys, pad = 6) => {
+          document.querySelectorAll(selector).forEach((el) => {
+            if (!(el instanceof HTMLElement)) return;
+            const style = window.getComputedStyle(el);
+            if (
+              style.display === "none" ||
+              style.visibility === "hidden" ||
+              style.pointerEvents === "none"
+            ) {
+              return;
+            }
+            const bounds = el.getBoundingClientRect();
+            if (bounds.width < 4 || bounds.height < 4) return;
+
+            const viewportWidth = Math.max(
+              window.innerWidth || 0,
+              document.documentElement?.clientWidth || 0,
+            );
+            const viewportHeight = Math.max(
+              window.innerHeight || 0,
+              document.documentElement?.clientHeight || 0,
+            );
+            if (!viewportWidth || !viewportHeight) return;
+            if (bounds.bottom <= 0 || bounds.top >= 132) return;
+
+            const left = Math.max(0, bounds.left - pad);
+            const top = Math.max(0, bounds.top - pad);
+            const right = Math.min(viewportWidth, bounds.right + pad);
+            const bottom = Math.min(viewportHeight, bounds.bottom + pad);
+            const width = Math.max(0, right - left);
+            const height = Math.max(0, bottom - top);
+            if (width <= 0 || height <= 0) return;
+
+            const rect = {
+              x: Math.round(left),
+              y: Math.round(Math.max(0, viewportHeight - bottom)),
+              width: Math.round(width),
+              height: Math.round(height),
+            };
+            const key = `${rect.x}:${rect.y}:${rect.width}:${rect.height}`;
+            if (seenKeys.has(key)) return;
+            seenKeys.add(key);
+            rects.push(rect);
+          });
+        };
+
+        const exclusionRects = [];
+        const seenRectKeys = new Set();
+        [
+          ".top-actions",
+          ".meta-badges-right",
+          ".detail-inline-search-anchor",
+          ".filter-scroll-container",
+          ".favorite-title",
+          ".header-action",
+          ".settings-pane-header",
+          ".settings-subpage-topbar",
+          ".settings-detail-mobile-nav",
+          "button",
+          "[role='button']",
+          "input",
+          "textarea",
+          "select",
+          "a[href]",
+          ".filter-chip",
+        ].forEach((selector) => {
+          collectRectsFromSelectors(selector, exclusionRects, seenRectKeys);
+        });
+
+        void safeApiCall("ensure_macos_drag_region", {
+          layout: resolveMacosDragRegionLayout(),
+          exclusion_rects: exclusionRects,
+        });
+      };
+      let macosDragRegionRefreshTimer = 0;
+      const scheduleMacosDragRegionRefresh = (delay = 0) => {
+        if (DESKTOP_PLATFORM !== "macos") return;
+        if (macosDragRegionRefreshTimer && typeof window !== "undefined") {
+          window.clearTimeout(macosDragRegionRefreshTimer);
+        }
+        macosDragRegionRefreshTimer = window.setTimeout(async () => {
+          macosDragRegionRefreshTimer = 0;
+          await nextTick();
+          requestAnimationFrame(() => {
+            refreshMacosDragRegion();
+          });
+        }, delay);
+      };
       const activeSettingsSubpage = computed(() => {
         if (showCustomRuleModal.value) {
           return "custom-rule";
@@ -1136,8 +1338,6 @@ try {
             activeSettingsSubpage.value || "main"
           }`,
       );
-      const isFontSheetOpen = ref(false);
-      const isSecondaryModelsSheetOpen = ref(false);
       const pendingReadUrls = ref([]); // 待更新普通公文队列
       const pendingNoticeVersion = ref(null); // 待更新公告队列
       const activeArticle = ref(null);
@@ -1286,6 +1486,71 @@ try {
           .trim()
           .startsWith("system:");
 
+      const getArticleTelemetrySourceType = (article) => {
+        if (isSystemContentArticle(article)) return "system";
+        if (isRssArticle(article)) return "rss";
+        return "html";
+      };
+
+      const getCurrentDetailModeForTelemetry = (article) => {
+        if (!article) return "";
+        if (isRssArticle(article)) {
+          return resolveRssDetailMode(article, rssDetailMode.value);
+        }
+        if (isSystemContentArticle(article)) return "raw";
+        return resolveStandardDetailMode(article, standardDetailMode.value);
+      };
+
+      const buildArticleTelemetryProps = (article, extra = {}) => {
+        const sourceType = getArticleTelemetrySourceType(article);
+        const ruleId = String(article?.rule_id || article?.ruleId || "").trim();
+        return {
+          article_id: Number(article?.id || 0),
+          source_type: sourceType,
+          source_name: String(
+            article?.source_name || article?.department || article?.category || "",
+          ).trim(),
+          rule_id: ruleId,
+          is_custom_source:
+            Boolean(ruleId) && !String(ruleId).startsWith("system:"),
+          has_ai_summary: Boolean(
+            sourceType === "rss"
+              ? getRssResolvedSummaryBody(article) ||
+                  (getRssResolvedTags(article) || []).length > 0
+              : getStandardResolvedSummaryBody(article),
+          ),
+          current_mode: getCurrentDetailModeForTelemetry(article),
+          ...extra,
+        };
+      };
+
+      const buildCustomRuleTelemetryProps = (ruleLike = {}, extra = {}) => {
+        const sourceType = String(ruleLike?.source_type || "html")
+          .trim()
+          .toLowerCase();
+        const ruleId = String(ruleLike?.rule_id || ruleLike?.ruleId || "").trim();
+        const sourceName = String(
+          ruleLike?.task_name || ruleLike?.source_name || "",
+        ).trim();
+        return {
+          source_type: sourceType === "rss" ? "rss" : "html",
+          source_name: sourceName,
+          rule_id: ruleId,
+          is_custom_source: true,
+          is_editing:
+            typeof extra.is_editing === "boolean"
+              ? extra.is_editing
+              : Boolean(editingRuleId.value || ruleId),
+          enable_ai_summary: Boolean(
+            ruleLike?.enable_ai_summary ?? ruleLike?.require_ai_summary ?? false,
+          ),
+          enable_ai_formatting: Boolean(
+            ruleLike?.enable_ai_formatting ?? false,
+          ),
+          ...extra,
+        };
+      };
+
       const getDetailTargetView = () =>
         isDualPaneActive.value ? "list" : "detail";
 
@@ -1335,6 +1600,24 @@ try {
             clearDualPanePlaceholderTimer();
             suppressDualPanePlaceholder.value = false;
           }
+        },
+        { flush: "post" },
+      );
+
+      watch(
+        [isDualPaneActive, isSettingsOpen, isSettingsSplitView, currentView],
+        () => {
+          if (DESKTOP_PLATFORM !== "macos") return;
+          scheduleMacosDragRegionRefresh();
+        },
+        { flush: "post" },
+      );
+
+      watch(
+        [activeArticle, activeSettingsSection],
+        () => {
+          if (DESKTOP_PLATFORM !== "macos") return;
+          scheduleMacosDragRegionRefresh();
         },
         { flush: "post" },
       );
@@ -2546,6 +2829,7 @@ try {
         }
       };
 
+      const listScrollContainerRef = ref(null);
       const detailScrollContainerRef = ref(null);
       const rssBodyShellRef = ref(null);
       const rssBodyContentRef = ref(null);
@@ -2553,6 +2837,82 @@ try {
       const rssTocItems = ref([]);
       const activeRssTocId = ref("");
       let rssTocRefreshFrame = 0;
+      let listScrollbarHideTimer = 0;
+      let detailScrollbarHideTimer = 0;
+
+      const clearListScrollbarHideTimer = () => {
+        if (listScrollbarHideTimer && typeof window !== "undefined") {
+          window.clearTimeout(listScrollbarHideTimer);
+        }
+        listScrollbarHideTimer = 0;
+      };
+
+      const setListScrollbarActive = (active) => {
+        const container = listScrollContainerRef.value;
+        if (!container?.classList) return;
+        container.classList.toggle("is-scrollbar-active", Boolean(active));
+      };
+
+      const hideListScrollbar = () => {
+        clearListScrollbarHideTimer();
+        setListScrollbarActive(false);
+      };
+
+      const showListScrollbarTemporarily = () => {
+        if (!showListPane.value || isSettingsOpen.value) {
+          return;
+        }
+
+        setListScrollbarActive(true);
+        clearListScrollbarHideTimer();
+
+        if (typeof window !== "undefined") {
+          listScrollbarHideTimer = window.setTimeout(() => {
+            setListScrollbarActive(false);
+            listScrollbarHideTimer = 0;
+          }, 1800);
+        }
+      };
+
+      const clearDetailScrollbarHideTimer = () => {
+        if (detailScrollbarHideTimer && typeof window !== "undefined") {
+          window.clearTimeout(detailScrollbarHideTimer);
+        }
+        detailScrollbarHideTimer = 0;
+      };
+
+      const setDetailScrollbarActive = (active) => {
+        const container = detailScrollContainerRef.value;
+        if (!container?.classList) return;
+        container.classList.toggle("is-scrollbar-active", Boolean(active));
+      };
+
+      const hideDetailScrollbar = () => {
+        clearDetailScrollbarHideTimer();
+        setDetailScrollbarActive(false);
+      };
+
+      const showDetailScrollbarTemporarily = () => {
+        if (!isDetailPaneVisible.value) return;
+
+        setDetailScrollbarActive(true);
+        clearDetailScrollbarHideTimer();
+
+        if (typeof window !== "undefined") {
+          detailScrollbarHideTimer = window.setTimeout(() => {
+            setDetailScrollbarActive(false);
+            detailScrollbarHideTimer = 0;
+          }, 5000);
+        }
+      };
+
+      const handleDetailScrollbarInteraction = () => {
+        showDetailScrollbarTemporarily();
+      };
+
+      const handleListScrollbarInteraction = () => {
+        showListScrollbarTemporarily();
+      };
 
       const getActiveAnnotationViewMode = (article = activeArticle.value) => {
         if (!isRssArticle(article)) {
@@ -2902,6 +3262,14 @@ try {
         if (!keyword) {
           return;
         }
+        fireTelemetryEvent(
+          "search_submit",
+          buildArticleTelemetryProps(activeArticle.value, {
+            scope: "detail",
+            keyword_length: keyword.length,
+            result_count: Math.max(detailSearchMatchCount.value, 0),
+          }),
+        );
         if (detailSearchMatchCount.value <= 0) {
           detailSearchActiveIndex.value = 0;
           queueApplyDetailSearchMarks(true);
@@ -3193,6 +3561,7 @@ try {
       };
 
       const handleListPanePointerDown = () => {
+        showListScrollbarTemporarily();
         setActiveKeyboardPane("list");
       };
 
@@ -3213,6 +3582,7 @@ try {
           return;
         }
 
+        showDetailScrollbarTemporarily();
         setActiveKeyboardPane("detail");
 
         const markTarget = event.target?.closest?.(".article-annotation-mark");
@@ -3235,6 +3605,7 @@ try {
           return;
         }
 
+        showDetailScrollbarTemporarily();
         setActiveKeyboardPane("detail");
 
         const markTarget = event.target?.closest?.(".article-annotation-mark");
@@ -3638,6 +4009,18 @@ try {
               if (deleteRes?.status !== "success") {
                 throw new Error(deleteRes?.message || "批注删除失败");
               }
+              fireTelemetryEvent(
+                "note_delete",
+                buildArticleTelemetryProps(activeArticle.value, {
+                  annotation_id: Number(exactMatch.id || 0),
+                  annotation_view_mode: snapshot.viewMode,
+                  selection_length: Math.max(
+                    Number(snapshot.endOffset || 0) -
+                      Number(snapshot.startOffset || 0),
+                    0,
+                  ),
+                }),
+              );
             }
             holdAnnotationSelectionSync();
             clearAnnotationSelection();
@@ -3680,6 +4063,22 @@ try {
               ? savedMark.getBoundingClientRect()
               : null;
           showAnnotationToolbarForRecord(savedAnnotation, savedRect);
+          fireTelemetryEvent(
+            "note_create",
+            buildArticleTelemetryProps(activeArticle.value, {
+              annotation_id: Number(savedAnnotation.id || 0),
+              annotation_action: exactMatch?.id ? "update" : "create",
+              annotation_view_mode: savedAnnotation.view_mode,
+              selection_length: Math.max(
+                Number(snapshot.endOffset || 0) - Number(snapshot.startOffset || 0),
+                0,
+              ),
+              has_highlight: Boolean(normalizedStyle.highlight_color),
+              has_underline: Boolean(normalizedStyle.underline),
+              has_strike: Boolean(normalizedStyle.strike),
+              has_bold: Boolean(normalizedStyle.bold),
+            }),
+          );
         } catch (error) {
           console.error("保存正文批注失败:", error);
           showNotification(
@@ -3707,6 +4106,10 @@ try {
           return;
         }
 
+        const deletingAnnotation = findArticleAnnotationById(annotationId);
+        const deletingStyle = normalizeAnnotationStyle(
+          deletingAnnotation?.style_payload || annotationToolbarState.value.style,
+        );
         isAnnotationSaving.value = true;
         try {
           const deleteRes = await safeApiCall(
@@ -3722,6 +4125,20 @@ try {
           clearAnnotationSelection();
           await loadArticleAnnotations({ skipSelectionSync: true });
           hideAnnotationToolbar();
+          fireTelemetryEvent(
+            "note_delete",
+            buildArticleTelemetryProps(activeArticle.value, {
+              annotation_id: annotationId,
+              annotation_view_mode:
+                deletingAnnotation?.view_mode ||
+                annotationSelectionSnapshot.value?.viewMode ||
+                getActiveAnnotationViewMode(),
+              has_highlight: Boolean(deletingStyle.highlight_color),
+              has_underline: Boolean(deletingStyle.underline),
+              has_strike: Boolean(deletingStyle.strike),
+              has_bold: Boolean(deletingStyle.bold),
+            }),
+          );
         } catch (error) {
           console.error("删除正文批注失败:", error);
           showNotification(
@@ -4010,6 +4427,7 @@ try {
       };
 
       const handleDetailContentScroll = () => {
+        showDetailScrollbarTemporarily();
         updateActiveRssTocItem();
         queueAnnotationSelectionSync();
       };
@@ -4152,6 +4570,7 @@ try {
 
       onUnmounted(() => {
         clearRssTocRefreshFrame();
+        clearListScrollbarHideTimer();
         clearDualPanePlaceholderTimer();
         clearAnnotationSelectionSettleTimer();
         window.removeEventListener("resize", handleWindowResize);
@@ -4947,14 +5366,53 @@ try {
         }
         if (!oldArticle || newArticle.id !== oldArticle.id) {
           setDefaultDetailMode(newArticle);
+          fireTelemetryEvent(
+            "article_open",
+            buildArticleTelemetryProps(newArticle, {
+              default_mode: isRssArticle(newArticle)
+                ? getPreferredRssDetailMode(newArticle)
+                : getPreferredStandardDetailMode(newArticle),
+            }),
+          );
         }
         if (!isDualPaneActive.value) {
           setActiveKeyboardPane("detail");
         }
       });
-      watch(rssDetailMode, () => {
+      watch(rssDetailMode, (nextMode, previousMode) => {
         closeImagePreview();
         resetRssImageLoadErrors();
+        if (
+          activeArticle.value &&
+          isRssArticle(activeArticle.value) &&
+          previousMode !== undefined &&
+          nextMode !== previousMode
+        ) {
+          fireTelemetryEvent(
+            "detail_mode_switch",
+            buildArticleTelemetryProps(activeArticle.value, {
+              from_mode: previousMode,
+              to_mode: nextMode,
+            }),
+          );
+        }
+      });
+      watch(standardDetailMode, (nextMode, previousMode) => {
+        if (
+          activeArticle.value &&
+          !isRssArticle(activeArticle.value) &&
+          !isSystemContentArticle(activeArticle.value) &&
+          previousMode !== undefined &&
+          nextMode !== previousMode
+        ) {
+          fireTelemetryEvent(
+            "detail_mode_switch",
+            buildArticleTelemetryProps(activeArticle.value, {
+              from_mode: previousMode,
+              to_mode: nextMode,
+            }),
+          );
+        }
       });
 
       const isLoading = ref(false);
@@ -5238,24 +5696,18 @@ try {
       const getTagColor = (index) => tagColors[index % tagColors.length];
 
       const createDefaultSystemNotice = () => ({
-        id: "sys_notice_1",
-        title: "欢迎使用 MicroFlow (微流)",
-        publish_time: new Date().toLocaleDateString("zh-CN", {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
+        id: "system_notice_placeholder",
+        title: "系统内容同步中",
+        publish_time: "",
         department: "系统公告",
         source_name: "系统通知",
-        category: "v1.0.0",
-        tags: ["新手指南", "版本 1.0.0"],
-        url: "https://github.com/AmaziiingChen/microflow",
-        content:
-          "亲爱的同学/老师，欢迎使用 MicroFlow！<br><br>为了让 AI 能够为您智能总结长篇公文，您需要先配置 AI 的 API 密钥。<br><br>👉 **配置方法**：请点击本界面**左上角的「设置/齿轮」图标**，在弹出的面板中填入您的 API 信息。<br><br>配置完成后，您就可以体验极速的公文摘要功能了。本卡片不仅是新手指南，未来也会在这里向您推送最新的版本更新说明。",
+        category: "",
+        tags: [],
+        url: "",
+        content: "",
         is_announcement: true,
-        version: "1.0.0",
+        version: "",
+        is_placeholder: true,
       });
       const SYSTEM_CONTENT_KEYS = Object.freeze([
         "announcement",
@@ -5360,10 +5812,14 @@ try {
 
         const nextEntries = createEmptySystemContentEntries();
         let nextNoticeArticle = null;
+        let hasAnyEntry = false;
 
         for (const key of SYSTEM_CONTENT_KEYS) {
           const normalizedEntry = normalizeSystemContentEntry(key, payload[key]);
           nextEntries[key] = normalizedEntry;
+          if (normalizedEntry) {
+            hasAnyEntry = true;
+          }
           if (key === "announcement" && normalizedEntry) {
             nextNoticeArticle = normalizedEntry;
           }
@@ -5372,7 +5828,7 @@ try {
         systemContentEntries.value = nextEntries;
 
         if (!nextNoticeArticle) {
-          return false;
+          return hasAnyEntry;
         }
 
         const newPublishTime =
@@ -5419,9 +5875,193 @@ try {
             nextNoticeArticle.version ||
             systemNotice.value.version,
           is_announcement: true,
+          is_placeholder: false,
         };
 
         return true;
+      };
+      const buildFallbackSystemContentArticle = (key) => {
+        const fallbackTimestamp = String(
+          softwareUpdateState.value.releaseDate ||
+            systemNotice.value.publish_time ||
+            new Date().toLocaleString("zh-CN", { hour12: false }),
+        ).trim();
+        const fallbackVersion = String(
+          softwareUpdateState.value.latestVersion ||
+            softwareUpdateState.value.currentVersion ||
+            remoteVersion.value ||
+            systemNotice.value.version ||
+            "v1.0.0",
+        ).trim();
+        const feedbackEmail = "amaziiingchen@qq.com";
+        const downloadUrl = String(softwareUpdateState.value.downloadUrl || "").trim();
+
+        if (key === "announcement") {
+          const title = String(systemNotice.value.title || "系统公告").trim();
+          const body = String(
+            systemNotice.value.content ||
+              systemNotice.value.summary ||
+              softwareUpdateState.value.notes ||
+              "当前公告内容暂未同步完成，请稍后再试。",
+          ).trim();
+          return buildArticleViewModel({
+            id: systemNotice.value.id || "system_announcement_fallback",
+            rule_id: "system:announcement",
+            title,
+            summary: body,
+            ai_summary: body,
+            raw_markdown: body,
+            enhanced_markdown: body,
+            publish_time: fallbackTimestamp,
+            exact_time: fallbackTimestamp,
+            date: fallbackTimestamp,
+            department: systemNotice.value.department || "系统公告",
+            source_name: systemNotice.value.source_name || "系统通知",
+            source_type: "rss",
+            category: systemNotice.value.category || fallbackVersion,
+            url: systemNotice.value.url || "microflow://system/announcement",
+            ai_tags:
+              systemNotice.value.parsedTags ||
+              systemNotice.value.tags ||
+              ["系统通知", fallbackVersion],
+            is_announcement: true,
+            system_content_key: "announcement",
+            has_full_content: true,
+            hasFullContent: true,
+            enable_ai_formatting: true,
+            enable_ai_summary: true,
+          });
+        }
+
+        if (key === "changelog") {
+          const sections = [
+            "## 应用信息",
+            "",
+            `- 名称：MicroFlow`,
+            `- 当前版本：${softwareUpdateState.value.currentVersion || fallbackVersion}`,
+            softwareUpdateState.value.latestVersion
+              ? `- 最新版本：${softwareUpdateState.value.latestVersion}`
+              : "",
+            softwareUpdateState.value.releaseDate
+              ? `- 发布时间：${softwareUpdateState.value.releaseDate}`
+              : "",
+            "",
+            "## 更新说明",
+            "",
+            String(
+              softwareUpdateState.value.notes ||
+                softwareUpdateState.value.detail ||
+                "当前暂无额外更新说明。",
+            ).trim(),
+            downloadUrl ? "" : "",
+            downloadUrl ? "## 下载地址" : "",
+            downloadUrl ? "" : "",
+            downloadUrl || "",
+          ]
+            .filter((line, index, arr) => {
+              if (!line && !arr[index - 1] && !arr[index + 1]) return false;
+              return true;
+            })
+            .join("\n")
+            .trim();
+          return buildArticleViewModel({
+            id: "system_changelog_fallback",
+            rule_id: "system:changelog",
+            title: "关于 MicroFlow",
+            summary:
+              softwareUpdateState.value.detail ||
+              softwareUpdateState.value.notes ||
+              "查看版本信息与更新说明。",
+            ai_summary: sections,
+            raw_markdown: sections,
+            enhanced_markdown: sections,
+            publish_time: fallbackTimestamp,
+            exact_time: fallbackTimestamp,
+            date: fallbackTimestamp,
+            department: "关于 MicroFlow",
+            source_name: "系统内容",
+            source_type: "rss",
+            category: fallbackVersion,
+            url: downloadUrl || "microflow://system/changelog",
+            ai_tags: ["关于", "更新日志", fallbackVersion],
+            system_content_key: "changelog",
+            has_full_content: true,
+            hasFullContent: true,
+            enable_ai_formatting: true,
+            enable_ai_summary: true,
+          });
+        }
+
+        if (key === "feedback") {
+          const body = [
+            `如需反馈 Bug、提交建议或申请排查，请发送邮件至 <contact>${feedbackEmail}</contact>。`,
+            "",
+            "建议附带以下信息，便于更快定位：",
+            "",
+            "1. 当前版本号与系统平台",
+            "2. 涉及的数据源、规则名称或文章标题",
+            "3. 复现步骤、截图或录屏",
+            "4. 报错信息或控制台日志",
+          ].join("\n");
+          return buildArticleViewModel({
+            id: "system_feedback_fallback",
+            rule_id: "system:feedback",
+            title: "反馈与建议",
+            summary: `欢迎通过邮件联系：${feedbackEmail}`,
+            ai_summary: body,
+            raw_markdown: body,
+            enhanced_markdown: body,
+            publish_time: fallbackTimestamp,
+            exact_time: fallbackTimestamp,
+            date: fallbackTimestamp,
+            department: "反馈与建议",
+            source_name: "系统内容",
+            source_type: "rss",
+            category: "联系方式",
+            url: `mailto:${feedbackEmail}`,
+            ai_tags: ["反馈", "建议", "邮箱"],
+            feedback_email: feedbackEmail,
+            system_content_key: "feedback",
+            has_full_content: true,
+            hasFullContent: true,
+            enable_ai_formatting: true,
+            enable_ai_summary: true,
+          });
+        }
+
+        if (key === "disclaimer") {
+          const body = [
+            "1. MicroFlow 仅作为本地信息聚合与阅读辅助工具，不代表任何官方发布渠道。",
+            "2. AI 摘要、标签、排版与增强结果仅用于提升阅读效率，不构成官方结论、法律意见或执行依据。",
+            "3. 关键事项请始终以原始发布页面、原文附件与官方通知为准。",
+            "4. 因源站改版、接口限流、模型输出偏差、网络异常或第三方服务故障造成的内容偏差，请以原始渠道为准。",
+          ].join("\n");
+          return buildArticleViewModel({
+            id: "system_disclaimer_fallback",
+            rule_id: "system:disclaimer",
+            title: "免责声明",
+            summary: "使用前请阅读免责声明与信息使用边界。",
+            ai_summary: body,
+            raw_markdown: body,
+            enhanced_markdown: body,
+            publish_time: fallbackTimestamp,
+            exact_time: fallbackTimestamp,
+            date: fallbackTimestamp,
+            department: "免责声明",
+            source_name: "系统内容",
+            source_type: "rss",
+            category: "使用说明",
+            url: "microflow://system/disclaimer",
+            ai_tags: ["免责声明", "使用边界"],
+            system_content_key: "disclaimer",
+            has_full_content: true,
+            hasFullContent: true,
+            enable_ai_formatting: true,
+            enable_ai_summary: true,
+          });
+        }
+
+        return null;
       };
       const loadSystemContentIndex = async (seedData = null) => {
         try {
@@ -5480,6 +6120,7 @@ try {
             content: res.announcement.content || systemNotice.value.content,
             is_announcement: true,
             version: res.announcement.version || systemNotice.value.version,
+            is_placeholder: false,
           };
         }
 
@@ -5722,6 +6363,12 @@ try {
         fontFamily: "sans-serif", // 🌟 新增：字体风格，默认黑体
         customFontPath: "", // 🌟 新增：外部字体路径
         customFontName: "", // 🌟 新增：外部字体原始名称
+        channel: "stable",
+        telemetryEnabled: true,
+        telemetryErrorReportsEnabled: true,
+        telemetryConsentStatus: "enabled",
+        telemetryInstallId: "",
+        telemetryNoticeShown: false,
         subscribedSources: [], // 🌟 新增：订阅的来源列表
         pollingInterval: 60, // 🌟 新增：后台巡检频率（分钟），默认 1 小时
         isPinned: false, // 🌟 新增：默认不置顶
@@ -5763,6 +6410,79 @@ try {
         );
         return matched?.description || "冷灰底盘与纯白卡片，干净通透。";
       });
+      const telemetryStatus = ref({
+        status: "success",
+        enabled: false,
+        error_reports_enabled: false,
+        consent_status: "undecided",
+        endpoint_configured: false,
+        batch_size: 30,
+        flush_interval_sec: 1800,
+        sample_rate: 0.3,
+        queue: {
+          total_count: 0,
+          pending_count: 0,
+          failed_count: 0,
+          sent_count: 0,
+          ready_count: 0,
+        },
+      });
+      const isTelemetryFlushing = ref(false);
+      let telemetryStartupNoticeShownThisSession = false;
+      const telemetryQueueSummary = computed(() => {
+        const queue = telemetryStatus.value?.queue || {};
+        const pending = Number(queue.pending_count || 0);
+        const failed = Number(queue.failed_count || 0);
+        const ready = Number(queue.ready_count || 0);
+        if (pending <= 0 && failed <= 0) {
+          return "当前没有待上报事件";
+        }
+        return `待上报 ${pending} 条，可立即发送 ${ready} 条，失败重试 ${failed} 条`;
+      });
+      const telemetryRemoteStatusText = computed(() => {
+        if (telemetryStatus.value?.remote_enabled === false) {
+          return "云端已关闭";
+        }
+        if (!telemetryStatus.value?.endpoint_configured) {
+          return "等待上报服务接入";
+        }
+        return "已连接上报端点";
+      });
+      const telemetryConsentLabel = computed(() => {
+        const consentStatus = String(
+          telemetryStatus.value?.consent_status || "undecided",
+        ).trim();
+        if (consentStatus === "enabled") return "已允许";
+        if (consentStatus === "disabled") return "已关闭";
+        return "待决定";
+      });
+      const telemetryUploadAvailable = computed(
+        () =>
+          telemetryStatus.value?.remote_enabled !== false &&
+          Boolean(telemetryStatus.value?.endpoint_configured),
+      );
+      const getTelemetryStartupNoticePreset = (channel = "stable") => {
+        const normalized = String(channel || "stable").trim().toLowerCase();
+        if (normalized === "beta") {
+          return {
+            title: "Beta 渠道已启用匿名诊断",
+            message:
+              "当前测试渠道会记录更完整的匿名功能与稳定性事件，便于快速收敛问题，可在设置中关闭。",
+          };
+        }
+        if (normalized === "internal") {
+          return {
+            title: "Internal 渠道已启用完整遥测",
+            message:
+              "当前内部渠道默认开启全量匿名诊断，用于验证抓取、更新与 AI 链路稳定性，可在设置中关闭。",
+          };
+        }
+        return {
+          title: "已开启匿名统计",
+          message:
+            "当前 Stable 渠道默认记录匿名功能与错误事件，用于改进体验，可在设置中随时关闭。",
+        };
+      };
 
       const getFontFormatByPath = (fontPath = "") => {
         const normalized = String(fontPath || "").trim().toLowerCase();
@@ -5791,6 +6511,39 @@ try {
         return await safeApiCall("save_config", configPayload);
       };
 
+      const trackTelemetryEvent = async (
+        eventName,
+        props = {},
+        force = false,
+      ) => {
+        if (!eventName) return { status: "skipped" };
+        return await safeApiCall(
+          "track_telemetry_event",
+          eventName,
+          props,
+          force,
+        );
+      };
+
+      const fireTelemetryEvent = (eventName, props = {}, force = false) => {
+        void trackTelemetryEvent(eventName, props, force);
+      };
+
+      const refreshTelemetryStatus = async () => {
+        const res = await safeApiCall("get_telemetry_status");
+        if (res && res.status === "success") {
+          telemetryStatus.value = {
+            ...telemetryStatus.value,
+            ...res,
+            queue: {
+              ...(telemetryStatus.value.queue || {}),
+              ...(res.queue || {}),
+            },
+          };
+        }
+        return res;
+      };
+
       const mergeConfigFromBackend = (data) => {
         if (!data || typeof data !== "object") return;
         isApplyingBackendConfig.value = true;
@@ -5798,6 +6551,17 @@ try {
         normalizedData.themeAppearance = normalizeThemeAppearance(
           normalizedData.themeAppearance,
         );
+        normalizedData.channel = String(
+          normalizedData.channel || config.value.channel || "stable",
+        )
+          .trim()
+          .toLowerCase();
+        if (
+          normalizedData.telemetryEnabled ||
+          normalizedData.telemetryErrorReportsEnabled
+        ) {
+          normalizedData.telemetryConsentStatus = "enabled";
+        }
         if (normalizedData.themeAppearance) {
           lastSavedThemeAppearance.value = normalizedData.themeAppearance;
         }
@@ -5805,6 +6569,144 @@ try {
         Promise.resolve().then(() => {
           isApplyingBackendConfig.value = false;
         });
+      };
+
+      const maybeShowTelemetryStartupNotice = async () => {
+        if (!configHydrated || telemetryStartupNoticeShownThisSession) {
+          return;
+        }
+        if (config.value.telemetryNoticeShown) {
+          telemetryStartupNoticeShownThisSession = true;
+          return;
+        }
+        if (
+          !config.value.telemetryEnabled &&
+          !config.value.telemetryErrorReportsEnabled
+        ) {
+          telemetryStartupNoticeShownThisSession = true;
+          return;
+        }
+
+        telemetryStartupNoticeShownThisSession = true;
+        const preset = getTelemetryStartupNoticePreset(config.value.channel);
+        showNotification(preset.title, preset.message, "info", 4200);
+        fireTelemetryEvent(
+          "feature_discovery",
+          {
+            feature: "telemetry_notice",
+            channel: String(config.value.channel || "stable"),
+          },
+          true,
+        );
+
+        config.value.telemetryNoticeShown = true;
+        const res = await saveConfigSafely();
+        if (!res || res.status !== "success") {
+          config.value.telemetryNoticeShown = false;
+          telemetryStartupNoticeShownThisSession = false;
+          console.warn("遥测首启提示状态保存失败:", res?.message || "");
+        }
+      };
+
+      const setTelemetryToggle = async (key, nextValue) => {
+        const normalizedValue = Boolean(nextValue);
+        const previousValue = Boolean(config.value[key]);
+        if (normalizedValue === previousValue) return;
+
+        config.value[key] = normalizedValue;
+        if (
+          config.value.telemetryEnabled ||
+          config.value.telemetryErrorReportsEnabled
+        ) {
+          config.value.telemetryConsentStatus = "enabled";
+        } else {
+          config.value.telemetryConsentStatus = "disabled";
+        }
+
+        try {
+          const res = await saveConfigSafely();
+          if (!res || res.status !== "success") {
+            throw new Error(res?.message || "保存设置失败");
+          }
+          await refreshTelemetryStatus();
+        } catch (e) {
+          config.value[key] = previousValue;
+          if (
+            config.value.telemetryEnabled ||
+            config.value.telemetryErrorReportsEnabled
+          ) {
+            config.value.telemetryConsentStatus = "enabled";
+          } else {
+            config.value.telemetryConsentStatus = "disabled";
+          }
+          showNotification("保存失败", String(e || "保存设置失败"), "error", 2400);
+        }
+      };
+
+      const flushTelemetryNow = async () => {
+        if (isTelemetryFlushing.value) return;
+        if (telemetryStatus.value?.remote_enabled === false) {
+          showNotification(
+            "云端已关闭",
+            "当前渠道未启用匿名上报，暂时不需要手动发送。",
+            "info",
+            2200,
+          );
+          return;
+        }
+        if (!telemetryStatus.value?.endpoint_configured) {
+          showNotification(
+            "等待上报服务接入",
+            "当前版本尚未接入云端接收服务，本地匿名事件会继续保留在队列中。",
+            "info",
+            2400,
+          );
+          return;
+        }
+        isTelemetryFlushing.value = true;
+        try {
+          const res = await safeApiCall("flush_telemetry", true);
+          await refreshTelemetryStatus();
+          if (res?.status === "success") {
+            showNotification(
+              "上报完成",
+              `本次已发送 ${res.accepted || 0} 条匿名事件`,
+              "success",
+              2200,
+            );
+          } else if (res?.status === "empty") {
+            showNotification("无需上报", "当前没有待发送的匿名事件", "info", 2200);
+          } else {
+            showNotification(
+              "上报失败",
+              res?.message || "匿名事件上报失败",
+              "error",
+              2400,
+            );
+          }
+        } finally {
+          isTelemetryFlushing.value = false;
+        }
+      };
+
+      const clearTelemetryQueueNow = async () => {
+        const res = await safeApiCall("clear_telemetry_queue");
+        await refreshTelemetryStatus();
+        if (res?.status === "success") {
+          showNotification(
+            "已清空",
+            `已删除 ${res.deleted_count || 0} 条本地匿名事件`,
+            "success",
+            2200,
+          );
+        } else {
+          showNotification(
+            "清空失败",
+            res?.message || "清空本地匿名事件失败",
+            "error",
+            2400,
+          );
+        }
       };
 
       const persistThemeAppearance = async () => {
@@ -5892,6 +6794,27 @@ try {
         },
       );
 
+      watch(
+        [
+          isDetailPaneVisible,
+          activeArticle,
+          rssDetailMode,
+          standardDetailMode,
+          isEditingSummary,
+        ],
+        async ([visible]) => {
+          clearDetailScrollbarHideTimer();
+
+          if (!visible) {
+            hideDetailScrollbar();
+            return;
+          }
+
+          await nextTick();
+          showDetailScrollbarTemporarily();
+        },
+      );
+
       // 🕷️ 自定义爬虫规则相关状态
       const customRules = ref([]); // 现有规则列表
       const DEFAULT_RSS_STRATEGY_CATALOG = {
@@ -5974,8 +6897,6 @@ try {
             Number(rssSummary.attention_count || 0),
         };
       });
-      const showCustomRuleModal = ref(false); // 向导弹窗显示状态
-      const editingRuleId = ref(null); // 正在编辑的规则ID（null表示新增模式）
       const isGeneratingRule = ref(false); // AI 生成中的 loading 态
       const isSavingCustomRule = ref(false); // 规则保存中的 loading 态
       const previewData = ref(null); // 沙盒测试样本数据
@@ -5991,6 +6912,9 @@ try {
       let activeRssPreviewRequestToken = 0;
 
       watch(activeSettingsSubpage, async (subpage) => {
+        if (DESKTOP_PLATFORM === "macos") {
+          scheduleMacosDragRegionRefresh();
+        }
         if (subpage === "prompt" && isPromptEditorOpen.value) {
           await schedulePromptEditorInit();
         }
@@ -6048,6 +6972,7 @@ try {
         nextCustomRuleRequestEpoch();
         isGeneratingRule.value = false;
         isRetestingRule.value = false;
+        isSavingCustomRule.value = false;
         if (cancelRssPreview) {
           cancelActiveRssPreview();
         } else {
@@ -6883,9 +7808,29 @@ try {
             if (collapsePanelOnSuccess && previewData.value.length > 0) {
               showSelectorPanel.value = false;
             }
+            fireTelemetryEvent(
+              "custom_rule_test_result",
+              buildCustomRuleTelemetryProps(retestRule, {
+                action: "retest",
+                result: "success",
+                result_count: Number(previewData.value.length || 0),
+                detail_preview_required: Boolean(res?.detail_preview_required),
+                detail_preview_passed: Boolean(res?.detail_preview_passed),
+              }),
+            );
             return true;
           }
 
+          fireTelemetryEvent(
+            "custom_rule_test_result",
+            buildCustomRuleTelemetryProps(retestRule, {
+              action: "retest",
+              result: "error",
+              message: String(res?.message || "提取数据失败"),
+              detail_preview_required: Boolean(res?.detail_preview_required),
+              detail_preview_passed: Boolean(res?.detail_preview_passed),
+            }),
+          );
           if (notifyError) {
             showNotification(
               "测试失败",
@@ -6896,6 +7841,14 @@ try {
           return false;
         } catch (error) {
           console.error("重新测试异常:", error);
+          fireTelemetryEvent(
+            "custom_rule_test_result",
+            buildCustomRuleTelemetryProps(activeRule, {
+              action: "retest",
+              result: "exception",
+              message: String(error?.message || error || "请求失败"),
+            }),
+          );
           if (notifyError) {
             showNotification("测试异常", "请求失败，请重试", "error");
           }
@@ -7622,6 +8575,12 @@ try {
           return normalized;
         }
 
+        fireTelemetryEvent("update_available", {
+          source,
+          latest_version: normalized.latestVersion,
+          force_update: Boolean(normalized.forceUpdate),
+        });
+
         const noticeMessage = normalized.forceUpdate
           ? `检测到强制更新版本 ${normalized.latestVersion}，请尽快下载新版。`
           : `发现 ${normalized.latestVersion}，可在设置页下载更新。`;
@@ -7658,6 +8617,12 @@ try {
           const normalized = userInitiated
             ? notifySoftwareUpdateIfNeeded(res, "manual")
             : applySoftwareUpdateSnapshot(res);
+          fireTelemetryEvent("update_check_result", {
+            source: userInitiated ? "manual" : "background",
+            result: normalized.status === "error" ? "error" : "success",
+            has_update: Boolean(normalized.hasUpdate),
+            force_update: Boolean(normalized.forceUpdate),
+          });
 
           if (userInitiated && !normalized.hasUpdate) {
             const title =
@@ -7667,6 +8632,11 @@ try {
         } catch (e) {
           const message = String(e || "检查更新失败");
           applySoftwareUpdateSnapshot({ status: "error", message });
+          fireTelemetryEvent("update_check_result", {
+            source: userInitiated ? "manual" : "background",
+            result: "error",
+            message,
+          });
           if (userInitiated) {
             showNotification("检查失败", message, "error", 2500);
           }
@@ -7681,6 +8651,10 @@ try {
           showNotification("暂无下载链接", "当前版本没有可用的下载地址", "warning", 2500);
           return false;
         }
+        fireTelemetryEvent("update_download_click", {
+          latest_version: String(softwareUpdateState.value.latestVersion || "").trim(),
+          download_url: url,
+        });
         void openBrowser(url, event);
         return false;
       };
@@ -8178,6 +9152,15 @@ try {
 
       const activeSource = ref("全部");
 
+      watch(
+        activeSource,
+        () => {
+          if (DESKTOP_PLATFORM !== "macos") return;
+          scheduleMacosDragRegionRefresh();
+        },
+        { flush: "post" },
+      );
+
       const shouldInsertArticleIntoCurrentList = (article = {}) => {
         if (isSearching.value || String(searchQuery.value || "").trim()) {
           return false;
@@ -8631,18 +9614,49 @@ try {
                 ? "RSS 解析完成，已返回 1 条代表样本用于预览"
                 : "RSS 解析完成，但暂未提取到可预览样本",
             );
+            fireTelemetryEvent(
+              "custom_rule_test_result",
+              buildCustomRuleTelemetryProps(ruleDict, {
+                action: "preview",
+                result: "success",
+                result_count: Number(previewData.value.length || 0),
+              }),
+            );
           } else if (res.status !== "cancelled") {
             aiProgress.error(
               "预览失败",
               res.message || "RSS 验证失败",
             );
+            fireTelemetryEvent(
+              "custom_rule_test_result",
+              buildCustomRuleTelemetryProps(ruleDict, {
+                action: "preview",
+                result: "error",
+                message: String(res?.message || "RSS 验证失败"),
+              }),
+            );
           } else {
             aiProgress.warning("已取消", "RSS 预览已中断");
+            fireTelemetryEvent(
+              "custom_rule_test_result",
+              buildCustomRuleTelemetryProps(ruleDict, {
+                action: "preview",
+                result: "cancelled",
+              }),
+            );
           }
         } catch (e) {
           if (isCurrentCustomRuleRequest(requestEpoch)) {
             aiProgress.error("预览失败", "网络请求失败");
             console.error("预览 RSS 规则失败:", e);
+            fireTelemetryEvent(
+              "custom_rule_test_result",
+              buildCustomRuleTelemetryProps(normalizedForm, {
+                action: "preview",
+                result: "exception",
+                message: String(e?.message || e || "网络请求失败"),
+              }),
+            );
           } else {
             aiProgress.close();
           }
@@ -8689,9 +9703,26 @@ try {
               `RSS 规则「${ruleDict.task_name}」已保存`,
               "success",
             );
+            fireTelemetryEvent(
+              "custom_rule_save_result",
+              buildCustomRuleTelemetryProps(res.rule || ruleDict, {
+                action: "save",
+                result: "success",
+                is_editing: Boolean(editingRuleId.value),
+              }),
+            );
             closeCustomRuleModal();
             await fetchCustomRules({ silent: true });
           } else {
+            fireTelemetryEvent(
+              "custom_rule_save_result",
+              buildCustomRuleTelemetryProps(ruleDict, {
+                action: "save",
+                result: "error",
+                is_editing: Boolean(editingRuleId.value),
+                message: String(res?.message || "RSS 保存失败"),
+              }),
+            );
             showNotification(
               "保存失败",
               res.message || "RSS 保存失败",
@@ -8702,6 +9733,15 @@ try {
           if (isCurrentCustomRuleRequest(requestEpoch)) {
             showNotification("保存失败", "网络请求失败", "error");
             console.error("保存 RSS 规则失败:", e);
+            fireTelemetryEvent(
+              "custom_rule_save_result",
+              buildCustomRuleTelemetryProps(ruleDict, {
+                action: "save",
+                result: "exception",
+                is_editing: Boolean(editingRuleId.value),
+                message: String(e?.message || e || "网络请求失败"),
+              }),
+            );
           }
         } finally {
           if (isCurrentCustomRuleRequest(requestEpoch)) {
@@ -8808,7 +9848,26 @@ try {
                 : `已成功生成规则并提取 ${previewData.value.length} 条样本数据`,
               "success",
             );
+            fireTelemetryEvent(
+              "custom_rule_test_result",
+              buildCustomRuleTelemetryProps(normalizedGeneratedRule, {
+                action: "generate",
+                result: "success",
+                result_count: Number(previewData.value.length || 0),
+                detail_preview_required: Boolean(res?.detail_preview_required),
+                detail_preview_passed: Boolean(res?.detail_preview_passed),
+                recovered_existing_rule: Boolean(res?.recovery_applied),
+              }),
+            );
           } else {
+            fireTelemetryEvent(
+              "custom_rule_test_result",
+              buildCustomRuleTelemetryProps(normalizedForm, {
+                action: "generate",
+                result: "error",
+                message: String(res?.message || "AI 分析失败"),
+              }),
+            );
             showNotification(
               "生成失败",
               res.message || "AI 分析失败，请重试",
@@ -8819,6 +9878,14 @@ try {
           if (isCurrentCustomRuleRequest(requestEpoch)) {
             showNotification("生成失败", "网络请求失败", "error");
             console.error("生成规则失败:", e);
+            fireTelemetryEvent(
+              "custom_rule_test_result",
+              buildCustomRuleTelemetryProps(normalizedForm, {
+                action: "generate",
+                result: "exception",
+                message: String(e?.message || e || "网络请求失败"),
+              }),
+            );
           }
         } finally {
           if (isCurrentCustomRuleRequest(requestEpoch)) {
@@ -8912,9 +9979,25 @@ try {
                 "success",
               );
             }
+            fireTelemetryEvent(
+              "custom_rule_test_result",
+              buildCustomRuleTelemetryProps(targetRule, {
+                action: "health_retest",
+                result: "success",
+                result_count: count,
+              }),
+            );
             return true;
           }
 
+          fireTelemetryEvent(
+            "custom_rule_test_result",
+            buildCustomRuleTelemetryProps(targetRule, {
+              action: "health_retest",
+              result: "error",
+              message: String(res?.message || "规则复测失败"),
+            }),
+          );
           if (!silent) {
             showNotification(
               "复测失败",
@@ -8925,6 +10008,14 @@ try {
           return false;
         } catch (error) {
           console.error("规则复测异常:", error);
+          fireTelemetryEvent(
+            "custom_rule_test_result",
+            buildCustomRuleTelemetryProps(targetRule, {
+              action: "health_retest",
+              result: "exception",
+              message: String(error?.message || error || "网络请求失败"),
+            }),
+          );
           if (!silent) {
             showNotification("复测失败", "网络请求失败", "error");
           }
@@ -9000,9 +10091,26 @@ try {
                   `规则「${updatedRssRule.task_name}」已更新`,
                   "success",
                 );
+                fireTelemetryEvent(
+                  "custom_rule_save_result",
+                  buildCustomRuleTelemetryProps(rssRes.rule || updatedRssRule, {
+                    action: "save",
+                    result: "success",
+                    is_editing: true,
+                  }),
+                );
                 closeCustomRuleModal();
                 await fetchCustomRules();
               } else {
+                fireTelemetryEvent(
+                  "custom_rule_save_result",
+                  buildCustomRuleTelemetryProps(updatedRssRule, {
+                    action: "save",
+                    result: "error",
+                    is_editing: true,
+                    message: String(rssRes?.message || "保存失败"),
+                  }),
+                );
                 showNotification(
                   "保存失败",
                   rssRes.message || "保存失败",
@@ -9033,13 +10141,42 @@ try {
                 `规则「${updatedRule.task_name}」已更新`,
                 "success",
               );
+              fireTelemetryEvent(
+                "custom_rule_save_result",
+                buildCustomRuleTelemetryProps(updatedRule, {
+                  action: "save",
+                  result: "success",
+                  is_editing: true,
+                }),
+              );
               closeCustomRuleModal();
               // 刷新规则列表
               await fetchCustomRules({ silent: true });
             } else {
+              fireTelemetryEvent(
+                "custom_rule_save_result",
+                buildCustomRuleTelemetryProps(updatedRule, {
+                  action: "save",
+                  result: "error",
+                  is_editing: true,
+                  message: String(res?.message || "保存失败"),
+                }),
+              );
               showNotification("保存失败", res.message || "保存失败", "error");
             }
           } catch (e) {
+            fireTelemetryEvent(
+              "custom_rule_save_result",
+              buildCustomRuleTelemetryProps(
+                generatedRuleCache.value || normalizedForm,
+                {
+                  action: "save",
+                  result: "exception",
+                  is_editing: true,
+                  message: String(e?.message || e || "网络请求失败"),
+                },
+              ),
+            );
             showNotification("保存失败", "网络请求失败", "error");
             console.error("保存规则失败:", e);
           } finally {
@@ -9076,13 +10213,42 @@ try {
               `规则「${ruleToSave.task_name}」已保存`,
               "success",
             );
+            fireTelemetryEvent(
+              "custom_rule_save_result",
+              buildCustomRuleTelemetryProps(ruleToSave, {
+                action: "save",
+                result: "success",
+                is_editing: false,
+              }),
+            );
             closeCustomRuleModal();
             // 刷新规则列表
             await fetchCustomRules({ silent: true });
           } else {
+            fireTelemetryEvent(
+              "custom_rule_save_result",
+              buildCustomRuleTelemetryProps(ruleToSave, {
+                action: "save",
+                result: "error",
+                is_editing: false,
+                message: String(res?.message || "保存失败"),
+              }),
+            );
             showNotification("保存失败", res.message || "保存失败", "error");
           }
         } catch (e) {
+          fireTelemetryEvent(
+            "custom_rule_save_result",
+            buildCustomRuleTelemetryProps(
+              generatedRuleCache.value || normalizedForm,
+              {
+                action: "save",
+                result: "exception",
+                is_editing: false,
+                message: String(e?.message || e || "网络请求失败"),
+              },
+            ),
+          );
           showNotification("保存失败", "网络请求失败", "error");
           console.error("保存规则失败:", e);
         } finally {
@@ -9455,6 +10621,22 @@ try {
           if (requestSeq !== searchRequestSeq) return;
           if (res.status === "success") {
             articles.value = res.data; // 替换列表内容为搜索结果
+            const resultCount = Array.isArray(res.data) ? res.data.length : 0;
+            fireTelemetryEvent("search_submit", {
+              scope: "list",
+              keyword_length: keyword.length,
+              source_name: String(sourceParam || activeSource.value || "全部"),
+              favorites_only: favoritesOnly,
+              result_count: resultCount,
+            });
+            if (resultCount <= 0) {
+              fireTelemetryEvent("search_result_empty", {
+                scope: "list",
+                keyword_length: keyword.length,
+                source_name: String(sourceParam || activeSource.value || "全部"),
+                favorites_only: favoritesOnly,
+              });
+            }
           }
         }, 300); // 300毫秒延迟
       };
@@ -9671,10 +10853,17 @@ try {
       const openSystemContentArticle = async (key) => {
         let article = systemContentEntries.value[key] || null;
         if (!article) {
-          const loaded = await loadSystemContentIndex();
-          if (loaded) {
-            article = systemContentEntries.value[key] || null;
-          }
+          await loadSystemContentIndex();
+          article = systemContentEntries.value[key] || null;
+        }
+
+        if (!article) {
+          await fetchSystemConfig();
+          article = systemContentEntries.value[key] || null;
+        }
+
+        if (!article) {
+          article = buildFallbackSystemContentArticle(key);
         }
 
         if (!article) {
@@ -9704,6 +10893,13 @@ try {
         }
 
         await openDetail(article);
+      };
+
+      const openSoftwareUpdateNotes = async () => {
+        const targetKey = systemContentEntries.value.changelog
+          ? "changelog"
+          : "announcement";
+        await openSystemContentArticle(targetKey);
       };
 
       // 返回上一页
@@ -9823,7 +11019,7 @@ try {
           !isSearching.value &&
           !searchQuery.value.trim() &&
           activeSource.value === "全部" &&
-          mapped.length > 0 // 🌟 核心：只有当有真实文章时才显示公告，避免数据加载时空数组导致公告浮动
+          !systemNotice.value.is_placeholder
         ) {
           // 🌟 检查公告是否已读（通过配置文件中的 readNoticeTime 与公告发布时间比较）
           // 使用 Date 对象比较，避免字符串格式不一致导致的错误
@@ -10251,7 +11447,16 @@ try {
       };
 
       onMounted(async () => {
+        applyPlatformDataAttribute(DESKTOP_PLATFORM);
         applyThemeAppearance(config.value.themeAppearance);
+
+        if (DESKTOP_PLATFORM === "macos") {
+          [0, 350, 900].forEach((delay) => {
+            window.setTimeout(() => {
+              scheduleMacosDragRegionRefresh();
+            }, delay);
+          });
+        }
 
         // 🎯 冷却时间恢复：检查 localStorage 中是否有未完成的冷却（不依赖 API）
         const lastTime = localStorage.getItem("lastManualUpdateTime");
@@ -10515,6 +11720,9 @@ try {
           if (checkResult && checkResult.mode === "read_only") {
             isReadOnlyMode.value = true;
             readOnlyReason.value = checkResult.reason || "服务已暂停";
+            fireTelemetryEvent("app_read_only_entered", {
+              reason: readOnlyReason.value,
+            });
           }
           return checkResult;
         };
@@ -10540,9 +11748,11 @@ try {
               }
             }),
             runStartupCheck(),
-            warmAiPrereqCache(),
-            checkApiBalance().catch(() => {}),
           ]);
+          setTimeout(() => {
+            void warmAiPrereqCache();
+            void checkApiBalance().catch(() => {});
+          }, 2200);
         };
 
         let startupDeferredTasksScheduled = false;
@@ -10633,10 +11843,13 @@ try {
             void e;
           } finally {
             configHydrated = true;
+            void refreshTelemetryStatus();
+            void maybeShowTelemetryStartupNotice();
           }
         })();
 
         requestAnimationFrame(() => {
+          void loadSystemContentIndex();
           void loadCoreData();
           scheduleDeferredStartupTasks();
         });
@@ -10888,6 +12101,15 @@ try {
         showNotification(title, message, "info", 2200);
       };
 
+      window.onReadOnlyRecovered = () => {
+        config.value.isLocked = false;
+        if (isReadOnlyMode.value) {
+          isReadOnlyMode.value = false;
+          readOnlyReason.value = "";
+          showNotification("服务恢复", "云端已恢复可用", "success", 2200);
+        }
+      };
+
       // 🌟 兼容旧版：后台完成通知（现在主要用于确认执行成功）
       window.triggerAutoFetchCooldown = () => {
         // 冷却已经在 onStartFetching 时启动，这里只做确认
@@ -11014,18 +12236,44 @@ try {
       };
 
       // 🌟 统一按钮点击处理
-      const handleButtonClick = () => {
+      const handleButtonClick = async () => {
         // 如果正在加载，点击取消任务
         if (isLoading.value) {
           cancelAITasks();
           return;
         }
 
-        // 如果是只读模式，显示提示
+        // 如果是只读模式，先尝试向云端确认是否已恢复
         if (isReadOnlyMode.value) {
+          try {
+            const recoverRes = await safeApiCall("get_version_info", true);
+            if (recoverRes?.status === "success" && recoverRes?.is_active !== false) {
+              isReadOnlyMode.value = false;
+              readOnlyReason.value = "";
+              config.value.isLocked = false;
+              const latestConfigRes = await safeApiCall("load_config");
+              if (
+                latestConfigRes?.status === "success" &&
+                latestConfigRes?.data
+              ) {
+                mergeConfigFromBackend(latestConfigRes.data);
+              }
+              showNotification(
+                "服务恢复",
+                "云端已恢复可用，正在重新检查内容",
+                "success",
+                2200,
+              );
+              await checkUpdates({ skipConfigSave: true });
+              return;
+            }
+          } catch (e) {
+            console.warn("只读恢复探测失败:", e);
+          }
+
           showNotification(
             "只读模式",
-            "服务已暂停，当前为只读模式",
+            readOnlyReason.value || "服务已暂停，当前为只读模式",
             "error",
             3000,
           );
@@ -11033,28 +12281,32 @@ try {
         }
 
         // 正常更新
-        checkUpdates();
+        await checkUpdates();
       };
 
-      const checkUpdates = async () => {
+      const checkUpdates = async (options = {}) => {
         if (isUpdateDisabled.value) {
           return;
         }
+
+        const skipConfigSave = Boolean(options.skipConfigSave);
 
         // 先补齐本地过期的 AI 配置，避免配置其实存在却被前端误判为空
         await hydrateMissingAiConfigFromBackend();
 
         // 先把当前设置落盘，确保订阅来源 / API 配置都是最新状态
         // 这样即使用户停留在设置界面，也能让本次更新直接按新配置执行
-        const saveRes = await saveConfigSafely();
-        if (!saveRes || saveRes.status !== "success") {
-          showNotification(
-            "保存失败",
-            saveRes?.message || "更新前自动保存配置失败，请重试",
-            "error",
-            3000,
-          );
-          return;
+        if (!skipConfigSave) {
+          const saveRes = await saveConfigSafely();
+          if (!saveRes || saveRes.status !== "success") {
+            showNotification(
+              "保存失败",
+              saveRes?.message || "更新前自动保存配置失败，请重试",
+              "error",
+              3000,
+            );
+            return;
+          }
         }
 
         isCancelledFlag.value = false; // 🌟 2. 每次重新开始更新时，重置拦截标记
@@ -12033,6 +13285,13 @@ try {
             "error",
             3000,
           );
+        } else if (activeArticle.value) {
+          fireTelemetryEvent(
+            "article_external_open",
+            buildArticleTelemetryProps(activeArticle.value, {
+              target_url: cleanUrl,
+            }),
+          );
         }
         return false;
       };
@@ -12075,6 +13334,7 @@ try {
               btn.classList.add("is-copied");
               setTimeout(() => btn.classList.remove("is-copied"), 1500);
             }
+            fireTelemetryEvent("article_copy", buildArticleTelemetryProps(item));
           })
           .catch((err) => {
             console.error("复制失败", err);
@@ -12120,6 +13380,12 @@ try {
             }
 
             // 收藏成功，不需要显示消息（通过动画反馈）
+            fireTelemetryEvent(
+              "article_favorite_toggle",
+              buildArticleTelemetryProps(item, {
+                is_favorite: Boolean(finalStatus),
+              }),
+            );
           } else {
             // 回滚
             item.is_favorite = oldStatus;
@@ -12169,6 +13435,14 @@ try {
             const res = await safeApiCall("open_in_browser", url);
             if (!res || res.status !== "success") {
               openBrowser(url);
+            } else if (activeArticle.value) {
+              fireTelemetryEvent(
+                "article_external_open",
+                buildArticleTelemetryProps(activeArticle.value, {
+                  target_url: url,
+                  external_attachment: true,
+                }),
+              );
             }
           } catch (e) {
             // 降级：使用 open_browser 方法
@@ -12188,9 +13462,25 @@ try {
           const res = await safeApiCall("download_attachment", url, name);
           if (res.status === "success") {
             showNotification("下载成功", "", "success", 3000);
+            fireTelemetryEvent(
+              "attachment_download_result",
+              buildArticleTelemetryProps(activeArticle.value || {}, {
+                status: "success",
+                attachment_name: name,
+                source_url: url,
+              }),
+            );
           } else if (res.status === "cancelled") {
             // 用户取消保存，关闭通知
             hideNotification(pendingDownloadToastId);
+            fireTelemetryEvent(
+              "attachment_download_result",
+              buildArticleTelemetryProps(activeArticle.value || {}, {
+                status: "cancelled",
+                attachment_name: name,
+                source_url: url,
+              }),
+            );
           } else {
             showNotification(
               "下载失败",
@@ -12198,9 +13488,27 @@ try {
               "error",
               3000,
             );
+            fireTelemetryEvent(
+              "attachment_download_result",
+              buildArticleTelemetryProps(activeArticle.value || {}, {
+                status: "error",
+                attachment_name: name,
+                source_url: url,
+                error_message: String(res?.message || "下载失败"),
+              }),
+            );
           }
         } catch (e) {
           showNotification("下载失败", "调起下载失败", "error", 3000);
+          fireTelemetryEvent(
+            "attachment_download_result",
+            buildArticleTelemetryProps(activeArticle.value || {}, {
+              status: "error",
+              attachment_name: name,
+              source_url: url,
+              error_message: String(e || "调起下载失败"),
+            }),
+          );
         }
       };
 
@@ -12221,6 +13529,7 @@ try {
 
         const targetView = document.querySelector(".detail-view");
         const scrollContent = document.querySelector(".detail-content");
+        const snapshotSurface = readRootCssToken("reader-surface-bg", "#ffffff");
 
         if (!targetView || !scrollContent) return;
 
@@ -12237,9 +13546,9 @@ try {
               }
             : config.value.fontFamily === "wenkai"
               ? {
-                  path: "fonts/custom_font.ttf",
+                  path: "fonts/custom_font.woff",
                   family: "MicroFlowWenKai",
-                  format: "truetype",
+                  format: "woff",
                 }
               : null;
         if (snapshotFontConfig) {
@@ -12308,7 +13617,7 @@ try {
         targetView.style.bottom = "auto"; // 👈 解除底部锁定
         targetView.style.height = "auto";
         targetView.style.overflow = "visible";
-        targetView.style.backgroundColor = readRootCssToken("white", "#ffffff");
+        targetView.style.backgroundColor = snapshotSurface;
 
         scrollContent.style.overflowY = "visible";
         scrollContent.style.flex = "none";
@@ -12325,7 +13634,7 @@ try {
           const canvas = await html2canvas(targetView, {
             scale: 2,
             useCORS: true,
-            backgroundColor: readRootCssToken("white", "#ffffff"),
+            backgroundColor: snapshotSurface,
             allowTaint: false,
             foreignObjectRendering: true,
             windowWidth: targetView.scrollWidth,
@@ -12362,9 +13671,24 @@ try {
                 1500,
               );
             }
+            fireTelemetryEvent(
+              "article_snapshot_result",
+              buildArticleTelemetryProps(item, {
+                status: "success",
+                copied_to_clipboard: Boolean(
+                  copyRes && copyRes.status === "success",
+                ),
+              }),
+            );
           } else if (res && res.status === "cancelled") {
             // 用户取消，显示取消提示
             showNotification("已取消", "快照保存已取消", "warning", 2000);
+            fireTelemetryEvent(
+              "article_snapshot_result",
+              buildArticleTelemetryProps(item, {
+                status: "cancelled",
+              }),
+            );
           } else {
             console.error("[Snapshot] 后端保存失败:", res);
             showNotification(
@@ -12373,6 +13697,13 @@ try {
               "error",
               3000,
             );
+            fireTelemetryEvent(
+              "article_snapshot_result",
+              buildArticleTelemetryProps(item, {
+                status: "error",
+                error_message: String(res?.message || "未知错误"),
+              }),
+            );
           }
         } catch (error) {
           console.error("💥 [Snapshot] 前端捕获失败:", error);
@@ -12380,6 +13711,13 @@ try {
           hideNotification(snapshotToastId);
           hideNotification(fontToastId);
           showNotification("截图失败", error.message, "error", 3000);
+          fireTelemetryEvent(
+            "article_snapshot_result",
+            buildArticleTelemetryProps(item, {
+              status: "error",
+              error_message: String(error?.message || "截图失败"),
+            }),
+          );
         } finally {
           // 6. 恢复所有原始样式
           document.body.style.height = origBodyHeight;
@@ -12450,6 +13788,12 @@ try {
           "warning",
           2200,
         );
+        fireTelemetryEvent(
+          "ai_regenerate_result",
+          buildArticleTelemetryProps(article, {
+            status: "cancelled",
+          }),
+        );
 
         try {
           void safeApiCall(
@@ -12488,6 +13832,12 @@ try {
         const requestToken = (summaryGenerationTokens.get(articleId) || 0) + 1;
         summaryGenerationTokens.set(articleId, requestToken);
         regeneratingIds.add(articleId);
+        fireTelemetryEvent(
+          "ai_regenerate_request",
+          buildArticleTelemetryProps(article, {
+            regeneration_kind: getArticleRegenerationKind(article),
+          }),
+        );
 
         const regenerationKind = getArticleRegenerationKind(article);
         const aiProgress = isRssArticle(article)
@@ -12505,6 +13855,11 @@ try {
                   : "正在准备重新生成 RSS 内容",
             })
           : null;
+        try {
+          await safeApiCall("clear_ai_cancel");
+        } catch (e) {
+          console.warn("清理残留 AI 取消状态失败:", e);
+        }
         if (regenerationKind !== "rss_reset") {
           const aiReady = await validateAiPrerequisites("重新生成总结");
           if (!aiReady) {
@@ -12583,6 +13938,13 @@ try {
             } else {
               showNotification("生成完成", successMessage, "success", 1500);
             }
+            fireTelemetryEvent(
+              "ai_regenerate_result",
+              buildArticleTelemetryProps(updatedArticle, {
+                status: "success",
+                result_kind: resultKind,
+              }),
+            );
           } else if (res.status === "cancelled") {
             if (aiProgress) {
               aiProgress.warning("已中断", `已中断${getAiBrandLabel()}总结`);
@@ -12594,6 +13956,12 @@ try {
                 2200,
               );
             }
+            fireTelemetryEvent(
+              "ai_regenerate_result",
+              buildArticleTelemetryProps(article, {
+                status: "cancelled",
+              }),
+            );
           } else {
             if (aiProgress) {
               aiProgress.error("生成失败", res.message || "请稍后重试");
@@ -12605,6 +13973,14 @@ try {
                 3000,
               );
             }
+            fireTelemetryEvent(
+              "ai_regenerate_result",
+              buildArticleTelemetryProps(article, {
+                status: "error",
+                result_kind: String(res?.result_kind || ""),
+                error_message: String(res?.message || "请稍后重试"),
+              }),
+            );
           }
         } catch (e) {
           console.error("重新生成总结失败:", e);
@@ -12618,6 +13994,13 @@ try {
               3000,
             );
           }
+          fireTelemetryEvent(
+            "ai_regenerate_result",
+            buildArticleTelemetryProps(article, {
+              status: "error",
+              error_message: String(e || "服务暂不可用"),
+            }),
+          );
         } finally {
           // 清除刷新状态
           if (summaryGenerationTokens.get(articleId) === requestToken) {
@@ -12745,6 +14128,8 @@ try {
 
       // 🌟 清理函数：组件卸载时移除事件监听器
       onUnmounted(() => {
+        clearListScrollbarHideTimer();
+        clearDetailScrollbarHideTimer();
         window.removeEventListener("mouseup", handleMouseUp);
         window.removeEventListener("wheel", handleWheel);
         window.removeEventListener("keydown", handleNavigationKeydown);
@@ -13021,6 +14406,7 @@ try {
           if (res.status === "success" && res.data) {
             mergeConfigFromBackend(res.data);
             configHydrated = true;
+            void maybeShowTelemetryStartupNotice();
           }
         } catch (e) {
           console.error("刷新配置失败:", e);
@@ -13145,6 +14531,8 @@ try {
         handleDetailSearchSubmit,
         handleListClick,
         handleTodayClick,
+        handleListScrollbarInteraction,
+        handleDetailScrollbarInteraction,
         toastList,
         showNotification,
 
@@ -13171,6 +14559,15 @@ try {
         currentFontLabel,
         themeAppearanceOptions,
         currentThemeAppearanceDescription,
+        telemetryStatus,
+        telemetryQueueSummary,
+        telemetryRemoteStatusText,
+        telemetryConsentLabel,
+        telemetryUploadAvailable,
+        isTelemetryFlushing,
+        setTelemetryToggle,
+        flushTelemetryNow,
+        clearTelemetryQueueNow,
         handleThemeAppearanceChange,
         setTrackMode,
         showApiKey,
@@ -13181,10 +14578,12 @@ try {
         softwareUpdateState,
         isCheckingSoftwareUpdate,
         remoteVersion,
+        systemNotice,
         systemContentEntries,
         checkSoftwareUpdate,
         openSoftwareUpdateDownload,
         openSystemContentArticle,
+        openSoftwareUpdateNotes,
         formatSoftwareUpdateCheckedAt,
         isTesting,
         connectionStatus,
@@ -13197,6 +14596,7 @@ try {
         togglePin,
 
         // 来源与订阅
+        listScrollContainerRef,
         filterScrollContainer,
         sources,
         activeSource,

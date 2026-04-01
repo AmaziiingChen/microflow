@@ -5,6 +5,7 @@ import logging
 import threading
 import requests
 import time
+from urllib.parse import urlparse
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple, Callable, Type, TYPE_CHECKING
@@ -111,6 +112,7 @@ class SpiderScheduler:
         article_processor: ArticleProcessor,
         progress_callback: Optional[Callable[[int, int, str], None]] = None,
         config_service: Optional["ConfigService"] = None,
+        source_result_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     ):
         """
         初始化调度器
@@ -123,6 +125,7 @@ class SpiderScheduler:
         self.article_processor = article_processor
         self.progress_callback = progress_callback
         self.config_service = config_service
+        self.source_result_callback = source_result_callback
         self.active_spiders: List[BaseSpider] = []
         self._update_lock = threading.Lock()
         # 线程安全进度条支持
@@ -137,6 +140,87 @@ class SpiderScheduler:
 
         # 初始化爬虫
         self._init_spiders()
+
+    @staticmethod
+    def _hash_text(value: str) -> str:
+        import hashlib
+
+        cleaned = str(value or "").strip()
+        if not cleaned:
+            return ""
+        return hashlib.sha256(cleaned.encode("utf-8")).hexdigest()[:16]
+
+    def _build_source_result_payload(
+        self,
+        *,
+        spider: BaseSpider,
+        source_name: str,
+        source_type: str,
+        submitted_count: int,
+        error_list: List[str],
+        duration_ms: int,
+        is_manual: bool,
+        is_cold_start: bool,
+        status_override: str = "",
+        error_code: str = "",
+    ) -> Dict[str, Any]:
+        is_custom_source = bool(getattr(spider, "_is_dynamic", False))
+        payload: Dict[str, Any] = {
+            "source_name": source_name,
+            "source_type": source_type,
+            "is_custom_source": is_custom_source,
+            "new_count": int(submitted_count or 0),
+            "duration_ms": int(duration_ms or 0),
+            "is_manual": bool(is_manual),
+            "is_cold_start": bool(is_cold_start),
+            "warning_count": len(error_list or []),
+        }
+
+        if error_code:
+            payload["error_code"] = error_code
+
+        if status_override:
+            payload["status"] = status_override
+        elif error_list and submitted_count <= 0:
+            payload["status"] = "error"
+        elif submitted_count > 0:
+            payload["status"] = "success"
+        else:
+            payload["status"] = "empty"
+
+        target_url = ""
+        if is_custom_source:
+            target_url = str(
+                getattr(spider, "target_url", "")
+                or getattr(spider, "url", "")
+                or ""
+            ).strip()
+            if target_url:
+                payload["source_url"] = target_url
+
+        rule_id = str(
+            getattr(spider, "rule_id", "")
+            or getattr(spider, "_rule_id", "")
+            or ""
+        ).strip()
+        if rule_id:
+            payload["rule_id"] = rule_id
+            payload["rule_hash"] = self._hash_text(rule_id)
+
+        if target_url:
+            hostname = str(urlparse(target_url).hostname or "").strip().lower()
+            if hostname:
+                payload["domain_hash"] = self._hash_text(hostname)
+
+        return payload
+
+    def _emit_source_result(self, payload: Dict[str, Any]) -> None:
+        if not self.source_result_callback:
+            return
+        try:
+            self.source_result_callback(dict(payload or {}))
+        except Exception as e:
+            logger.debug(f"来源抓取结果回调失败: {e}")
 
     def _init_spiders(self) -> None:
         """初始化所有爬虫实例（包括静态注册的学院爬虫和动态爬虫）"""
@@ -422,15 +506,68 @@ class SpiderScheduler:
         )
         return max(0, min(max(fetch_limit, 0), base_window))
 
+    def _resolve_manual_deep_repair_guard_threshold(
+        self,
+        spider: BaseSpider,
+        source_name: str,
+    ) -> int:
+        """
+        判断来源是否已经“成熟”到允许手动深补扫。
+
+        目标是避免首次冷启动刚写入少量种子文章后，用户立刻手动检查就从 10/1 条
+        扩大回溯到 50/100 条，导致历史内容突然涌入。
+        """
+        clean_source_name = str(source_name or "").strip()
+        if clean_source_name == "公文通":
+            return self._COLD_START_QUOTA_GWT
+        if not getattr(spider, "_is_dynamic", False):
+            return self._COLD_START_QUOTA_COLLEGE
+
+        source_type = str(getattr(spider, "_source_type", "html") or "html").strip()
+        if source_type == "html":
+            # 自定义 HTML 源冷启动同样只落 1 条，守门阈值保持一致即可：
+            # - 首次启动后立刻手动更新时，existing_count=1，不会直接深补扫
+            # - 已经积累出几条历史后，则允许手动触发更深的缺口修复
+            return self._COLD_START_QUOTA_COLLEGE
+        return max(self._resolve_fetch_limit(spider), 0)
+
+    def _resolve_seed_frontier_url(
+        self,
+        *,
+        source_name: str,
+        section_key: str,
+        mode: str,
+        is_cold_start: bool,
+        existing_count: int,
+        maturity_threshold: int,
+    ) -> str:
+        """
+        在来源尚未“成熟”前，复用冷启动写下的 frontier 作为临时增量边界。
+
+        这样可以避免：
+        - 公文通冷启动写入 10 条后，第二次检查继续把更旧内容倒灌进来
+        - 学院冷启动只写入 1 条后，第二次检查把该板块前 10 条全部补进来
+
+        同时又保留一项能力：frontier 以内如果恰好存在被物理删除/漏抓的文章，
+        仍然允许在边界内进行修补。
+        """
+        if is_cold_start or mode != "continuous":
+            return ""
+        if existing_count > maturity_threshold:
+            return ""
+        return db.get_crawl_frontier_url(source_name, section_key)
+
     @staticmethod
     def _normalize_section_key(section_name: Optional[str]) -> str:
         return str(section_name or "").strip()
 
     def _record_cold_start_frontiers(
-        self, selected_candidates: List[Dict[str, Any]]
+        self,
+        section_frontiers: Dict[Tuple[str, str], ArticleContext],
+        selected_candidates: List[Dict[str, Any]],
     ) -> None:
         """记录冷启动首批入库文章的板块边界，避免后续手动更新倒灌旧文。"""
-        frontier_map: Dict[Tuple[str, str], ArticleContext] = {}
+        frontier_map: Dict[Tuple[str, str], ArticleContext] = dict(section_frontiers or {})
         for candidate in selected_candidates:
             ctx = candidate.get("ctx")
             if not isinstance(ctx, ArticleContext) or not ctx.url:
@@ -525,13 +662,14 @@ class SpiderScheduler:
         sections: List[Optional[str]],
         fetch_limit: int,
         page_budget: Optional[int] = None,
-    ) -> Tuple[List[Dict[str, Any]], List[str]]:
+    ) -> Tuple[List[Dict[str, Any]], List[str], Dict[Tuple[str, str], ArticleContext]]:
         """冷启动时先跨板块收集候选，再按全来源最新程度裁剪。"""
         source_name = spider.SOURCE_NAME
         candidates: List[Dict[str, Any]] = []
         error_list: List[str] = []
         seen_urls: set[str] = set()
         encounter_order = 0
+        section_frontiers: Dict[Tuple[str, str], ArticleContext] = {}
 
         for section_name in sections:
             if self._cancel_event.is_set():
@@ -556,7 +694,15 @@ class SpiderScheduler:
                     should_skip, _ = self.article_processor.should_skip_by_title(
                         ctx.title
                     )
-                    if should_skip or not ctx.url or ctx.url in seen_urls:
+                    if should_skip or not ctx.url:
+                        continue
+
+                    section_key = self._normalize_section_key(section_name)
+                    frontier_key = (source_name, section_key)
+                    if frontier_key not in section_frontiers:
+                        section_frontiers[frontier_key] = ctx
+
+                    if ctx.url in seen_urls:
                         continue
 
                     seen_urls.add(ctx.url)
@@ -585,7 +731,7 @@ class SpiderScheduler:
             key=lambda item: item["article_dt"] or datetime.min,
             reverse=True,
         )
-        return candidates, error_list
+        return candidates, error_list, section_frontiers
 
     def run_all_spiders(
         self,
@@ -701,6 +847,7 @@ class SpiderScheduler:
             try:
                 futures = {}
                 future_deadlines = {}
+                future_start_times = {}
                 pending = set()
 
                 for idx, spider in enumerate(spiders_to_run):
@@ -710,11 +857,13 @@ class SpiderScheduler:
                         mode=mode,
                         today_str=today_str,
                         is_manual=is_manual,
+                        include_source_result=True,
                     )
                     futures[future] = (spider.SOURCE_NAME, idx, spider)
                     future_deadlines[future] = (
                         time.monotonic() + self._resolve_spider_timeout(spider)
                     )
+                    future_start_times[future] = time.monotonic()
                     pending.add(future)
 
                 completed_count = 0
@@ -760,6 +909,33 @@ class SpiderScheduler:
                             )
                             logger.warning(error_msg)
                             errors.append(error_msg)
+                            self._emit_source_result(
+                                self._build_source_result_payload(
+                                    spider=spider,
+                                    source_name=source_name,
+                                    source_type=str(
+                                        getattr(spider, "_source_type", "html")
+                                    ),
+                                    submitted_count=0,
+                                    error_list=[error_msg],
+                                    duration_ms=int(
+                                        max(
+                                            (
+                                                time.monotonic()
+                                                - future_start_times.get(
+                                                    future, time.monotonic()
+                                                )
+                                            )
+                                            * 1000,
+                                            0,
+                                        )
+                                    ),
+                                    is_manual=is_manual,
+                                    is_cold_start=False,
+                                    status_override="error",
+                                    error_code="timeout",
+                                )
+                            )
 
                         continue
 
@@ -778,16 +954,50 @@ class SpiderScheduler:
                                 logger.debug(f"爬虫进度回调失败: {e}")
 
                         try:
-                            result_name, count, error_list = future.result()
+                            (
+                                result_name,
+                                count,
+                                error_list,
+                                source_result_payload,
+                            ) = future.result()
                             submitted_count += count
                             if error_list:
                                 errors.extend(error_list)
                             if count > 0:
                                 submitted_sources.append(f"{result_name}({count})")
+                            if source_result_payload:
+                                self._emit_source_result(source_result_payload)
                         except Exception as e:
                             error_msg = f"[{source_name}] 爬虫执行崩溃: {e}"
                             logger.error(error_msg, exc_info=True)
                             errors.append(error_msg)
+                            self._emit_source_result(
+                                self._build_source_result_payload(
+                                    spider=spider,
+                                    source_name=source_name,
+                                    source_type=str(
+                                        getattr(spider, "_source_type", "html")
+                                    ),
+                                    submitted_count=0,
+                                    error_list=[error_msg],
+                                    duration_ms=int(
+                                        max(
+                                            (
+                                                time.monotonic()
+                                                - future_start_times.get(
+                                                    future, time.monotonic()
+                                                )
+                                            )
+                                            * 1000,
+                                            0,
+                                        )
+                                    ),
+                                    is_manual=is_manual,
+                                    is_cold_start=False,
+                                    status_override="error",
+                                    error_code="crash",
+                                )
+                            )
             finally:
                 executor.shutdown(wait=False, cancel_futures=True)
 
@@ -828,8 +1038,14 @@ class SpiderScheduler:
             self._update_lock.release()
 
     def _process_spider(
-        self, spider: BaseSpider, mode: str, today_str: str, is_manual: bool
-    ) -> Tuple[str, int, List[str]]:
+        self,
+        spider: BaseSpider,
+        mode: str,
+        today_str: str,
+        is_manual: bool,
+        *,
+        include_source_result: bool = False,
+    ) -> Tuple[str, int, List[str], Dict[str, Any]] | Tuple[str, int, List[str]]:
         """
         处理单个爬虫的所有板块（异步提交，线程安全）
 
@@ -838,12 +1054,14 @@ class SpiderScheduler:
         - 双轨时间拦截器（Dual-Track Time Horizon Interceptor）
 
         Returns:
-            (来源名称, 提交数量, 错误列表) 元组
+            默认返回 (来源名称, 提交数量, 错误列表)。
+            当 include_source_result=True 时，附加返回单来源结果载荷。
         """
         submitted_count = 0
         source_name = spider.SOURCE_NAME
         source_type = getattr(spider, "_source_type", "html")
         error_list: List[str] = []
+        started_at = time.monotonic()
 
         # ── 冷启动状态推演 ──────────────────────────────────────────
         existing_count = db.get_article_count_by_source(source_name)
@@ -890,9 +1108,21 @@ class SpiderScheduler:
             is_cold_start=is_cold_start,
             is_manual=is_manual,
         )
+        manual_deep_repair_guard_threshold = (
+            self._resolve_manual_deep_repair_guard_threshold(spider, source_name)
+        )
+        manual_deep_repair_ready = existing_count > manual_deep_repair_guard_threshold
+
+        if is_manual and not is_cold_start and mode == "continuous" and not manual_deep_repair_ready:
+            logger.info(
+                "[%s] 当前仅积累 %s 篇文章，未超过深补扫阈值 %s，本次手动检查保持常规扫描深度",
+                source_name,
+                existing_count,
+                manual_deep_repair_guard_threshold,
+            )
 
         if is_cold_start and quota is not None:
-            candidates, error_list = self._collect_cold_start_candidates(
+            candidates, error_list, section_frontiers = self._collect_cold_start_candidates(
                 spider=spider,
                 sections=sections,
                 fetch_limit=fetch_limit,
@@ -900,11 +1130,16 @@ class SpiderScheduler:
             )
             selected_candidates = candidates[:quota]
 
+            if section_frontiers:
+                self._record_cold_start_frontiers(
+                    section_frontiers,
+                    selected_candidates,
+                )
+
             if selected_candidates:
                 logger.info(
                     f"❄️ [{source_name}] 冷启动候选 {len(candidates)} 条，按全来源最新排序后入库 {len(selected_candidates)} 条"
                 )
-                self._record_cold_start_frontiers(selected_candidates)
 
             for candidate in selected_candidates:
                 if self._cancel_event.is_set():
@@ -920,7 +1155,28 @@ class SpiderScheduler:
                 ):
                     submitted_count += 1
 
-            return (source_name, submitted_count, error_list)
+            source_result_payload = self._build_source_result_payload(
+                spider=spider,
+                source_name=source_name,
+                source_type=source_type,
+                submitted_count=submitted_count,
+                error_list=error_list,
+                duration_ms=int(max((time.monotonic() - started_at) * 1000, 0)),
+                is_manual=is_manual,
+                is_cold_start=is_cold_start,
+            )
+            if include_source_result:
+                return (
+                    source_name,
+                    submitted_count,
+                    error_list,
+                    source_result_payload,
+                )
+            return (
+                source_name,
+                submitted_count,
+                error_list,
+            )
 
         seen_urls_in_run: set[str] = set()
 
@@ -929,12 +1185,35 @@ class SpiderScheduler:
                 break
 
             section_key = self._normalize_section_key(section_name)
+            seed_frontier_url = self._resolve_seed_frontier_url(
+                source_name=source_name,
+                section_key=section_key,
+                mode=mode,
+                is_cold_start=is_cold_start,
+                existing_count=existing_count,
+                maturity_threshold=manual_deep_repair_guard_threshold,
+            )
             manual_frontier_url = (
                 db.get_crawl_frontier_url(source_name, section_key)
-                if (is_manual and not is_cold_start and mode == "continuous")
+                if (
+                    is_manual
+                    and not is_cold_start
+                    and mode == "continuous"
+                    and manual_deep_repair_ready
+                )
                 else ""
             )
+            frontier_url = manual_frontier_url or seed_frontier_url
             allow_manual_deep_repair = bool(manual_frontier_url)
+            allow_seed_frontier_guard = bool(seed_frontier_url) and not allow_manual_deep_repair
+            allow_frontier_guard = allow_manual_deep_repair or allow_seed_frontier_guard
+            allow_missing_frontier_autoseed = (
+                not is_cold_start
+                and mode == "continuous"
+                and not frontier_url
+                and existing_count <= manual_deep_repair_guard_threshold
+                and not getattr(spider, "_is_dynamic", False)
+            )
             section_scan_limit = (
                 deep_scan_limit if allow_manual_deep_repair else fetch_limit
             )
@@ -951,12 +1230,12 @@ class SpiderScheduler:
                 if (
                     not is_cold_start
                     and mode == "continuous"
-                    and not allow_manual_deep_repair
+                    and not allow_frontier_guard
                 )
                 else 0
             )
             section_unique_index = 0
-            manual_frontier_reached = False
+            frontier_reached = False
             undated_grace_remaining = (
                 self._WEAK_DATE_UNDATED_GRACE
                 if (not is_cold_start and mode == "continuous" and time_cutoff is not None)
@@ -990,6 +1269,25 @@ class SpiderScheduler:
                         logger.debug(f"跳过导航噪音（黑名单标题）: {ctx.title}")
                         continue
 
+                    seeded_missing_frontier_this_article = False
+                    if ctx.url and allow_missing_frontier_autoseed and not frontier_url:
+                        frontier_url = ctx.url
+                        allow_seed_frontier_guard = True
+                        allow_frontier_guard = True
+                        seeded_missing_frontier_this_article = True
+                        db.upsert_crawl_frontier(
+                            source_name=source_name,
+                            section_name=section_key,
+                            frontier_url=ctx.url,
+                            frontier_cursor=str(ctx.date or "").strip(),
+                        )
+                        logger.info(
+                            "[%s] 板块 '%s' 首次建立 frontier 边界: %s",
+                            source_name,
+                            section_key or "默认板块",
+                            ctx.url,
+                        )
+
                     if not ctx.url or ctx.url in seen_urls_in_run:
                         continue
                     seen_urls_in_run.add(ctx.url)
@@ -1000,13 +1298,9 @@ class SpiderScheduler:
                         and repair_window > 0
                         and section_unique_index <= repair_window
                     )
-                    is_manual_frontier_article = (
-                        allow_manual_deep_repair and ctx.url == manual_frontier_url
-                    )
-                    in_manual_repair_range = (
-                        allow_manual_deep_repair and not manual_frontier_reached
-                    )
-                    in_repair_window = auto_repair_window or in_manual_repair_range
+                    is_frontier_article = allow_frontier_guard and ctx.url == frontier_url
+                    in_frontier_range = allow_frontier_guard and not frontier_reached
+                    in_repair_window = auto_repair_window or in_frontier_range
 
                     # 持续追踪模式：
                     # - 顶部回补窗口内：继续检查是否存在物理删除/漏抓的缺口文章
@@ -1016,13 +1310,16 @@ class SpiderScheduler:
                         and mode == "continuous"
                         and self.article_processor.should_skip_by_url(ctx.url, is_manual)
                     ):
-                        if is_manual_frontier_article:
+                        if is_frontier_article:
                             logger.debug(
-                                "[%s] 命中手动修复边界，结束当前板块缺口检查: %s",
+                                "[%s] 命中%s边界，结束当前板块缺口检查: %s",
                                 source_name,
+                                "手动修复"
+                                if allow_manual_deep_repair
+                                else "冷启动保护",
                                 ctx.url,
                             )
-                            manual_frontier_reached = True
+                            frontier_reached = True
                             break
                         if in_repair_window:
                             logger.debug(
@@ -1036,6 +1333,7 @@ class SpiderScheduler:
                         )
                         break
 
+                    article_dt: Optional[datetime] = None
                     # ── 双轨时间拦截断言 ────────────────────────────
                     if time_cutoff is not None:
                         article_dt = self._parse_time_cursor(ctx.date)
@@ -1093,6 +1391,34 @@ class SpiderScheduler:
                         ):
                             continue
 
+                    if (
+                        allow_seed_frontier_guard
+                        and is_frontier_article
+                        and not seeded_missing_frontier_this_article
+                    ):
+                        logger.debug(
+                            "[%s] 命中 seed frontier 边界，停止当前板块回溯: %s",
+                            source_name,
+                            ctx.url,
+                        )
+                        frontier_reached = True
+                        break
+
+                    if seeded_missing_frontier_this_article and is_frontier_article:
+                        is_seed_frontier_new = bool(
+                            time_cutoff is not None
+                            and article_dt is not None
+                            and article_dt > time_cutoff
+                        )
+                        if not is_seed_frontier_new:
+                            logger.debug(
+                                "[%s] 首次建立 frontier 后命中旧边界，停止当前板块回溯: %s",
+                                source_name,
+                                ctx.url,
+                            )
+                            frontier_reached = True
+                            break
+
                     if self._submit_context(
                         spider=spider,
                         ctx=ctx,
@@ -1101,8 +1427,8 @@ class SpiderScheduler:
                         is_manual=is_manual,
                     ):
                         submitted_count += 1
-                    if is_manual_frontier_article:
-                        manual_frontier_reached = True
+                    if is_frontier_article:
+                        frontier_reached = True
                         break
 
             except (requests.RequestException, ConnectionError, TimeoutError, ValueError) as e:
@@ -1126,7 +1452,28 @@ class SpiderScheduler:
                 error_list.append(error_msg)
                 continue
 
-        return (source_name, submitted_count, error_list)
+        source_result_payload = self._build_source_result_payload(
+            spider=spider,
+            source_name=source_name,
+            source_type=source_type,
+            submitted_count=submitted_count,
+            error_list=error_list,
+            duration_ms=int(max((time.monotonic() - started_at) * 1000, 0)),
+            is_manual=is_manual,
+            is_cold_start=is_cold_start,
+        )
+        if include_source_result:
+            return (
+                source_name,
+                submitted_count,
+                error_list,
+                source_result_payload,
+            )
+        return (
+            source_name,
+            submitted_count,
+            error_list,
+        )
 
     @property
     def is_locked(self) -> bool:

@@ -1,0 +1,103 @@
+{
+  "schema_version": "1",
+  "channel": "stable",
+  "version": "v1.0.0",
+  "build": 1000,
+  "release_date": "2026-04-01",
+  "is_active": true,
+  "kill_message": "由于合规性要求，MicroFlow 已停止服务。感谢你的使用。",
+  "min_supported_version": "v1.0.0",
+  "force_update": false,
+  "notes": "首个正式公开版本，已集成系统公告、应用内更新提醒、主题系统、HTML AI 爬虫链路与匿名遥测基础设施。",
+  "feedback_email": "amaziiingchen@qq.com",
+  "downloads": {
+    "windows": {
+      "url": "https://microflow-1412347033.cos.ap-guangzhou.myqcloud.com/releases/v1.0.0/MicroFlow-Setup-v1.0.0.exe",
+      "sha256": "",
+      "size": 0,
+      "installer_type": "inno",
+      "signature_subject": ""
+    },
+    "macos": {
+      "url": "https://microflow-1412347033.cos.ap-guangzhou.myqcloud.com/releases/v1.0.0/MicroFlow-v1.0.0-macos-arm64.dmg",
+      "sha256": "79b65b25cf242ce46274031ed048be5568402f24f928087b531c724acc22facf",
+      "size": 116797298,
+      "package_type": "dmg",
+      "notarized": false
+    }
+  },
+  "announcement": {
+    "id": "notice_v1.0.0",
+    "title": "MicroFlow v1.0.0 正式发布",
+    "version": "v1.0.0",
+    "publish_time": "2026-04-01",
+    "department": "系统公告",
+    "tags": [
+      "系统通知",
+      "正式发布",
+      "v1.0.0"
+    ],
+    "summary": "MicroFlow 首个正式版现已可用，第一代版本已支持校内官方源聚合、RSS 订阅、自定义 HTML AI 爬虫、AI 摘要增强、邮件推送与个性化阅读。",
+    "content": "欢迎使用 MicroFlow v1.0.0！\n\n这是 MicroFlow 的第一代正式版本，也是一个已经具备完整主链路的校园信息聚合与阅读工具版本。你现在拿到的，不只是一个“看通知”的桌面程序，而是一套围绕“信息获取、重点提炼、阅读整理、提醒触达”设计的本地工作流。\n\n### 这款软件可以做什么\n\n- 聚合公文通、学院官网等校内官方信息源。\n- 支持新增 RSS / Atom 订阅源，统一在同一界面阅读。\n- 支持自定义 HTML 网页规则，通过 AI 辅助生成抓取方案。\n- 支持 AI 摘要、标签提取与 Markdown 排版增强。\n- 支持搜索、未读统计、收藏、软删除和原文跳转。\n- 支持图片预览、附件查看、正文批注、截图导出与复制分享。\n- 支持邮件推送、系统托盘、免打扰、窗口置顶与开机自启。\n\n### 第一次使用建议\n\n1. 进入“AI 引擎与提示词”，填写 `Base URL`、`API Key` 和 `Model Name`。\n2. 如使用 DeepSeek，推荐配置：`https://api.deepseek.com/v1` 与 `deepseek-chat`。\n3. 进入“数据订阅管理”，勾选你真正关心的官方来源。\n4. 如需接入校外资讯、博客或实验室网页，可在“自定义数据源”中新增 RSS 或 HTML 规则。\n5. 在“阅读与行为偏好”中设置主题、字体、追踪方式以及是否开机自启。\n6. 如需手机端提醒，可在“邮件推送”中配置 SMTP，并先发送测试邮件。\n\n### 网络与访问说明\n\nMicroFlow 面向深技大校内使用场景设计。公文通及部分学院官网依赖校园网访问条件，因此：\n\n- 在校园网环境下，可正常获取校内官方源的最新内容。\n- 在非校园网环境下，公文通和部分学院官网可能无法更新。\n- 即使不在校园网环境中，你仍可继续使用 RSS 订阅、自定义 HTML 网页采集、本地阅读、AI 总结和历史内容管理等功能。\n\n请务必遵守校内信息使用规范。任何涉及内网权限、内部通知或未公开内容的信息，都不应被擅自传播、转发或扩散。\n\n### 推荐使用方式\n\n- 建议开启持续追踪模式，让应用在后台保持低打扰更新。\n- 建议只订阅自己真正关心的来源，减少无关信息干扰。\n- 长篇通知可先阅读 AI 摘要，再按需回看原文和附件。\n- 对考试、缴费、评审、学位、选课等关键事项，请务必回到原文核实。\n- 对重要来源建议配置邮件推送，形成桌面端到手机端的提醒闭环。\n\n### 隐私与数据说明\n\nMicroFlow 采用本地优先的运行方式。文章数据、阅读状态、收藏记录、批注内容、AI 提示词和邮箱配置默认保存在本地设备中。\n\n当你主动使用 AI 摘要、查看原文或邮件推送时，请求才会分别发送到对应的模型服务商、原始站点或邮件服务。当前版本默认启用匿名、脱敏的使用统计与错误诊断，用于改进软件稳定性；系统不会上传文章正文、用户批注、API Key、SMTP 密码或完整自定义规则，你也可以在设置中随时关闭相关统计。\n\n### 使用边界\n\n1. MicroFlow 仅提供信息聚合、阅读与文本辅助处理能力，不代表任何官方发布渠道。\n2. 所有通知、公文、RSS 内容、网页正文及附件的最终解释权，均归原始发布方所有。\n3. AI 摘要与标签仅用于提升阅读效率，不构成官方结论、执行依据或最终通知。\n4. 若因网络波动、校园网限制、源站改版、接口异常、模型限流或第三方服务故障导致内容延迟、缺失或偏差，请以原始发布页面为准。\n\n### 下载与反馈\n\n- Windows 安装包：请在当前版本下载地址中获取。\n- macOS 安装包：请在当前版本下载地址中获取。\n- 如在使用中遇到问题或希望反馈建议，欢迎发送邮件至 <contact>amaziiingchen@qq.com</contact>。\n\n### 赞赏支持\n\nMicroFlow 的全部功能都可以免费使用。\n\n如果 MicroFlow 对您有帮助，欢迎 BUY ME A COOFEE，您的支持是我持续改进的动力！\n\n![支付宝赞赏码](https://microflow-1412347033.cos.ap-guangzhou.myqcloud.com/assets/announcements/v1.0.0/alipay.JPG)\n\n支付宝赞赏\n\n![微信赞赏码](https://microflow-1412347033.cos.ap-guangzhou.myqcloud.com/assets/announcements/v1.0.0/wechat.JPG)\n\n微信赞赏\n\n希望 MicroFlow 能帮你把“找信息、看通知、读重点”这件事，变得更轻松一点！",
+    "image_url": "",
+    "image_alt": "MicroFlow 赞赏码",
+    "image_caption": "如果 MicroFlow 对您有帮助，欢迎 BUY ME A COOFEE，您的支持是我持续改进的动力！",
+    "url": "https://www.sztu.edu.cn/"
+  },
+  "system_contents": {
+    "changelog": {
+      "title": "关于 MicroFlow",
+      "summary": "查看当前版本、发布信息与本次正式版的核心能力。",
+      "content": "## 应用信息\n\n- 名称：MicroFlow\n- 版本：v1.0.0\n- 发布日期：2026-04-01\n- 发布渠道：stable\n\n## 本次版本包含\n\n- 设置页重构与系统内容远程同步\n- 公文通、学院、RSS、自定义数据源统一阅读体验\n- 摘要模式 / 原文模式切换\n- 主题系统与阅读字体切换\n- HTML 网页 AI 爬虫基础链路\n- 应用内更新提醒与匿名遥测基础设施\n\n## 更新与下载\n\n- Windows 安装包：https://microflow-1412347033.cos.ap-guangzhou.myqcloud.com/releases/v1.0.0/MicroFlow-Setup-v1.0.0.exe\n- macOS 安装包：https://microflow-1412347033.cos.ap-guangzhou.myqcloud.com/releases/v1.0.0/MicroFlow-v1.0.0-macos-arm64.dmg\n\n## 后续计划\n\n后续版本将继续补强 Windows / macOS 发布链路、规则调试体验、遥测看板与内容处理稳定性。",
+      "publish_time": "2026-04-01",
+      "url": "https://www.sztu.edu.cn/",
+      "category": "v1.0.0",
+      "tags": [
+        "关于",
+        "更新日志",
+        "v1.0.0"
+      ],
+      "department": "关于 MicroFlow"
+    },
+    "feedback": {
+      "title": "反馈与建议",
+      "summary": "如遇到 Bug、规则异常或有新功能建议，欢迎通过邮件联系。",
+      "content": "如需反馈 Bug、提交建议或申请排查，请发送邮件至 <contact>amaziiingchen@qq.com</contact>。\n\n建议附带以下信息，便于更快定位：\n\n1. 当前版本号与系统平台\n2. 涉及的数据源、规则名称或文章标题\n3. 复现步骤、截图或录屏\n4. 报错信息或控制台日志",
+      "publish_time": "2026-04-01",
+      "url": "mailto:amaziiingchen@qq.com",
+      "category": "联系方式",
+      "tags": [
+        "反馈",
+        "建议",
+        "邮箱"
+      ],
+      "department": "反馈与建议",
+      "email": "amaziiingchen@qq.com"
+    },
+    "disclaimer": {
+      "title": "免责声明",
+      "summary": "使用前请阅读信息来源边界、AI 风险提示与匿名统计说明。",
+      "content": "1. MicroFlow 仅作为本地信息聚合与阅读辅助工具，不代表学校、学院、部门或任何第三方机构的官方发布渠道。\n2. 校内通知、公文、RSS 与网页内容的版权、解释权与最终效力均归原发布方所有；请始终以原始页面、原文附件与官方通知为准。\n3. AI 摘要、标签、排版与增强结果仅用于提升阅读效率，不构成官方结论、法律意见或执行依据。\n4. 当你启用 AI 总结、查看原文、邮件推送或匿名统计时，相关请求会分别发送到对应的第三方服务；MicroFlow 不会主动上传文章正文、用户笔记、API Key、SMTP 密码或完整自定义规则。\n5. 因源站改版、接口限流、模型输出偏差、网络异常或第三方服务故障造成的内容缺失、延迟、误判或其他直接间接影响，开发者不承担连带责任。",
+      "publish_time": "2026-04-01",
+      "url": "https://www.sztu.edu.cn/",
+      "category": "使用说明",
+      "tags": [
+        "免责声明",
+        "使用边界"
+      ],
+      "department": "免责声明"
+    }
+  },
+  "rollout": {
+    "enabled": false,
+    "percentage": 100,
+    "whitelist": []
+  },
+  "telemetry": {
+    "enabled": true,
+    "endpoint": "",
+    "batch_size": 30,
+    "flush_interval_sec": 1800,
+    "sample_rate": 0.3
+  }
+}

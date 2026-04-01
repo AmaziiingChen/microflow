@@ -126,6 +126,14 @@
 
 当前远程配置建议仍沿用单一 `version.json`，但字段升级为正式协议。
 
+当前仓库已允许直接在项目根目录维护一份 [version.json](/Users/chen/Code/MicroFlow/version.json) 作为“待上传到腾讯云 COS 的工作副本”。
+
+说明：
+
+- 这份根目录 `version.json` 适合你每次发版前直接修改，然后上传覆盖云端文件
+- 当前 [MicroFlow.spec](/Users/chen/Code/MicroFlow/MicroFlow.spec) 只会打包 `frontend/` 与 `data/`，不会把根目录 `version.json` 带进安装包
+- 文档模板仍保留在 [docs/version.template.json](/Users/chen/Code/MicroFlow/docs/version.template.json) 供后续复制与对照
+
 ## 建议字段
 
 | 字段 | 类型 | 必填 | 用途 |
@@ -177,6 +185,9 @@
 | `publish_time` | string | 否 | 发布时间 |
 | `url` | string | 否 | 外部链接 |
 | `version` | string | 否 | 与哪个版本关联 |
+| `image_url` | string | 否 | 公告附图地址，可用于收款码或海报 |
+| `image_alt` | string | 否 | 公告附图替代文本 |
+| `image_caption` | string | 否 | 公告附图说明文案 |
 
 ## `rollout` 字段建议
 
@@ -329,7 +340,7 @@
 2. 打包 Windows / macOS 产物
 3. 计算各平台 `sha256`
 4. 上传安装包到腾讯云 COS
-5. 更新 `version.json`
+5. 更新根目录 [version.json](/Users/chen/Code/MicroFlow/version.json) 并上传到腾讯云 COS
 6. 先灰度到 `beta` 或小比例 `stable`
 7. 观察埋点与错误率
 8. 确认稳定后放量到 100%

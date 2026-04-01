@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional, Tuple, Callable, TYPE_CHECKING, List
 from src.utils.text_cleaner import strip_emoji
 from src.utils.ai_markdown import compose_tagged_markdown
+from src.utils.content_text import resolve_effective_article_text
 from src.utils.html_rule_strategy import normalize_detail_strategy
 from src.utils.article_identity import canonicalize_article_url
 
@@ -478,7 +479,7 @@ class ArticleProcessor:
             return "AI 服务暂时不可用，请稍后重试。"
 
         while text.startswith(self.AI_FAILURE_PREFIXES):
-            text = text[1:].lstrip("：:[]（）() \t")
+            text = text[1:].lstrip("：:[]（）() \t\uFE0F")
 
         return text or "AI 服务暂时不可用，请稍后重试。"
 
@@ -499,6 +500,29 @@ class ArticleProcessor:
             "message": normalized_message,
             "raw_message": str(message or "").strip(),
         }
+
+    def _build_ai_failure_fallback_summary(
+        self,
+        *,
+        source_type: str,
+        raw_text: str,
+        structured_raw_markdown: str,
+        rss_raw_markdown: str,
+        rss_enhanced_markdown: str,
+    ) -> str:
+        """AI 失败时回退为可读的正文内容，避免整篇文章直接丢失。"""
+        candidates = (
+            [rss_enhanced_markdown, rss_raw_markdown, raw_text]
+            if source_type == "rss"
+            else [structured_raw_markdown, raw_text]
+        )
+
+        for candidate in candidates:
+            normalized = str(candidate or "").strip()
+            if normalized:
+                return normalized
+
+        return "AI 摘要暂不可用，请切换原文模式查看。"
 
     def _process_task(
         self, task: ProcessingTask
@@ -542,6 +566,18 @@ class ArticleProcessor:
         # 🌟 纯图片内容检测标记
         is_pure_image = False
         pure_image_html = ""  # 🌟 纯图片内容的 HTML
+
+        recovered_text = resolve_effective_article_text(
+            raw_text=raw_text,
+            raw_markdown=structured_raw_markdown,
+            body_html=body_html,
+        )
+        if (
+            len(str(raw_text or "").strip()) < self.MIN_CONTENT_LENGTH
+            and self.validate_content_length(recovered_text)
+        ):
+            raw_text = recovered_text
+            logger.info(f"已从结构化正文恢复可总结文本: {ctx.title}")
 
         # 🌟 纯图片内容防御：如果 body_text 为空，检查 HTML 中是否有实际文字
         if not raw_text or len(raw_text.strip()) < 10:
@@ -648,6 +684,9 @@ class ArticleProcessor:
         rss_ai_summary = ""
         rss_ai_tags: List[str] = []
         summary = ""
+        ai_summary_failed = False
+        ai_failure_reason = ""
+        ai_failure_payload: Optional[Dict[str, Any]] = None
 
         # 8. 🌟 纯图片内容：跳过 AI 调用，使用图片 HTML 作为摘要
         if is_pure_image:
@@ -748,15 +787,21 @@ class ArticleProcessor:
                         self.on_progress(ai_completed, ai_total, ctx.title)
                     except Exception:
                         pass
-                return (
-                    False,
-                    "ai_error",
-                    self._build_ai_failure_payload(
-                        ctx,
-                        f"AI 服务调用异常：{e}",
-                        reason="ai_error",
-                    ),
+                ai_summary_failed = True
+                ai_failure_reason = "ai_error"
+                ai_failure_payload = self._build_ai_failure_payload(
+                    ctx,
+                    f"AI 服务调用异常：{e}",
+                    reason="ai_error",
                 )
+                summary = self._build_ai_failure_fallback_summary(
+                    source_type=source_type,
+                    raw_text=raw_text,
+                    structured_raw_markdown=structured_raw_markdown,
+                    rss_raw_markdown=rss_raw_markdown,
+                    rss_enhanced_markdown=rss_enhanced_markdown,
+                )
+                logger.warning(f"AI 调用异常，已回退原文入库: {ctx.title}")
 
             # 🌟 AI 调用完成，推送最新进度（含完成信号）
             with self._stats_lock:
@@ -771,16 +816,21 @@ class ArticleProcessor:
 
             # 10. 核心防线：拦截 AI 失败的情况
             if summary.startswith(self.AI_FAILURE_PREFIXES):
-                logger.warning(f"AI 分析失败，本次不入库: {ctx.title}")
-                return (
-                    False,
-                    "ai_failed",
-                    self._build_ai_failure_payload(
-                        ctx,
-                        summary,
-                        reason="ai_failed",
-                    ),
+                ai_summary_failed = True
+                ai_failure_reason = "ai_failed"
+                ai_failure_payload = self._build_ai_failure_payload(
+                    ctx,
+                    summary,
+                    reason="ai_failed",
                 )
+                summary = self._build_ai_failure_fallback_summary(
+                    source_type=source_type,
+                    raw_text=raw_text,
+                    structured_raw_markdown=structured_raw_markdown,
+                    rss_raw_markdown=rss_raw_markdown,
+                    rss_enhanced_markdown=rss_enhanced_markdown,
+                )
+                logger.warning(f"AI 分析失败，已回退原文入库: {ctx.title}")
 
         summary = strip_emoji(summary)
         structured_raw_markdown = strip_emoji(structured_raw_markdown)
@@ -831,8 +881,8 @@ class ArticleProcessor:
         content_blocks = detail.get("content_blocks") or []
         image_assets = detail.get("image_assets") or []
 
-        # 9. 入库（🌟 异步写入：通过写队列串行化，不阻塞当前 Worker）
-        self.db.insert_or_update_article(
+        # 9. 入库（同步等待），确保前端实时收到的文章带有真实数据库主键。
+        write_success = self.db.insert_or_update_article_sync(
             title=ctx.title,
             url=ctx.url,
             date=ctx.date,
@@ -857,11 +907,17 @@ class ArticleProcessor:
             content_blocks=content_blocks,
             image_assets=image_assets,
         )
+        if not write_success:
+            logger.error(f"[{ctx.source_name}] 文章入库失败: {ctx.title}")
+            return False, "db_write_failed", None
+
+        persisted_article = self.db.get_article_by_url(ctx.url) or {}
 
         logger.info(f"[{ctx.source_name}] 文章入库成功: {ctx.title}")
 
         # 10. 构建完整的文章数据并触发回调
         article_data = {
+            "id": persisted_article.get("id"),
             "title": ctx.title,
             "url": ctx.url,
             "date": ctx.date,
@@ -875,12 +931,14 @@ class ArticleProcessor:
             "content_blocks": content_blocks,
             "image_assets": image_assets,
             "summary": summary,
+            "raw_text": raw_text,
             "raw_content": raw_text,
             "raw_markdown": stored_raw_markdown,
             "enhanced_markdown": stored_enhanced_markdown,
             "ai_summary": rss_ai_summary,
             "ai_tags": rss_ai_tags,
             "is_read": 0,
+            "is_favorite": persisted_article.get("is_favorite", 0),
             "model_name": self.config_service.get('modelName', 'AI'),  # 🌟 传递模型名称用于快照
             "rule_id": ctx.rule_id,
             "custom_summary_prompt": ctx.summary_prompt or ctx.custom_summary_prompt,
@@ -889,6 +947,18 @@ class ArticleProcessor:
             "enable_ai_formatting": ctx.enable_ai_formatting,
             "enable_ai_summary": ctx.enable_ai_summary,
             "source_type": source_type,
+            "ai_summary_failed": ai_summary_failed,
+            "ai_failure_reason": ai_failure_reason,
+            "ai_failure_message": (
+                str(ai_failure_payload.get("message") or "").strip()
+                if isinstance(ai_failure_payload, dict)
+                else ""
+            ),
+            "raw_ai_failure_message": (
+                str(ai_failure_payload.get("raw_message") or "").strip()
+                if isinstance(ai_failure_payload, dict)
+                else ""
+            ),
         }
         logger.info(f"📸 article_data.model_name = {article_data.get('model_name')}")
 
@@ -908,6 +978,8 @@ class ArticleProcessor:
             ).start()
 
         # 12. 返回成功信息
+        if ai_summary_failed and ai_failure_reason:
+            return True, f"{ai_failure_reason}_fallback", article_data
         return True, reason, article_data
 
     def submit(
