@@ -217,9 +217,9 @@ class ArticleProcessor:
             # 绝不能在这里 break，否则会导致线程死亡
 
             try:
-                # 从队列获取任务（带超时，这是线程保持监听的核心）
+                # 🌟 平衡优化：2秒轮询，兼顾响应速度
                 try:
-                    task = self._task_queue.get(timeout=1.0)
+                    task = self._task_queue.get(timeout=2.0)
                 except queue.Empty:
                     continue
 

@@ -103,7 +103,7 @@ class SpiderScheduler:
     _INCREMENTAL_REPAIR_WINDOW_RSS = 20  # 连续追踪时，RSS 源每板块顶部回补窗口
     _MANUAL_REPAIR_SCAN_LIMIT_HTML = 50  # 手动更新时，HTML 源每板块深补扫上限
     _MANUAL_REPAIR_SCAN_LIMIT_RSS = 100  # 手动更新时，RSS 源每板块深补扫上限
-    _SPIDER_WATCHDOG_POLL_SECONDS = 0.5
+    _SPIDER_WATCHDOG_POLL_SECONDS = 1.0  # 🌟 平衡优化：1秒检测超时
     _SPIDER_TIMEOUT_BASE_SECONDS = 18
     _SPIDER_TIMEOUT_PER_SECTION_SECONDS = 14
 
@@ -137,6 +137,8 @@ class SpiderScheduler:
         # 🌟 热重载优化：缓存规则文件修改时间
         self._rules_last_mtime: float = 0
         self._rules_manager = get_rules_manager()
+        # 🌟 性能优化：规则检查计数器，每3次轮询才检查一次
+        self._rules_check_counter: int = 0
 
         # 初始化爬虫
         self._init_spiders()
@@ -317,17 +319,32 @@ class SpiderScheduler:
         except Exception as e:
             logger.debug(f"回写 RSS 健康状态失败: {e}")
 
-    def reload_dynamic_spiders(self) -> None:
+    def reload_dynamic_spiders(self, *, force: bool = False) -> None:
         """
         重新加载动态爬虫（每次轮询前调用，实现热重载）
 
         🌟 优化：通过检查规则文件修改时间，仅在文件变化时执行重载，
         避免不必要的爬虫实例创建和规则解析。
+        🌟 性能优化：每3次轮询才检查一次，降低文件系统调用频率。
         """
         import os
 
-        # 获取规则文件路径
         rules_path = self._rules_manager._rules_path
+
+        if force:
+            logger.info("📋 强制刷新动态爬虫")
+            self._do_reload_dynamic_spiders()
+            try:
+                self._rules_last_mtime = rules_path.stat().st_mtime
+            except Exception:
+                self._rules_last_mtime = 0
+            return
+
+        # 🌟 性能优化：每3次轮询才检查一次
+        self._rules_check_counter += 1
+        if self._rules_check_counter % 3 != 0:
+            logger.debug("跳过本轮规则检查（计数器未达阈值）")
+            return
 
         # 文件不存在，视为需要加载（可能首次运行）
         if not rules_path.exists():
@@ -525,10 +542,8 @@ class SpiderScheduler:
 
         source_type = str(getattr(spider, "_source_type", "html") or "html").strip()
         if source_type == "html":
-            # 自定义 HTML 源冷启动同样只落 1 条，守门阈值保持一致即可：
-            # - 首次启动后立刻手动更新时，existing_count=1，不会直接深补扫
-            # - 已经积累出几条历史后，则允许手动触发更深的缺口修复
-            return self._COLD_START_QUOTA_COLLEGE
+            # 自定义 HTML 源：使用用户配置的 max_items，允许冷启动时抓取更多历史文章
+            return max(self._resolve_fetch_limit(spider), 0)
         return max(self._resolve_fetch_limit(spider), 0)
 
     def _resolve_seed_frontier_url(
@@ -842,8 +857,8 @@ class SpiderScheduler:
                 except Exception as e:
                     logger.debug(f"爬虫进度回调失败: {e}")
 
-            # 6. 使用线程池并发执行爬虫
-            executor = ThreadPoolExecutor(max_workers=5)
+            # 🌟 平衡优化：4线程并发，兼顾速度和资源
+            executor = ThreadPoolExecutor(max_workers=4)
             try:
                 futures = {}
                 future_deadlines = {}
@@ -1062,6 +1077,7 @@ class SpiderScheduler:
         source_type = getattr(spider, "_source_type", "html")
         error_list: List[str] = []
         started_at = time.monotonic()
+        fetch_limit = self._resolve_fetch_limit(spider)
 
         # ── 冷启动状态推演 ──────────────────────────────────────────
         existing_count = db.get_article_count_by_source(source_name)
@@ -1072,6 +1088,13 @@ class SpiderScheduler:
                 # RSS 订阅：不设配额限制，抓取所有条目
                 quota = None
                 logger.info(f"📡 [{source_name}] RSS 订阅冷启动，不限配额")
+            elif getattr(spider, "_is_dynamic", False) and source_type == "html":
+                # 自定义 HTML 源：冷启动时也允许使用规则自己的抓取上限，
+                # 这样首次更新就能回补用户希望保留的历史窗口。
+                quota = max(fetch_limit, 1)
+                logger.info(
+                    f"❄️ [{source_name}] 自定义 HTML 冷启动，使用规则抓取上限: {quota} 条"
+                )
             else:
                 # HTML 爬虫：使用原有配额
                 quota = (
@@ -1100,7 +1123,6 @@ class SpiderScheduler:
 
         # 获取板块列表
         sections = self._get_sections(spider)
-        fetch_limit = self._resolve_fetch_limit(spider)
         default_page_budget = self._resolve_dynamic_page_budget(spider, is_cold_start)
         deep_scan_limit = self._resolve_section_scan_limit(
             spider,

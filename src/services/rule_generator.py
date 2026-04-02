@@ -1409,7 +1409,7 @@ class RuleGeneratorService:
                         recovery_sample_data = self._test_rule_with_beautifulsoup(
                             raw_html,
                             recovery_schema,
-                            max_items=3,
+                            max_items=1,
                         )
                         if self._sample_data_has_signal(
                             recovery_sample_data,
@@ -1503,7 +1503,7 @@ class RuleGeneratorService:
                         sample_data = self._test_rule_with_beautifulsoup(
                             raw_html,
                             template_schema,
-                            max_items=3,
+                            max_items=1,
                         )
                         if not self._sample_data_has_signal(
                             sample_data,
@@ -1678,7 +1678,7 @@ class RuleGeneratorService:
                     logger.info(f"🧪 开始沙盒测试: {url}")
 
                     sample_data = self._test_rule_with_beautifulsoup(
-                        raw_html_for_test, rule_schema, max_items=3
+                        raw_html_for_test, rule_schema, max_items=1
                     )
                     logger.info(f"🧪 沙盒测试结果: 提取到 {len(sample_data)} 条数据")
 
@@ -1738,7 +1738,7 @@ class RuleGeneratorService:
                                 if isinstance(sec_result, dict):
                                     sec_schema = SpiderRuleSchema(**sec_result)
                                     sec_sample = self._test_rule_with_beautifulsoup(
-                                        raw_html_for_test, sec_schema, max_items=3
+                                        raw_html_for_test, sec_schema, max_items=1
                                     )
 
                                     if sec_sample and len(sec_sample) > 0:

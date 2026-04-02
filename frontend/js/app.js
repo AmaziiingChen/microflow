@@ -234,7 +234,19 @@ const SOURCE_ICON_CATALOG = [
 ];
 
 // 🌟 修复：清洗 SVG 中写死的黑色，让它能跟随 CSS 变色
-const getDepartmentIcon = (departmentName) => {
+const getDepartmentIcon = (departmentName, sourceType = '', ruleId = '') => {
+  // 🌟 HTML 自定义规则：使用 h.square.fill.svg 灰色背景白色H图标
+  // 只对自定义规则（有 rule_id）且类型为 html 的显示特殊图标
+  const isCustomRule = String(ruleId || '').trim().length > 0;
+  if (isCustomRule && String(sourceType).toLowerCase() === 'html') {
+    return `<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 18.3398 17.9785">
+ <g>
+  <rect height="17.9785" opacity="0" width="18.3398" x="0" y="0"/>
+  <path d="M17.9785 3.02734L17.9785 14.9609C17.9785 16.9727 16.9629 17.9785 14.9121 17.9785L3.06641 17.9785C1.02539 17.9785 0 16.9727 0 14.9609L0 3.02734C0 1.01562 1.02539 0 3.06641 0L14.9121 0C16.9629 0 17.9785 1.01562 17.9785 3.02734ZM11.3379 5.08789L11.3379 8.11523L6.63086 8.11523L6.63086 5.08789C6.63086 4.51172 6.33789 4.17969 5.81055 4.17969C5.3125 4.17969 5.01953 4.52148 5.01953 5.08789L5.01953 12.6953C5.01953 13.2617 5.3125 13.6035 5.81055 13.6035C6.33789 13.6035 6.63086 13.2715 6.63086 12.6953L6.63086 9.38477L11.3379 9.38477L11.3379 12.6953C11.3379 13.2617 11.6406 13.6035 12.1387 13.6035C12.666 13.6035 12.959 13.2715 12.959 12.6953L12.959 5.08789C12.959 4.51172 12.666 4.17969 12.1387 4.17969C11.6406 4.17969 11.3379 4.52148 11.3379 5.08789Z" fill="#ffffff" fill-opacity="1"/>
+ </g>
+</svg>`;
+  }
+
   // 默认使用公文通的图标（第一个）
   const defaultIcon = SOURCE_ICON_CATALOG[0];
   if (!departmentName)
@@ -572,6 +584,18 @@ try {
       getTagColor: { type: Function, required: true },
       renderMarkdown: { type: Function, required: true },
       getHtmlRulePendingRetestMessage: {
+        type: Function,
+        required: true,
+      },
+      getHtmlRulePrimaryActionMode: {
+        type: Function,
+        required: true,
+      },
+      getHtmlRulePrimaryActionLabel: {
+        type: Function,
+        required: true,
+      },
+      getHtmlSelectorActionLabel: {
         type: Function,
         required: true,
       },
@@ -5767,7 +5791,7 @@ try {
       };
       const getArticleSortKey = (article = {}) =>
         normalizeArticleTimeForSort(
-          article?.exact_time || article?.publish_time || article?.date || "",
+          article?.exact_time || article?.publish_time || article?.date || article?.created_at || "",
         );
       const compareArticlesByTimeDesc = (left = {}, right = {}) => {
         const leftKey = getArticleSortKey(left);
@@ -7630,7 +7654,7 @@ try {
       const getHtmlRulePendingRetestMessage = (seedRule = null) => {
         const driftState = getHtmlRuleDriftState(seedRule);
         if (driftState.fieldDrift) {
-          return "提取字段已变化，请重新生成规则后再保存。";
+          return "提取字段已变化，旧选择器已不再适用，请重新生成并测试后再保存。";
         }
         if (driftState.retestDrift) {
           return "目标 URL、请求方式或正文抓取策略已变化，请先重新测试后再保存。";
@@ -7644,6 +7668,45 @@ try {
           return detailPreviewMessage;
         }
         return "";
+      };
+
+      const getHtmlRulePrimaryActionMode = (seedRule = null) => {
+        const activeRule = seedRule || generatedRuleCache.value;
+        if (!activeRule) {
+          return "generate";
+        }
+
+        const driftState = getHtmlRuleDriftState(seedRule);
+        if (driftState.fieldDrift) {
+          return "regenerate";
+        }
+
+        return "retest";
+      };
+
+      const getHtmlRulePrimaryActionLabel = (seedRule = null) => {
+        const mode = getHtmlRulePrimaryActionMode(seedRule);
+        if (mode === "generate") {
+          return "AI 智能分析并测试";
+        }
+        if (mode === "regenerate") {
+          return "重新生成并测试";
+        }
+        return previewData.value && previewData.value.length > 0
+          ? "测试规则"
+          : "先测试当前规则";
+      };
+
+      const getHtmlSelectorActionLabel = (seedRule = null) => {
+        const mode = getHtmlRulePrimaryActionMode(seedRule);
+        if (mode === "regenerate") {
+          return previewData.value && previewData.value.length > 0
+            ? "字段已变更，重新生成并测试"
+            : "字段已变更，先重新生成规则";
+        }
+        return previewData.value && previewData.value.length > 0
+          ? "用当前选择器重新测试"
+          : "先测试当前规则";
       };
 
       const getHtmlRuleSaveBlockingMessage = (seedRule = null) => {
@@ -7756,12 +7819,13 @@ try {
         if (driftState.fieldDrift) {
           if (notifyError) {
             showNotification(
-              "请重新生成",
-              "提取字段已变化，请重新生成规则后再测试。",
-              "warning",
+              "字段已变化",
+              "提取字段已变化，已切换为按当前表单重新生成并测试规则。",
+              "info",
+              2200,
             );
           }
-          return false;
+          return await generateAndTestRule();
         }
 
         if (!validateHtmlAccessConfigOrNotify("重新测试")) {
@@ -8352,6 +8416,56 @@ try {
         checkedAt: 0,
       });
       const isCheckingNetworkAccess = ref(false);
+
+      // 🌟 性能监控状态
+      const performanceStats = ref({
+        cpu_percent: 0,
+        memory_mb: 0,
+        stats: {
+          peak_cpu: 0,
+          peak_memory: 0,
+          avg_cpu: 0,
+          avg_memory: 0,
+        },
+      });
+
+      // 🌟 获取 CPU 状态样式类
+      const getCpuStatusClass = (cpu) => {
+        if (cpu < 5) return 'is-excellent';
+        if (cpu < 20) return 'is-good';
+        if (cpu < 50) return 'is-normal';
+        return 'is-high';
+      };
+
+      // 🌟 刷新性能统计
+      const refreshPerformanceStats = async () => {
+        try {
+          const stats = await window.pywebview.api.get_performance_stats();
+          if (stats && !stats.error) {
+            performanceStats.value = {
+              cpu_percent: Math.round(stats.cpu_percent || 0),
+              memory_mb: Math.round(stats.memory_mb || 0),
+              stats: stats.stats || {},
+            };
+          }
+        } catch (error) {
+          console.error('获取性能统计失败:', error);
+        }
+      };
+
+      // 🌟 自动刷新性能数据（每10秒）
+      let performanceInterval = null;
+      const startPerformanceMonitoring = () => {
+        refreshPerformanceStats();
+        performanceInterval = setInterval(refreshPerformanceStats, 10000);
+      };
+
+      const stopPerformanceMonitoring = () => {
+        if (performanceInterval) {
+          clearInterval(performanceInterval);
+          performanceInterval = null;
+        }
+      };
       const softwareUpdateState = ref({
         status: "idle", // idle | testing | success | error
         label: "尚未检查",
@@ -9105,9 +9219,12 @@ try {
       );
 
       // 🌟 自定义数据源的默认图标
-      const customSourceIcon = `<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <path d="M10 2a8 8 0 100 16 8 8 0 000-16zM8.5 7.5a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0zM10 11c-1.5 0-2.8.8-3.5 2h7c-.7-1.2-2-2-3.5-2z" fill="currentColor"/>
-            </svg>`;
+      const customSourceIcon = normalizeSourceSvg(`<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 20.2832 19.9316" aria-hidden="true">
+ <g>
+  <rect height="19.9316" opacity="0" width="20.2832" x="0" y="0"/>
+  <path d="M19.9219 9.96094C19.9219 15.4492 15.459 19.9219 9.96094 19.9219C4.47266 19.9219 0 15.4492 0 9.96094C0 4.46289 4.47266 0 9.96094 0C15.459 0 19.9219 4.46289 19.9219 9.96094ZM12.3047 6.06445L12.3047 9.0918L7.59766 9.0918L7.59766 6.06445C7.59766 5.48828 7.30469 5.15625 6.77734 5.15625C6.2793 5.15625 5.98633 5.49805 5.98633 6.06445L5.98633 13.6719C5.98633 14.2383 6.2793 14.5801 6.77734 14.5801C7.30469 14.5801 7.59766 14.248 7.59766 13.6719L7.59766 10.3613L12.3047 10.3613L12.3047 13.6719C12.3047 14.2383 12.6074 14.5801 13.1055 14.5801C13.6328 14.5801 13.9258 14.248 13.9258 13.6719L13.9258 6.06445C13.9258 5.48828 13.6328 5.15625 13.1055 5.15625C12.6074 5.15625 12.3047 5.49805 12.3047 6.06445Z" fill="black" fill-opacity="0.85"/>
+ </g>
+</svg>`);
       const customRssSourceIcon =
         normalizeSourceSvg(`<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 20.2832 19.9316" aria-hidden="true">
  <g>
@@ -9132,13 +9249,13 @@ try {
               );
 
         // 🌟 构建可见的自定义数据源列表
-        const visibleCustomSources = enabledCustomRules.map((rule, index) => ({
-          key: `custom-source-${index}`,
+        const visibleCustomSources = enabledCustomRules.map((rule) => ({
+          key: `custom-source-${rule.url || rule.rule_id}`,
           name: rule.task_name,
           color:
             String(rule?.source_type || "").toLowerCase() === "rss"
               ? "var(--custom-source-rss-color)"
-              : "var(--custom-source-web-color)",
+              : "#9ca3af",
           svg:
             String(rule?.source_type || "").toLowerCase() === "rss"
               ? customRssSourceIcon
@@ -9753,17 +9870,17 @@ try {
       // AI 智能分析并测试
       const generateAndTestRule = async () => {
         if (notifyIfCustomRuleBusy("生成规则")) {
-          return;
+          return false;
         }
         const normalizedForm = getNormalizedRuleForm();
         if (!validateRuleIdentityFields(normalizedForm)) {
-          return;
+          return false;
         }
 
         // 🌟 RSS 模式：直接验证并保存
         if (normalizedForm.source_type === "rss") {
           await validateAndSaveRssRule();
-          return;
+          return true;
         }
 
         // HTML 模式：过滤空字段
@@ -9772,18 +9889,18 @@ try {
         );
         if (validFields.length === 0) {
           showNotification("表单校验", "请至少添加一个提取字段", "warning");
-          return;
+          return false;
         }
 
         if (!validateHtmlAccessConfigOrNotify("生成规则")) {
-          return;
+          return false;
         }
 
         const accessConfig = getNormalizedHtmlAccessConfig();
 
         const aiReady = await validateAiPrerequisites("AI 规则生成");
         if (!aiReady) {
-          return;
+          return false;
         }
 
         const requestEpoch = nextCustomRuleRequestEpoch();
@@ -9817,7 +9934,7 @@ try {
           );
 
           if (!isCurrentCustomRuleRequest(requestEpoch)) {
-            return;
+            return false;
           }
 
           if (res.status === "success") {
@@ -9859,6 +9976,7 @@ try {
                 recovered_existing_rule: Boolean(res?.recovery_applied),
               }),
             );
+            return true;
           } else {
             fireTelemetryEvent(
               "custom_rule_test_result",
@@ -9873,6 +9991,7 @@ try {
               res.message || "AI 分析失败，请重试",
               "error",
             );
+            return false;
           }
         } catch (e) {
           if (isCurrentCustomRuleRequest(requestEpoch)) {
@@ -9887,11 +10006,14 @@ try {
               }),
             );
           }
+          return false;
         } finally {
           if (isCurrentCustomRuleRequest(requestEpoch)) {
             isGeneratingRule.value = false;
           }
         }
+
+        return false;
       };
 
       // 🌟 重新生成规则（用户对预览结果不满意时调用）
@@ -10151,6 +10273,7 @@ try {
               );
               closeCustomRuleModal();
               // 刷新规则列表
+              customRulesLoaded.value = false;  // 强制重置标志位，确保刷新生效
               await fetchCustomRules({ silent: true });
             } else {
               fireTelemetryEvent(
@@ -10223,6 +10346,7 @@ try {
             );
             closeCustomRuleModal();
             // 刷新规则列表
+            customRulesLoaded.value = false;  // 强制重置标志位，确保刷新生效
             await fetchCustomRules({ silent: true });
           } else {
             fireTelemetryEvent(
@@ -10349,10 +10473,14 @@ try {
           );
           if (res.status === "success") {
             showNotification("状态更新", res.message, "success");
-            // 更新本地状态
-            const rule = customRules.value.find((r) => r.rule_id === ruleId);
-            if (rule) {
-              rule.enabled = newStatus;
+            // 更新本地状态 - 创建新数组触发响应式更新
+            const ruleIndex = customRules.value.findIndex((r) => r.rule_id === ruleId);
+            if (ruleIndex !== -1) {
+              customRules.value = [
+                ...customRules.value.slice(0, ruleIndex),
+                { ...customRules.value[ruleIndex], enabled: newStatus },
+                ...customRules.value.slice(ruleIndex + 1)
+              ];
             }
           } else {
             showNotification("更新失败", res.message || "更新失败", "error");
@@ -10741,6 +10869,13 @@ try {
           backFromSettingsSubpage();
         }
         activeSettingsSection.value = sectionId;
+
+        // 🌟 切换到网络与访问时启动性能监控
+        if (sectionId === 'network') {
+          startPerformanceMonitoring();
+        } else {
+          stopPerformanceMonitoring();
+        }
       };
 
       const backToSettingsSectionList = () => {
@@ -10831,10 +10966,14 @@ try {
 
         // 2. 🌟 核心：无论保存是否彻底成功，都关闭设置界面
         isSettingsOpen.value = false;
+        // 🌟 停止性能监控
+        stopPerformanceMonitoring();
       };
 
       const closeSettingsSilently = async () => {
         if (!isSettingsOpen.value) return;
+        // 🌟 停止性能监控
+        stopPerformanceMonitoring();
         if (isPromptEditorOpen.value) {
           if (promptEasyMDE) {
             tempPromptContent.value = promptEasyMDE.value();
@@ -11748,6 +11887,7 @@ try {
               }
             }),
             runStartupCheck(),
+            fetchCustomRules({ silent: true }),
           ]);
           setTimeout(() => {
             void warmAiPrereqCache();
@@ -13639,6 +13779,14 @@ try {
             foreignObjectRendering: true,
             windowWidth: targetView.scrollWidth,
             windowHeight: targetView.scrollHeight,
+            onclone: (clonedDoc) => {
+              // 将 base64 字体注入到克隆的文档中
+              const fontStyle = document.getElementById("temp-snapshot-font");
+              if (fontStyle) {
+                const clonedStyle = fontStyle.cloneNode(true);
+                clonedDoc.head.appendChild(clonedStyle);
+              }
+            },
           });
 
           // 5. 导出并保存
@@ -14575,6 +14723,9 @@ try {
         isCheckingNetworkAccess,
         refreshNetworkAccessStatus,
         formatNetworkCheckedAt,
+        performanceStats,
+        getCpuStatusClass,
+        refreshPerformanceStats,
         softwareUpdateState,
         isCheckingSoftwareUpdate,
         remoteVersion,
@@ -14643,6 +14794,9 @@ try {
         getRuleStrategyLabel,
         getHtmlAccessConfigValidationMessage,
         getHtmlRulePendingRetestMessage,
+        getHtmlRulePrimaryActionMode,
+        getHtmlRulePrimaryActionLabel,
+        getHtmlSelectorActionLabel,
         isRuleInlineEditing,
         isHealthRetestingRule,
         fetchCustomRules,

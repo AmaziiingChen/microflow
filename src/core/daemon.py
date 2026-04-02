@@ -66,6 +66,10 @@ class DaemonManager:
         # 🌟 冷却时间获取器（可由外部设置，支持动态配置）
         self._cooldown_getter: Optional[Callable[[], int]] = None
 
+        # 🌟 性能优化：内存缓存时间戳，减少文件IO
+        self._cached_fetch_time: float = 0.0
+        self._fetch_time_cache_valid: bool = False
+
     def set_cooldown_getter(self, getter: Callable[[], int]) -> None:
         """
         设置冷却时间获取器
@@ -113,18 +117,30 @@ class DaemonManager:
     def _save_last_fetch_time(self) -> None:
         """将当前时间戳持久化到文件"""
         try:
+            current_time = time.time()
             # 确保目录存在（paths 模块已处理，这里双重保险）
             LAST_FETCH_TIME_PATH.parent.mkdir(parents=True, exist_ok=True)
-            LAST_FETCH_TIME_PATH.write_text(str(time.time()), encoding="utf-8")
+            LAST_FETCH_TIME_PATH.write_text(str(current_time), encoding="utf-8")
+            # 🌟 同步更新内存缓存
+            self._cached_fetch_time = current_time
+            self._fetch_time_cache_valid = True
             logger.debug(f"💾 已保存抓取时间戳")
         except Exception as e:
             logger.warning(f"保存抓取时间戳失败: {e}")
 
     def _get_last_fetch_time(self) -> float:
         """从文件读取上次抓取时间戳，失败返回 0.0"""
+        # 🌟 优先使用内存缓存
+        if self._fetch_time_cache_valid:
+            return self._cached_fetch_time
+
         try:
             if LAST_FETCH_TIME_PATH.exists():
-                return float(LAST_FETCH_TIME_PATH.read_text(encoding="utf-8").strip())
+                fetch_time = float(LAST_FETCH_TIME_PATH.read_text(encoding="utf-8").strip())
+                # 🌟 更新缓存
+                self._cached_fetch_time = fetch_time
+                self._fetch_time_cache_valid = True
+                return fetch_time
         except Exception as e:
             logger.debug(f"读取抓取时间戳失败: {e}")
         return 0.0
@@ -134,8 +150,12 @@ class DaemonManager:
         公开方法：记录手动更新时间
         供 api.py 的手动更新接口调用
         """
+        current_time = time.time()
+        self._last_successful_run = current_time
+        # 🌟 先更新缓存，再持久化
+        self._cached_fetch_time = current_time
+        self._fetch_time_cache_valid = True
         self._save_last_fetch_time()
-        self._last_successful_run = time.time()
         logger.info("📝 已记录手动更新时间")
 
     # =========================================================
@@ -409,8 +429,9 @@ class DaemonManager:
                             evening_ran = True
                             logger.info("🌆 晚间抖动任务已完成")
 
-                # 🌟 基础心跳：每 60 秒检查一次
-                if self._stop_event.wait(60):
+                # 🌟 平衡优化：动态心跳间隔（深夜300秒，白天90秒）
+                heartbeat_interval = 300 if (hour_float >= 20.0 or hour_float < 8.0) else 90
+                if self._stop_event.wait(heartbeat_interval):
                     return
 
         self._thread = threading.Thread(target=worker, daemon=True)

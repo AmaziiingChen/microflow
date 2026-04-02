@@ -640,6 +640,7 @@ class SchedulerIncrementalGuardrailsTests(unittest.TestCase):
         spider._is_dynamic = True
         spider._source_type = "html"
         spider.pagination_mode = "load_more"
+        spider.max_items = 3
         spider.max_pages = 4
         spider.incremental_max_pages = 1
 
@@ -655,6 +656,54 @@ class SchedulerIncrementalGuardrailsTests(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertEqual(count, 1)
         self.assertEqual(spider.fetch_kwargs[0]["page_budget"], 4)
+
+    def test_dynamic_html_cold_start_uses_configured_max_items_for_submission_quota(self):
+        processor = DummyProcessor()
+        scheduler = self.make_scheduler(processor)
+        spider = DummySpider(
+            "自定义网页源",
+            {
+                None: [
+                    {
+                        "title": "最新文章",
+                        "url": "https://example.com/4",
+                        "date": "2026-03-30",
+                    },
+                    {
+                        "title": "历史文章 3",
+                        "url": "https://example.com/3",
+                        "date": "2026-03-29",
+                    },
+                    {
+                        "title": "历史文章 2",
+                        "url": "https://example.com/2",
+                        "date": "2026-03-28",
+                    },
+                    {
+                        "title": "历史文章 1",
+                        "url": "https://example.com/1",
+                        "date": "2026-03-27",
+                    },
+                ]
+            },
+        )
+        spider._is_dynamic = True
+        spider._source_type = "html"
+        spider.max_items = 3
+
+        fake_db = FakeDB(existing_count=0)
+        with patch("src.core.scheduler.db", fake_db):
+            _source_name, count, errors = scheduler._process_spider(
+                spider=spider,
+                mode="continuous",
+                today_str="2026-03-30",
+                is_manual=False,
+            )
+
+        self.assertEqual(errors, [])
+        self.assertEqual(count, 3)
+        self.assertEqual(len(processor.submitted), 3)
+        self.assertEqual(spider.fetch_kwargs[0]["limit"], 3)
 
     def test_manual_dynamic_html_spider_uses_full_page_budget_for_deep_repair(self):
         processor = DummyProcessor()
@@ -688,6 +737,7 @@ class SchedulerIncrementalGuardrailsTests(unittest.TestCase):
         spider._is_dynamic = True
         spider._source_type = "html"
         spider.pagination_mode = "load_more"
+        spider.max_items = 3
         spider.max_pages = 4
         spider.incremental_max_pages = 1
 

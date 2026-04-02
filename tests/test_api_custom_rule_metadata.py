@@ -706,6 +706,9 @@ class ApiCustomRuleMetadataTests(unittest.TestCase):
         self.assertEqual(result["page_summary"]["title"], "Preview Page")
         self.assertEqual(result["test_snapshot"]["sample_count"], 1)
         self.assertEqual(result["message"], "")
+        api._rule_generator.build_rule_preview_bundle.assert_called_once()
+        _, preview_kwargs = api._rule_generator.build_rule_preview_bundle.call_args
+        self.assertEqual(preview_kwargs["max_items"], 1)
 
     def test_test_custom_spider_rule_returns_error_when_fetch_failed(self):
         api = self.make_api([])

@@ -518,8 +518,8 @@ def ensure_pywebview_cocoa_drag_patch():
     return True
 
 
-def apply_macos_full_size_content(window):
-    """macOS: 启用原生全尺寸内容视图，移除默认白色标题栏底板。"""
+def apply_macos_immersive_window(window):
+    """macOS: 配置沉浸式窗口 - 透明标题栏 + 红绿灯按钮"""
     if not HAS_PYOBJC or sys.platform != "darwin" or window is None:
         return
 
@@ -529,37 +529,20 @@ def apply_macos_full_size_content(window):
             if native_window is None:
                 return
 
+            # 1. 🌟 全尺寸内容视图（内容延伸到标题栏下方）
             full_size_mask = getattr(
                 AppKit, "NSFullSizeContentViewWindowMask", 0
             ) or getattr(AppKit, "NSWindowStyleMaskFullSizeContentView", 0)
-            title_hidden = getattr(AppKit, "NSWindowTitleHidden", 0)
 
-            current_mask = native_window.styleMask()
             if full_size_mask:
+                current_mask = native_window.styleMask()
                 native_window.setStyleMask_(current_mask | full_size_mask)
 
-            native_window.setTitleVisibility_(title_hidden)
+            # 2. 🌟 透明标题栏
             native_window.setTitlebarAppearsTransparent_(True)
-            if hasattr(native_window, "setMovableByWindowBackground_"):
-                native_window.setMovableByWindowBackground_(False)
+            native_window.setTitleVisibility_(AppKit.NSWindowTitleHidden)
 
-            if hasattr(native_window, "setToolbarStyle_") and hasattr(
-                AppKit, "NSWindowToolbarStyleUnifiedCompact"
-            ):
-                native_window.setToolbarStyle_(
-                    AppKit.NSWindowToolbarStyleUnifiedCompact
-                )
-
-            configure_macos_scroll_views(native_window)
-
-            titlebar_container = get_macos_titlebar_container(native_window)
-            if titlebar_container is not None and hasattr(
-                titlebar_container, "setBackgroundColor_"
-            ):
-                titlebar_container.setBackgroundColor_(AppKit.NSColor.clearColor())
-
-            install_macos_drag_strip(window)
-
+            # 3. 🌟 显示红绿灯按钮
             for button_type in (
                 AppKit.NSWindowCloseButton,
                 AppKit.NSWindowMiniaturizeButton,
@@ -569,9 +552,9 @@ def apply_macos_full_size_content(window):
                 if button is not None:
                     button.setHidden_(False)
 
-            logger.info("已启用 macOS 全尺寸内容视图")
+            logger.info("✨ 已启用 macOS 沉浸式窗口")
         except Exception as e:
-            logger.warning(f"启用 macOS 全尺寸内容视图失败: {e}")
+            logger.warning(f"启用沉浸式窗口失败: {e}")
 
     run_on_main_thread(_apply)
 
@@ -950,7 +933,7 @@ if HAS_PYOBJC:
                 def do_show():
                     try:
                         if main_mod._window_instance:
-                            apply_macos_full_size_content(main_mod._window_instance)
+                            apply_macos_immersive_window(main_mod._window_instance)
                             schedule_macos_drag_region_refresh(
                                 main_mod._window_instance
                             )
@@ -1026,7 +1009,7 @@ if HAS_PYOBJC:
                 def do_open():
                     try:
                         if main_mod._window_instance:
-                            apply_macos_full_size_content(main_mod._window_instance)
+                            apply_macos_immersive_window(main_mod._window_instance)
                             schedule_macos_drag_region_refresh(
                                 main_mod._window_instance
                             )
@@ -1419,7 +1402,7 @@ def schedule_macos_drag_region_refresh(window, delays=None):
                 import time
 
                 time.sleep(delay_seconds)
-                apply_macos_full_size_content(window)
+                apply_macos_immersive_window(main_mod._window_instance)
             except Exception as e:
                 logger.warning(f"延迟刷新 macOS 拖动热区失败: {e}")
 
@@ -1585,6 +1568,7 @@ if __name__ == "__main__":
     ensure_pywebview_cocoa_drag_patch()
 
     # 创建原生窗口
+    # 🌟 沉浸式窗口配置（使用标准窗口，通过原生API配置）
     window = webview.create_window(
         title="Microflow",
         url=html_url,
@@ -1592,10 +1576,8 @@ if __name__ == "__main__":
         width=450,
         height=800,
         min_size=(450, 700),
-        frameless=False,
-        easy_drag=False,
-        transparent=False,
-        background_color="#FFFFFF",
+        frameless=False,  # 🌟 使用标准窗口，保留红绿灯
+        easy_drag=False,  # 🌟 禁用自动拖拽
         hidden=start_minimized,
     )
 
@@ -1649,7 +1631,7 @@ if __name__ == "__main__":
             def do_show():
                 try:
                     if main_mod._window_instance:
-                        apply_macos_full_size_content(main_mod._window_instance)
+                        apply_macos_immersive_window(main_mod._window_instance)
                         schedule_macos_drag_region_refresh(main_mod._window_instance)
                         main_mod._window_instance.show()
                         main_mod._window_instance.restore()
@@ -1711,7 +1693,7 @@ if __name__ == "__main__":
             def do_open():
                 try:
                     if main_mod._window_instance:
-                        apply_macos_full_size_content(main_mod._window_instance)
+                        apply_macos_immersive_window(main_mod._window_instance)
                         schedule_macos_drag_region_refresh(main_mod._window_instance)
                         main_mod._window_instance.show()
                         main_mod._window_instance.restore()
@@ -1791,7 +1773,7 @@ if __name__ == "__main__":
 
     # 启动应用
     def on_app_start():
-        apply_macos_full_size_content(window)
+        apply_macos_immersive_window(main_mod._window_instance)
         schedule_macos_drag_region_refresh(window)
         try:
             api.telemetry_service.track(
@@ -1810,4 +1792,28 @@ if __name__ == "__main__":
                 window.restore()
                 window.show()
 
-    webview.start(func=on_app_start, debug=False, http_server=True)
+        # 🌟 启动性能监控窗口
+        def launch_performance_monitor():
+            try:
+                import os
+                frontend_path = os.path.join(
+                    os.path.dirname(os.path.abspath(__file__)),
+                    "frontend",
+                    "performance-monitor.html"
+                )
+                perf_window = webview.create_window(
+                    title="性能监控",
+                    url=frontend_path,
+                    js_api=api,
+                    width=900,
+                    height=700,
+                    x=100,
+                    y=100,
+                )
+                logger.info("📊 性能监控窗口已启动")
+            except Exception as e:
+                logger.warning(f"启动性能监控窗口失败: {e}")
+
+        threading.Thread(target=launch_performance_monitor, daemon=True).start()
+
+    webview.start(func=on_app_start, debug=True, http_server=True)

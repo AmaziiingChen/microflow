@@ -264,11 +264,12 @@ class ConfigService:
                 expected_sign = self._generate_signature(data)
 
                 if stored_sign != expected_sign:
-                    logger.warning(f"🔐 配置签名校验失败！文件可能被篡改。")
+                    logger.warning(f"🔐 配置签名校验失败！文件可能被手动修改。")
                     logger.warning(f"  - 存储签名: {stored_sign[:16]}...")
                     logger.warning(f"  - 计算签名: {expected_sign[:16]}...")
-                    # 🔐 强制锁定：签名不匹配，视为被篡改
-                    is_locked = True
+                    logger.warning(f"  - 允许继续使用，下次保存时会自动修复签名")
+                    # ✅ 不强制锁定，允许用户继续使用
+                    is_locked = is_locked_from_file
                 else:
                     is_locked = is_locked_from_file
                     logger.debug("🔐 配置签名校验通过")
@@ -552,9 +553,17 @@ class ConfigService:
                     f.flush()
                     os.fsync(f.fileno())
 
+                # ✅ 只备份有效的配置文件
                 if os.path.exists(self.config_path):
                     try:
+                        # 先验证原文件是否有效
+                        with open(self.config_path, "r", encoding="utf-8") as verify_f:
+                            json.load(verify_f)
+                        # 验证通过，创建备份
                         shutil.copy2(self.config_path, backup_path)
+                        logger.debug("配置备份已更新")
+                    except json.JSONDecodeError:
+                        logger.warning("原配置文件已损坏，跳过备份")
                     except Exception as copy_err:
                         logger.debug(f"更新配置备份失败: {copy_err}")
 

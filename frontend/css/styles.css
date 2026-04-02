@@ -6,7 +6,7 @@
   --accent-color: var(--color-accent-primary);
   --border-color: var(--color-border-subtle);
   --dual-pane-master-width: 392px;
-  --mac-titlebar-safe-top: 0px;
+  --mac-titlebar-safe-top: 0px; /* 🌟 无需额外留白 */
   --mac-titlebar-safe-left: 0px;
   --overlay-scrollbar-size: 6px;
   --overlay-scrollbar-thumb: rgba(0, 0, 0, 0.14);
@@ -20,7 +20,7 @@
 }
 
 :root[data-platform="macos"] {
-  --mac-titlebar-safe-top: 28px;
+  --mac-titlebar-safe-top: 0px; /* 🌟 移除顶部留白 */
   --mac-titlebar-safe-left: 0px;
 }
 
@@ -176,8 +176,9 @@ body {
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
-  background: var(--bg-color);
+  background: var(--bg-color); /* 恢复主题背景 */
   color: var(--text-main);
+  -webkit-app-region: no-drag;
 }
 
 @supports (color: color-mix(in srgb, white 50%, black 50%)) {
@@ -202,10 +203,24 @@ body {
   display: flex;
   position: relative;
   overflow: hidden;
+  /* 🌟 移除顶部留白 */
 }
 
 .app-workspace.is-settings-open {
-  background: var(--color-bg-base);
+  background: rgba(248, 248, 248, 0.95); /* 半透明背景 */
+}
+
+/* 🌟 所有按钮和交互元素禁用拖拽 */
+button,
+a,
+input,
+textarea,
+select,
+.card,
+.article-card,
+.settings-row,
+.filter-chip {
+  -webkit-app-region: no-drag !important;
 }
 
 /* 1. 确保容器有滚动权限 */
@@ -213,7 +228,7 @@ body {
   flex: 1;
   overflow-y: auto; /* 允许纵向滚动 */
   position: relative;
-  padding-top: calc(12px + var(--mac-titlebar-safe-top));
+  padding-top: 8px; /* 🌟 顶部间距 */
   padding-right: 12px;
   padding-bottom: 42px; /* 为底部悬浮功能栏留出空间 */
   padding-left: 12px;
@@ -2484,6 +2499,11 @@ body {
   scrollbar-color: transparent transparent;
 }
 
+/* HTML 订阅正文区域：与内置爬虫保持一致的边距 */
+.detail-content.detail-content-standard {
+  padding: 20px 30px calc(80px + env(safe-area-inset-bottom, 0px)) 30px;
+}
+
 body.is-capturing .detail-footer {
   background:
     linear-gradient(180deg, var(--material-panel-thick) 0%, var(--material-panel-soft) 100%),
@@ -3662,6 +3682,16 @@ body.is-capturing .detail-footer .action-btn::after {
   transform: translateY(-3px);
 }
 
+/* HTML 爬虫：隐藏 H 层级标签，只保留竖粗线 */
+.detail-content-standard.markdown-body h1[data-heading-label]::before,
+.detail-content-standard.markdown-body h2[data-heading-label]::before,
+.detail-content-standard.markdown-body h3[data-heading-label]::before,
+.detail-content-standard.markdown-body h4[data-heading-label]::before,
+.detail-content-standard.markdown-body h5[data-heading-label]::before,
+.detail-content-standard.markdown-body h6[data-heading-label]::before {
+  content: none;
+}
+
 .detail-content-standard.markdown-body h3[data-heading-label] {
   padding-left: 0;
 }
@@ -3685,7 +3715,7 @@ body.is-capturing .detail-footer .action-btn::after {
 .detail-content-standard.markdown-body h5[data-official-heading-emphasis],
 .detail-content-standard.markdown-body h6[data-official-heading-emphasis] {
   position: relative;
-  padding-left: 12px;
+  padding-left: 16px;
 }
 
 .detail-content-standard.markdown-body h2[data-official-heading-emphasis]::after,
@@ -11583,6 +11613,31 @@ body.is-capturing .detail-inline-search-trigger::after {
 .settings-row-note.is-inline {
   display: inline-flex;
   -webkit-line-clamp: unset;
+}
+
+/* 🌟 性能监控样式 - Apple 风格 */
+.performance-value {
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  transition: color 0.2s ease;
+}
+
+.performance-value.is-excellent {
+  color: #34c759; /* Apple Green */
+}
+
+.performance-value.is-good {
+  color: #30d158; /* Light Green */
+}
+
+.performance-value.is-normal {
+  color: #ff9f0a; /* Apple Orange */
+}
+
+.performance-value.is-high {
+  color: #ff3b30; /* Apple Red */
 }
 
 .settings-row-control {

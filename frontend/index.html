@@ -622,6 +622,9 @@
                           :get-tag-color="getTagColor"
                           :render-markdown="renderMarkdown"
                           :get-html-rule-pending-retest-message="getHtmlRulePendingRetestMessage"
+                          :get-html-rule-primary-action-mode="getHtmlRulePrimaryActionMode"
+                          :get-html-rule-primary-action-label="getHtmlRulePrimaryActionLabel"
+                          :get-html-selector-action-label="getHtmlSelectorActionLabel"
                           :get-html-access-config-validation-message="getHtmlAccessConfigValidationMessage"
                           :editing-rule-id="editingRuleId"
                           :is-saving-custom-rule="isSavingCustomRule"
@@ -701,6 +704,53 @@
                       </div>
                       <p class="settings-group-footer">
                         {{ networkAccessState.detail }}
+                      </p>
+                    </div>
+
+                    <!-- 性能监控 -->
+                    <div class="settings-group-block">
+                      <div class="settings-group-head">
+                        <div class="settings-group-label">性能监控</div>
+                        <button
+                          type="button"
+                          class="settings-group-tool"
+                          @click="refreshPerformanceStats"
+                        >
+                          刷新
+                        </button>
+                      </div>
+                      <div class="settings-group-card">
+                        <div class="settings-row">
+                          <span class="settings-row-label">CPU 占用</span>
+                          <span class="settings-row-trailing">
+                            <span class="performance-value" :class="getCpuStatusClass(performanceStats.cpu_percent)">
+                              {{ performanceStats.cpu_percent || 0 }}%
+                            </span>
+                          </span>
+                        </div>
+                        <div class="settings-row">
+                          <span class="settings-row-label">内存占用</span>
+                          <span class="settings-row-trailing">
+                            <span class="performance-value">
+                              {{ performanceStats.memory_mb || 0 }} MB
+                            </span>
+                          </span>
+                        </div>
+                        <div class="settings-row">
+                          <span class="settings-row-label">峰值 CPU</span>
+                          <span class="settings-row-note is-inline">
+                            {{ performanceStats.stats?.peak_cpu || 0 }}%
+                          </span>
+                        </div>
+                        <div class="settings-row">
+                          <span class="settings-row-label">平均内存</span>
+                          <span class="settings-row-note is-inline">
+                            {{ performanceStats.stats?.avg_memory || 0 }} MB
+                          </span>
+                        </div>
+                      </div>
+                      <p class="settings-group-footer">
+                        性能数据每 5 秒自动采集。CPU 占用 < 5% 为优秀，内存占用 < 300MB 为正常。
                       </p>
                     </div>
                   </template>
@@ -3175,6 +3225,9 @@
                           :get-tag-color="getTagColor"
                           :render-markdown="renderMarkdown"
                           :get-html-rule-pending-retest-message="getHtmlRulePendingRetestMessage"
+                          :get-html-rule-primary-action-mode="getHtmlRulePrimaryActionMode"
+                          :get-html-rule-primary-action-label="getHtmlRulePrimaryActionLabel"
+                          :get-html-selector-action-label="getHtmlSelectorActionLabel"
                           :get-html-access-config-validation-message="getHtmlAccessConfigValidationMessage"
                           @close="closeCustomRuleModal"
                           @add-rule-field="addRuleField"
@@ -4785,7 +4838,7 @@
                     <button
                       type="button"
                       class="settings-sheet-action is-primary selector-tuning-action"
-                      @click="$emit('manual-retest')"
+                      @click="getHtmlRulePrimaryActionMode() === 'regenerate' ? $emit('regenerate') : $emit('manual-retest')"
                       :disabled="isRetestingRule"
                     >
                       <svg
@@ -4805,7 +4858,7 @@
                         />
                       </svg>
                       <span v-else>
-                        {{ previewData && previewData.length > 0 ? '用当前选择器重新测试' : '先测试当前规则' }}
+                        {{ getHtmlSelectorActionLabel() }}
                       </span>
                     </button>
                   </div>
@@ -4837,15 +4890,15 @@
                 <button
                   v-else
                   :class="sheetMode ? 'settings-sheet-action' : 'btn btn-secondary'"
-                  @click="generatedRuleCache ? $emit('manual-retest') : $emit('generate')"
+                  @click="getHtmlRulePrimaryActionMode() === 'generate'
+                    ? $emit('generate')
+                    : (getHtmlRulePrimaryActionMode() === 'regenerate'
+                      ? $emit('regenerate')
+                      : $emit('manual-retest'))"
                   :disabled="isGeneratingRule || isRetestingRule || isSavingCustomRule"
                   type="button"
                 >
-                  {{
-                    generatedRuleCache
-                      ? (previewData && previewData.length > 0 ? '测试规则' : '先测试当前规则')
-                      : 'AI 智能分析并测试'
-                  }}
+                  {{ getHtmlRulePrimaryActionLabel() }}
                 </button>
                 <button
                   v-if="ruleForm.source_type !== 'rss' && generatedRuleCache"
@@ -6895,7 +6948,7 @@
                         />
                       </svg>
                       <span v-else>
-                        {{ previewData && previewData.length > 0 ? '🧪 用此规则重新测试' : '🧪 先测试当前规则' }}
+                        {{ `🧪 ${getHtmlSelectorActionLabel()}` }}
                       </span>
                     </button>
                   </div>
@@ -7123,15 +7176,15 @@
                     <div
                       v-else
                       class="department-icon"
-                      :style="{ backgroundColor: getDepartmentColor(item.department) }"
-                      v-html="getDepartmentIcon(item.department)"
+                      :style="{ backgroundColor: (item.rule_id && item.source_type === 'html') ? '#9ca3af' : getDepartmentColor(item.department) }"
+                      v-html="getDepartmentIcon(item.department, item.source_type, item.rule_id)"
                     ></div>
                   </div>
 
                   <span
                     v-if="item.parsedTags && item.parsedTags.length > 0 && String(item.source_type || '').toLowerCase() !== 'rss'"
                     class="tag ai-tag-left"
-                    :style="{ backgroundColor: getAITagBgColor(item.department) }"
+                    :style="{ backgroundColor: (item.rule_id && item.source_type === 'html') ? 'rgba(156, 163, 175, 0.80)' : getAITagBgColor(item.department) }"
                   >
                     {{ item.parsedTags[0].slice(0, 2) }}
                   </span>

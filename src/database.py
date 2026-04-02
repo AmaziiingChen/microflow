@@ -81,7 +81,7 @@ class ConnectionPool:
     - 自动重连机制
     """
 
-    def __init__(self, db_path: str, pool_size: int = 3):
+    def __init__(self, db_path: str, pool_size: int = 2):  # 🌟 性能优化：从3降至2
         self._db_path = db_path
         self._pool_size = pool_size
         self._pool: queue.Queue[sqlite3.Connection] = queue.Queue(maxsize=pool_size)
@@ -186,7 +186,7 @@ class WriteWorker:
     - 🌟 队列满时自动重试（默认 3 次）
     """
 
-    def __init__(self, db_path: str, queue_size: int = 500):
+    def __init__(self, db_path: str, queue_size: int = 300):  # 🌟 平衡优化：300缓冲
         self._db_path = db_path
         self._task_queue: queue.Queue[WriteTask] = queue.Queue(maxsize=queue_size)
         self._queue_size = queue_size

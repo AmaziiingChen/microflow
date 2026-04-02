@@ -219,6 +219,11 @@ class Api:
         self._rule_generator = RuleGeneratorService(self._config_service)
         self._rules_manager = get_rules_manager()
 
+        # 🌟 性能监控服务
+        from src.services.performance_monitor import get_performance_monitor
+        self._performance_monitor = get_performance_monitor()
+        self._performance_monitor.start()
+
         # 线程控制
         self.is_running = True
         self._window: Optional[webview.Window] = None
@@ -334,8 +339,8 @@ class Api:
         """
         while self._js_thread_running:
             try:
-                # 阻塞等待最多 50ms，平衡响应速度和 CPU 占用
-                task = self._js_queue.get(timeout=0)
+                # 🌟 修复CPU 100%问题：阻塞等待1秒，避免忙等待
+                task = self._js_queue.get(timeout=1.0)
                 if task is None:
                     continue
 
@@ -4291,6 +4296,23 @@ class Api:
 
         return response
 
+    def get_performance_stats(self) -> Dict[str, Any]:
+        """获取性能统计数据"""
+        try:
+            return self._performance_monitor.get_current_stats()
+        except Exception as e:
+            logger.error(f"获取性能统计失败: {e}")
+            return {"error": str(e)}
+
+    def reset_performance_stats(self) -> Dict[str, str]:
+        """重置性能统计"""
+        try:
+            self._performance_monitor.reset_stats()
+            return {"status": "success", "message": "性能统计已重置"}
+        except Exception as e:
+            logger.error(f"重置性能统计失败: {e}")
+            return {"status": "error", "message": str(e)}
+
     def get_version_info(self, force_refresh: bool = False) -> Dict[str, Any]:
         """获取云端版本信息（支持 ETag 304 缓存协商）"""
         # 1. 优先使用内存缓存（如果不强制刷新）
@@ -4444,12 +4466,10 @@ class Api:
             except Exception:
                 pass
 
-            apply_full_size = getattr(main_mod, "apply_macos_full_size_content", None)
+            # 🌟 已移除全尺寸窗口功能，使用系统默认窗口样式
             install_drag_strip = getattr(main_mod, "install_macos_drag_strip", None)
 
-            if callable(apply_full_size):
-                apply_full_size(self._window)
-            elif callable(install_drag_strip):
+            if callable(install_drag_strip):
                 install_drag_strip(self._window)
             else:
                 return {"status": "error", "message": "拖动热区安装器不可用"}
@@ -4745,6 +4765,7 @@ class Api:
             success = self._rules_manager.save_custom_rule(normalized_rule)
 
             if success:
+                self._refresh_dynamic_spiders_after_rule_change()
                 logger.info(f"规则保存成功: {normalized_rule.get('rule_id')}")
                 return {
                     "status": "success",
@@ -4757,6 +4778,16 @@ class Api:
         except Exception as e:
             logger.error(f"保存规则失败: {e}")
             return {"status": "error", "message": str(e)}
+
+    def _refresh_dynamic_spiders_after_rule_change(self) -> None:
+        """规则变更后尽快刷新运行时动态爬虫，避免继续沿用旧配置。"""
+        scheduler = getattr(self, "_scheduler", None)
+        if scheduler is None:
+            return
+        try:
+            scheduler.reload_dynamic_spiders(force=True)
+        except Exception as e:
+            logger.debug(f"规则保存后刷新动态爬虫失败: {e}")
 
     def validate_and_save_rss_rule(
         self,
@@ -5533,7 +5564,7 @@ class Api:
 
             preview_bundle = self._rule_generator.build_rule_preview_bundle(
                 rule,
-                max_items=5,
+                max_items=1,
             )
             sample_data = preview_bundle.get("sample_data") or []
             fetch_error = str(preview_bundle.get("fetch_error") or "").strip()

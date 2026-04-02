@@ -990,6 +990,24 @@ class DynamicSpider(BaseSpider):
         clean_value = str(value or "").strip()
         if not clean_value:
             return ""
+
+        # 提取纯净的日期时间格式
+        import re
+        # 匹配 YYYY-MM-DD HH:MM:SS 或 YYYY-MM-DD 或 YYYY/MM/DD 等格式
+        match = re.search(r'(\d{4}[-/年]\d{1,2}[-/月]\d{1,2}(?:日)?(?:[\s时T]\d{1,2}[:时]\d{1,2}(?:[:分]\d{1,2})?)?)', clean_value)
+        if match:
+            extracted = match.group(1)
+            return (
+                extracted.replace('年', '-')
+                .replace('月', '-')
+                .replace('日', '')
+                .replace('时', ':')
+                .replace('分', ':')
+                .replace('/', '-')
+                .strip()
+            )
+
+        # 如果没有匹配到，返回原始清理后的值
         return (
             clean_value.replace('年', '-')
             .replace('月', '-')

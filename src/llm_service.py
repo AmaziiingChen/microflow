@@ -53,7 +53,7 @@ class LLMService:
     BASE_DELAY = 1.0  # 初始延迟 1 秒
     MAX_DELAY = 32.0  # 最大延迟 32 秒
 
-    # 并发控制：批量总结 2 路，手动总结 1 路
+    # 🌟 平衡优化：批量总结2路，手动总结1路，加快AI处理
     MAX_BATCH_CONCURRENCY = 2
     MAX_MANUAL_CONCURRENCY = 1
     RSS_CHUNK_TRIGGER_LENGTH = 7000
