@@ -25,7 +25,9 @@ hidden_modules = [
     'webview.platforms.edgechromium',
     'webview.platforms.winforms',
     'truststore',
-    'mistune'
+    'mistune',
+    'psutil',
+    'psutil._pswindows'
 ]
 
 a = Analysis(

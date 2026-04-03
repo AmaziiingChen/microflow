@@ -1514,13 +1514,21 @@ if __name__ == "__main__":
     start_minimized = "--minimized" in sys.argv
 
     # 创建原生窗口
+    # 🌟 Windows DPI 适配：Windows 上使用更大的尺寸以适应 DPI 缩放
+    if platform.system() == "Windows":
+        default_width, default_height = 500, 850
+        min_width, min_height = 500, 750
+    else:
+        default_width, default_height = 450, 800
+        min_width, min_height = 450, 700
+
     window = webview.create_window(
         title="Microflow",
         url=html_url,
         js_api=api,
-        width=450,
-        height=800,
-        min_size=(450, 700),
+        width=default_width,
+        height=default_height,
+        min_size=(min_width, min_height),
         frameless=False,  # 🌟 使用标准窗口，保留红绿灯
         easy_drag=False,  # 🌟 禁用自动拖拽
         hidden=start_minimized,

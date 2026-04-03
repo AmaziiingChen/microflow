@@ -4409,9 +4409,21 @@ class Api:
             return {"status": "error", "message": "窗口未初始化"}
 
         try:
-            # 直接设置，pywebview 会确保在正确的线程中执行
-            self._window.on_top = is_on_top
-            logger.info(f"窗口置顶状态已设置为 {is_on_top}")
+            # 🌟 Windows 平台特殊处理：使用异步方式避免卡死
+            if platform.system() == "Windows":
+                import threading
+                def _set_on_top():
+                    try:
+                        self._window.on_top = is_on_top
+                        logger.info(f"窗口置顶状态已设置为 {is_on_top}")
+                    except Exception as e:
+                        logger.error(f"Windows 置顶设置失败: {e}")
+                threading.Thread(target=_set_on_top, daemon=True).start()
+            else:
+                # macOS 直接设置
+                self._window.on_top = is_on_top
+                logger.info(f"窗口置顶状态已设置为 {is_on_top}")
+
             return {"status": "success", "is_pinned": is_on_top}
 
         except Exception as e:
