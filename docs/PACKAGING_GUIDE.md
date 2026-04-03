@@ -81,10 +81,13 @@ Windows 必须在 Windows 机器上执行，当前仓库已提供：
 - `MicroFlow.windows.spec`
 - `packaging/windows/MicroFlow.iss`
 
-建议在 Windows 专用虚拟环境中打包：
+建议在 Windows 专用虚拟环境中打包。优先使用 Python `3.12`，如果本机没有则使用 Python `3.11`；不建议使用 Python `3.14`：
 
 ```powershell
 cd C:\path\to\MicroFlow
+
+# 先确认本机已安装 Python 3.12；若没有则把下面命令里的 3.12 改成 3.11
+py -3.12 --version
 
 py -3.12 -m venv .venv-pack-win
 .venv-pack-win\Scripts\Activate.ps1
@@ -104,6 +107,12 @@ if (Test-Path dist) { Remove-Item dist -Recurse -Force }
 if (Test-Path release\windows) { Remove-Item release\windows -Recurse -Force }
 
 python -m PyInstaller --clean --noconfirm MicroFlow.windows.spec
+```
+
+如果你不想手动敲完整套命令，也可以直接运行：
+
+```powershell
+.\scripts\package_windows_release.ps1
 ```
 
 如果本机已安装 Inno Setup 6，可继续生成正式安装包：
