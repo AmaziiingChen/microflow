@@ -219,7 +219,7 @@ python3 -m py_compile src/api.py src/database.py
 
 ```bash
 python3 scripts/build_release_icons.py
-pyinstaller MicroFlow.spec
+python -m PyInstaller MicroFlow.spec
 ```
 
 当前仓库包含两套主要打包入口：

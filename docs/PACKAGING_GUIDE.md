@@ -51,7 +51,7 @@ python scripts/build_release_icons.py
 # deactivate
 
 rm -rf build dist release/macos
-pyinstaller --clean --noconfirm MicroFlow.spec
+python -m PyInstaller --clean --noconfirm MicroFlow.spec
 
 mkdir -p release/macos
 ditto -c -k --sequesterRsrc --keepParent dist/MicroFlow.app release/macos/MicroFlow-v1.0.0-macos-arm64.zip
@@ -103,7 +103,7 @@ if (Test-Path build) { Remove-Item build -Recurse -Force }
 if (Test-Path dist) { Remove-Item dist -Recurse -Force }
 if (Test-Path release\windows) { Remove-Item release\windows -Recurse -Force }
 
-pyinstaller --clean --noconfirm MicroFlow.windows.spec
+python -m PyInstaller --clean --noconfirm MicroFlow.windows.spec
 ```
 
 如果本机已安装 Inno Setup 6，可继续生成正式安装包：

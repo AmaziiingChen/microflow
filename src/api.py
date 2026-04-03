@@ -220,9 +220,14 @@ class Api:
         self._rules_manager = get_rules_manager()
 
         # 🌟 性能监控服务
-        from src.services.performance_monitor import get_performance_monitor
-        self._performance_monitor = get_performance_monitor()
-        self._performance_monitor.start()
+        self._performance_monitor = None
+        try:
+            from src.services.performance_monitor import get_performance_monitor
+
+            self._performance_monitor = get_performance_monitor()
+            self._performance_monitor.start()
+        except Exception as e:
+            logger.warning(f"性能监控服务不可用，已跳过初始化: {e}")
 
         # 线程控制
         self.is_running = True
@@ -637,7 +642,8 @@ class Api:
                             "cooldown_remaining": 0,
                         }
 
-                    self._config_service.load()
+                    # 云端已恢复，执行解锁
+                    self._unlock_if_needed()
                     logger.info("云端已恢复可用，已从只读模式恢复")
                 else:
                     msg = "服务已暂停，当前为只读模式，仅可查看和利用 AI 分析历史公文"
@@ -4223,12 +4229,15 @@ class Api:
         """
         if self._config_service.current.is_locked:
             try:
+                logger.info("检测到本地锁定状态，尝试解锁...")
                 current_config = self._config_service.to_dict()
                 current_config["isLocked"] = False
+                current_config["lastCloudSyncTime"] = time.time()
                 saved = self._config_service.save(current_config)
                 if not saved:
                     logger.error("解除锁定失败：配置服务拒绝写回解锁状态")
                     return False
+                # 重新加载配置，确保内存中的状态同步
                 self._config_service.load()
                 logger.info("🔓 云端验证成功，已解除只读锁定，恢复正常模式")
                 try:
@@ -4298,6 +4307,11 @@ class Api:
 
     def get_performance_stats(self) -> Dict[str, Any]:
         """获取性能统计数据"""
+        if self._performance_monitor is None:
+            return {
+                "error": "performance_monitor_unavailable",
+                "message": "性能监控依赖未安装，当前功能不可用",
+            }
         try:
             return self._performance_monitor.get_current_stats()
         except Exception as e:
@@ -4306,6 +4320,11 @@ class Api:
 
     def reset_performance_stats(self) -> Dict[str, str]:
         """重置性能统计"""
+        if self._performance_monitor is None:
+            return {
+                "status": "error",
+                "message": "性能监控依赖未安装，无法重置统计",
+            }
         try:
             self._performance_monitor.reset_stats()
             return {"status": "success", "message": "性能统计已重置"}
@@ -4383,33 +4402,17 @@ class Api:
     def set_window_on_top(self, is_on_top: bool):
         """前端调用：切换窗口置顶状态
 
-        注意：在 Windows 上，窗口操作必须在 UI 线程执行，
-        否则会导致死锁或无响应。
+        pywebview 的 API 调用本身就在正确的线程中执行，
+        直接设置即可，无需额外的线程处理。
         """
         if not self._window:
             return {"status": "error", "message": "窗口未初始化"}
 
         try:
-            # 🌟 Windows 平台特殊处理：使用线程避免阻塞
-            if platform.system() == "Windows":
-                import threading
-
-                def _set_on_top_safe():
-                    try:
-                        self._window.on_top = is_on_top
-                        logger.info(f"Windows: 窗口置顶状态已设置为 {is_on_top}")
-                    except Exception as e:
-                        logger.error(f"Windows 设置置顶失败: {e}")
-
-                # 在新线程中执行，避免阻塞前端
-                thread = threading.Thread(target=_set_on_top_safe, daemon=True)
-                thread.start()
-                # 不等待结果，立即返回，避免阻塞
-                return {"status": "success", "is_pinned": is_on_top, "async": True}
-            else:
-                # macOS 可以直接设置
-                self._window.on_top = is_on_top
-                return {"status": "success", "is_pinned": is_on_top}
+            # 直接设置，pywebview 会确保在正确的线程中执行
+            self._window.on_top = is_on_top
+            logger.info(f"窗口置顶状态已设置为 {is_on_top}")
+            return {"status": "success", "is_pinned": is_on_top}
 
         except Exception as e:
             logger.error(f"设置窗口置顶失败: {e}")

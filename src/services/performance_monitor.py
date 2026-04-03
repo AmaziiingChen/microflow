@@ -1,11 +1,15 @@
 """性能监控服务 - 监控CPU和内存使用情况"""
 
-import psutil
 import threading
 import time
 import logging
 from typing import Dict, Any, Optional, Callable, List
 from collections import deque
+
+try:
+    import psutil
+except Exception:
+    psutil = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +40,7 @@ class PerformanceMonitor:
         self._memory_history: deque = deque(maxlen=history_size)
 
         # 当前进程
-        self._process = psutil.Process()
+        self._process = psutil.Process() if psutil is not None else None
 
         # 控制标志
         self._stop_event = threading.Event()
@@ -60,6 +64,10 @@ class PerformanceMonitor:
 
     def start(self) -> None:
         """启动监控"""
+        if self._process is None:
+            logger.warning("psutil 未安装，性能监控已禁用")
+            return
+
         if self._is_running:
             logger.warning("性能监控已在运行")
             return
@@ -89,6 +97,10 @@ class PerformanceMonitor:
         """监控主循环"""
         while not self._stop_event.is_set():
             try:
+                if self._process is None:
+                    self._stop_event.wait(self.interval)
+                    continue
+
                 # 采集性能数据
                 cpu_percent = self._process.cpu_percent(interval=0.1)
                 memory_info = self._process.memory_info()
@@ -141,6 +153,17 @@ class PerformanceMonitor:
 
     def get_current_stats(self) -> Dict[str, Any]:
         """获取当前性能统计"""
+        if self._process is None:
+            return {
+                'error': 'performance_monitor_unavailable',
+                'message': 'psutil 未安装，性能监控不可用',
+                'stats': dict(self._stats),
+                'history': {
+                    'cpu': list(self._cpu_history),
+                    'memory': list(self._memory_history),
+                }
+            }
+
         try:
             cpu_percent = self._process.cpu_percent(interval=0.1)
             memory_info = self._process.memory_info()

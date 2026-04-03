@@ -1,8 +1,18 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 from PyInstaller.building.datastruct import TOC
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
+
+try:
+    webview_hidden_modules = ['webview'] + collect_submodules('webview')
+    webview_data_files = collect_data_files('webview')
+except Exception as exc:
+    raise SystemExit(
+        "缺少 pywebview/webview 打包依赖。请先激活项目虚拟环境后再执行 PyInstaller，"
+        "例如：`source .venv/bin/activate && python -m PyInstaller --clean --noconfirm MicroFlow.spec`"
+    ) from exc
 
 # 1. 精准排除无关的重型库（保持体积小巧）
 excluded_modules = [
@@ -26,7 +36,7 @@ hidden_modules = [
     'webview.platforms.cocoa',              # pywebview macOS 渲染后端
     'truststore',                           # 强制引入 SSL 信任库
     'mistune'
-]
+] + webview_hidden_modules
 
 a = Analysis(
     ['main.py'],
@@ -37,7 +47,7 @@ a = Analysis(
         ('frontend', 'frontend'),
         ('data', 'data'),
         ('src/services/snapshot_template.html', 'src/services'),
-    ],
+    ] + webview_data_files,
     hiddenimports=hidden_modules,
     hookspath=[],
     hooksconfig={},

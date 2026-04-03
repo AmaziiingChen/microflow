@@ -56,20 +56,31 @@ python3 scripts/build_release_icons.py
 ```bash
 cd /Users/chen/Code/MicroFlow
 
+# 1. 创建干净的打包虚拟环境
+rm -rf .venv-pack-macos
 python3 -m venv .venv-pack-macos
 source .venv-pack-macos/bin/activate
 
+# 2. 安装打包依赖
 python -m pip install --upgrade pip setuptools wheel
 pip install -r requirements-packaging.txt
 
-python scripts/build_release_icons.py
+# 3. 生成发布图标
+python3 scripts/build_release_icons.py
 
+# 4. 清理旧构建文件
 rm -rf build dist release/macos
-PYINSTALLER_CONFIG_DIR=/Users/chen/Code/MicroFlow/.pyinstaller-cache pyinstaller --clean --noconfirm MicroFlow.spec
 
+# 5. 执行 PyInstaller 打包
+PYINSTALLER_CONFIG_DIR=/Users/chen/Code/MicroFlow/.pyinstaller-cache python -m PyInstaller --clean --noconfirm MicroFlow.spec
+
+# 6. 创建发布目录并生成 DMG
 mkdir -p release/macos
-ditto -c -k --sequesterRsrc --keepParent dist/MicroFlow.app release/macos/MicroFlow-v1.0.0-macos-arm64.zip
 ./scripts/package_macos_dmg.sh dist/MicroFlow.app v1.0.0 arm64
+
+# 7. 查看生成的文件和 SHA256
+ls -lh release/macos/
+shasum -a 256 release/macos/MicroFlow-v1.0.0-macos-arm64.dmg
 ```
 
 ## D. Windows 打包
@@ -83,28 +94,40 @@ ditto -c -k --sequesterRsrc --keepParent dist/MicroFlow.app release/macos/MicroF
 核心命令：
 
 ```powershell
+# 1. 进入项目目录
 cd C:\path\to\MicroFlow
 
+# 2. 创建干净的打包虚拟环境
+if (Test-Path .venv-pack-win) { Remove-Item .venv-pack-win -Recurse -Force }
 py -3.12 -m venv .venv-pack-win
 .venv-pack-win\Scripts\Activate.ps1
 
+# 3. 安装打包依赖
 python -m pip install --upgrade pip setuptools wheel
 pip install -r requirements-packaging.txt
 
+# 4. 生成发布图标
 python scripts\build_release_icons.py
 
+# 5. 清理旧构建文件
 if (Test-Path build) { Remove-Item build -Recurse -Force }
 if (Test-Path dist) { Remove-Item dist -Recurse -Force }
 if (Test-Path release\windows) { Remove-Item release\windows -Recurse -Force }
 
+# 6. 执行 PyInstaller 打包
 $env:PYINSTALLER_CONFIG_DIR="$PWD\.pyinstaller-cache"
-pyinstaller --clean --noconfirm MicroFlow.windows.spec
+python -m PyInstaller --clean --noconfirm MicroFlow.windows.spec
 
+# 7. 使用 Inno Setup 生成安装包
 & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
   "packaging\windows\MicroFlow.iss" `
   "/DMyAppVersion=v1.0.0" `
   "/DMySourceDir=$PWD\dist\MicroFlow" `
   "/DMyOutputDir=$PWD\release\windows"
+
+# 8. 查看生成的文件和 SHA256
+Get-ChildItem .\release\windows\ | Format-Table Name, Length
+Get-FileHash .\release\windows\MicroFlow-Setup-v1.0.0.exe -Algorithm SHA256
 ```
 
 ## E. 计算安装包信息

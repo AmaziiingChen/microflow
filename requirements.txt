@@ -22,6 +22,7 @@ openai>=1.0                 # OpenAI 兼容 API 客户端
 mistune>=3.0                # Markdown 渲染（邮件快照）
 python-dateutil>=2.8.0        # 增强的日期解析（支持多种日期格式）
 python-dotenv>=1.0          # 环境变量加载
+psutil>=6.0                # 性能监控（CPU / 内存采样）
 
 # === 系统托盘 ===
 pyobjc>=10.0; sys_platform == "darwin"   # macOS 原生 API 绑定

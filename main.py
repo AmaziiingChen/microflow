@@ -519,44 +519,9 @@ def ensure_pywebview_cocoa_drag_patch():
 
 
 def apply_macos_immersive_window(window):
-    """macOS: 配置沉浸式窗口 - 透明标题栏 + 红绿灯按钮"""
-    if not HAS_PYOBJC or sys.platform != "darwin" or window is None:
-        return
-
-    def _apply():
-        try:
-            native_window = getattr(window, "native", None)
-            if native_window is None:
-                return
-
-            # 1. 🌟 全尺寸内容视图（内容延伸到标题栏下方）
-            full_size_mask = getattr(
-                AppKit, "NSFullSizeContentViewWindowMask", 0
-            ) or getattr(AppKit, "NSWindowStyleMaskFullSizeContentView", 0)
-
-            if full_size_mask:
-                current_mask = native_window.styleMask()
-                native_window.setStyleMask_(current_mask | full_size_mask)
-
-            # 2. 🌟 透明标题栏
-            native_window.setTitlebarAppearsTransparent_(True)
-            native_window.setTitleVisibility_(AppKit.NSWindowTitleHidden)
-
-            # 3. 🌟 显示红绿灯按钮
-            for button_type in (
-                AppKit.NSWindowCloseButton,
-                AppKit.NSWindowMiniaturizeButton,
-                AppKit.NSWindowZoomButton,
-            ):
-                button = native_window.standardWindowButton_(button_type)
-                if button is not None:
-                    button.setHidden_(False)
-
-            logger.info("✨ 已启用 macOS 沉浸式窗口")
-        except Exception as e:
-            logger.warning(f"启用沉浸式窗口失败: {e}")
-
-    run_on_main_thread(_apply)
+    """macOS: 保持原生标题栏，不对窗口做沉浸式改造。"""
+    _ = window
+    return
 
 
 def update_tray_status(unread: int = None, sync_time: str = None):  # type:ignore
@@ -1390,26 +1355,9 @@ def install_macos_drag_strip(window):
 
 
 def schedule_macos_drag_region_refresh(window, delays=None):
-    """macOS: 在启动后多次重装原生拖动区域，避免被 pywebview 后续层级变更覆盖。"""
-    if not HAS_PYOBJC or sys.platform != "darwin" or window is None:
-        return
-
-    refresh_delays = delays or (0.15, 0.45, 0.9, 1.6, 2.8)
-
-    def _schedule(delay_seconds):
-        def _runner():
-            try:
-                import time
-
-                time.sleep(delay_seconds)
-                apply_macos_immersive_window(main_mod._window_instance)
-            except Exception as e:
-                logger.warning(f"延迟刷新 macOS 拖动热区失败: {e}")
-
-        threading.Thread(target=_runner, daemon=True).start()
-
-    for delay in refresh_delays:
-        _schedule(delay)
+    """macOS: 原生标题栏模式下无需额外刷新拖动热区。"""
+    _ = (window, delays)
+    return
 
 
 def create_native_menu(api, window):
@@ -1565,10 +1513,7 @@ if __name__ == "__main__":
     # 🌟 检测启动参数：如果是开机自启（带了 --minimized 参数），则初始隐藏
     start_minimized = "--minimized" in sys.argv
 
-    ensure_pywebview_cocoa_drag_patch()
-
     # 创建原生窗口
-    # 🌟 沉浸式窗口配置（使用标准窗口，通过原生API配置）
     window = webview.create_window(
         title="Microflow",
         url=html_url,
@@ -1588,6 +1533,7 @@ if __name__ == "__main__":
 
     main_module._api_instance = api
     main_module._window_instance = window
+    tray_state = {"initialized": False}
 
     # 拦截关闭事件
     def on_closing():
@@ -1602,7 +1548,6 @@ if __name__ == "__main__":
     if HAS_PYOBJC:
         # 使用 PyObjC 原生方案
         print("🚀 使用 PyObjC 原生状态栏")
-        run_native_tray(api, window)
     else:
         # 使用 pystray 备选方案
         print("🚀 使用 pystray 状态栏")
@@ -1773,8 +1718,6 @@ if __name__ == "__main__":
 
     # 启动应用
     def on_app_start():
-        apply_macos_immersive_window(main_mod._window_instance)
-        schedule_macos_drag_region_refresh(window)
         try:
             api.telemetry_service.track(
                 "app_launch",
@@ -1787,33 +1730,19 @@ if __name__ == "__main__":
             )
         except Exception:
             pass
-        if not start_minimized:
+
+        def _show_main_window():
+            if HAS_PYOBJC and not tray_state["initialized"]:
+                run_native_tray(api, window)
+                tray_state["initialized"] = True
+
+            if start_minimized:
+                return
+
             if window is not None:
                 window.restore()
                 window.show()
 
-        # 🌟 启动性能监控窗口
-        def launch_performance_monitor():
-            try:
-                import os
-                frontend_path = os.path.join(
-                    os.path.dirname(os.path.abspath(__file__)),
-                    "frontend",
-                    "performance-monitor.html"
-                )
-                perf_window = webview.create_window(
-                    title="性能监控",
-                    url=frontend_path,
-                    js_api=api,
-                    width=900,
-                    height=700,
-                    x=100,
-                    y=100,
-                )
-                logger.info("📊 性能监控窗口已启动")
-            except Exception as e:
-                logger.warning(f"启动性能监控窗口失败: {e}")
+        run_on_main_thread(_show_main_window)
 
-        threading.Thread(target=launch_performance_monitor, daemon=True).start()
-
-    webview.start(func=on_app_start, debug=True, http_server=True)
+    webview.start(func=on_app_start, debug=False, http_server=True)

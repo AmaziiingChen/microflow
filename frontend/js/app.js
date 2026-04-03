@@ -6652,6 +6652,18 @@ try {
           if (!res || res.status !== "success") {
             throw new Error(res?.message || "保存设置失败");
           }
+          if (
+            !config.value.telemetryEnabled &&
+            !config.value.telemetryErrorReportsEnabled
+          ) {
+            const clearRes = await safeApiCall("clear_telemetry_queue");
+            if (clearRes?.status !== "success") {
+              console.warn(
+                "关闭遥测后清空本地队列失败:",
+                clearRes?.message || "",
+              );
+            }
+          }
           await refreshTelemetryStatus();
         } catch (e) {
           config.value[key] = previousValue;

@@ -32,7 +32,11 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('frontend', 'frontend'), ('data', 'data')],
+    datas=[
+        ('frontend', 'frontend'),
+        ('data', 'data'),
+        ('src/services/snapshot_template.html', 'src/services'),
+    ],
     hiddenimports=hidden_modules,
     hookspath=[],
     hooksconfig={},

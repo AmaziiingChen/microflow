@@ -217,6 +217,37 @@ class TelemetryServiceTests(unittest.TestCase):
         self.assertGreaterEqual(int(failed_item["next_retry_at"]), before_flush + 60)
         self.assertIn("boom", failed_item["last_error"])
 
+    def test_flush_skips_when_telemetry_disabled_without_force(self):
+        self.service.track("app_launch", {"source_name": "启动"}, force=True)
+        self.config_service.data["telemetryEnabled"] = False
+        self.config_service.data["telemetryErrorReportsEnabled"] = False
+        self.config_service.data["telemetryConsentStatus"] = "disabled"
+
+        with patch("src.services.telemetry_service.requests.post") as post_mock:
+            result = self.service.flush(force=False)
+
+        self.assertEqual(result["status"], "skipped")
+        self.assertEqual(result["message"], "遥测已关闭")
+        self.assertEqual(self.db.get_telemetry_queue_stats()["pending_count"], 1)
+        post_mock.assert_not_called()
+
+    def test_flush_force_still_sends_queued_events(self):
+        self.service.track("app_launch", {"source_name": "启动"}, force=True)
+        self.config_service.data["telemetryEnabled"] = False
+        self.config_service.data["telemetryErrorReportsEnabled"] = False
+        self.config_service.data["telemetryConsentStatus"] = "disabled"
+
+        response = Mock(status_code=200, text="ok")
+        with patch(
+            "src.services.telemetry_service.requests.post",
+            return_value=response,
+        ) as post_mock:
+            result = self.service.flush(force=True)
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["accepted"], 1)
+        post_mock.assert_called_once()
+
 
 class ConfigServiceTelemetryFieldsTests(unittest.TestCase):
     def test_telemetry_fields_roundtrip(self):

@@ -379,6 +379,12 @@ class TelemetryService:
             return {"status": "busy", "message": "正在上报"}
 
         try:
+            if not force and not (
+                self._is_consent_enabled()
+                and (self._is_usage_enabled() or self._is_error_enabled())
+            ):
+                return {"status": "skipped", "message": "遥测已关闭"}
+
             endpoint = str(self._remote_config.get("endpoint") or "").strip()
             if not endpoint:
                 return {"status": "skipped", "message": "未配置上报地址"}
