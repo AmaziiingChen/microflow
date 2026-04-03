@@ -4,6 +4,7 @@
 import webview
 import os
 import sys
+import platform
 import logging
 from PIL import Image, ImageDraw
 import requests
