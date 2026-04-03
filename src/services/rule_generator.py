@@ -1256,12 +1256,17 @@ class RuleGeneratorService:
                     )
 
                 # 2. 导入 ScrapeGraphAI
+                # Avoid importing scrapegraphai.graphs package root here because its
+                # __init__ eagerly imports many optional graph variants.
                 try:
-                    from scrapegraphai.graphs import SmartScraperGraph
-                except ImportError:
+                    from scrapegraphai.graphs.smart_scraper_graph import (
+                        SmartScraperGraph,
+                    )
+                except Exception as exc:
+                    logger.exception("导入 ScrapeGraphAI 失败: %s", exc)
                     return RuleGenerationResult(
                         success=False,
-                        error_message="ScrapeGraphAI 未安装，请运行 pip install scrapegraphai",
+                        error_message=f"ScrapeGraphAI 导入失败: {exc}",
                     )
 
                 # 3. 构建配置

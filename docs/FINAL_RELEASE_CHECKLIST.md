@@ -91,23 +91,24 @@ shasum -a 256 release/macos/MicroFlow-v1.0.0-macos-arm64.dmg
 - [ ] 成功生成 `dist\\MicroFlow`
 - [ ] 成功通过 Inno Setup 生成 `release\\windows\\MicroFlow-Setup-v1.0.0.exe`
 
+说明：当前 Windows 打包基线为 Python 3.11；如果本机没有 3.11，请先安装后再执行下面命令。
+
 核心命令：
 
 ```powershell
 # 1. 进入项目目录
-cd C:\path\to\MicroFlow
+cd C:\AmazingSyncthing\Code\MicroFlow
 
 # 2. 创建干净的打包虚拟环境
 if (Test-Path .venv-pack-win) { Remove-Item .venv-pack-win -Recurse -Force }
-py -3.12 -m venv .venv-pack-win
-.venv-pack-win\Scripts\Activate.ps1
+py -3.11 -m venv .venv-pack-win
 
 # 3. 安装打包依赖
-python -m pip install --upgrade pip setuptools wheel
-pip install -r requirements-packaging.txt
+.\.venv-pack-win\Scripts\python.exe -m pip install --upgrade pip setuptools wheel
+.\.venv-pack-win\Scripts\python.exe -m pip install -r requirements-packaging.txt
 
 # 4. 生成发布图标
-python scripts\build_release_icons.py
+.\.venv-pack-win\Scripts\python.exe scripts\build_release_icons.py
 
 # 5. 清理旧构建文件
 if (Test-Path build) { Remove-Item build -Recurse -Force }
@@ -116,7 +117,7 @@ if (Test-Path release\windows) { Remove-Item release\windows -Recurse -Force }
 
 # 6. 执行 PyInstaller 打包
 $env:PYINSTALLER_CONFIG_DIR="$PWD\.pyinstaller-cache"
-python -m PyInstaller --clean --noconfirm MicroFlow.windows.spec
+.\.venv-pack-win\Scripts\python.exe -m PyInstaller --clean --noconfirm MicroFlow.windows.spec
 
 # 7. 使用 Inno Setup 生成安装包
 & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `

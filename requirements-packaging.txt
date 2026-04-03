@@ -1,10 +1,11 @@
 -r requirements.txt
 
-# === 发布包运行时必需的扩展能力 ===
-# 自定义 HTML 规则生成 / AI 分析
+# Packaging-only runtime extensions
+# Custom HTML generation and AI analysis
+numpy>=2.0
 langchain-openai>=1.1.12
 scrapegraphai>=1.75.1
 trafilatura>=2.0.0
 
-# 浏览器渲染 / 快照截图
+# Browser rendering and snapshot capture
 playwright>=1.58.0

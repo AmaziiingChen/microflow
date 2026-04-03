@@ -4,6 +4,7 @@
 import webview
 import os
 import sys
+import builtins
 import platform
 import logging
 from PIL import Image, ImageDraw
@@ -14,6 +15,27 @@ import threading
 import time
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
+def console_print(*args, **kwargs):
+    """Print safely on Windows consoles that use legacy encodings like GBK."""
+    try:
+        builtins.print(*args, **kwargs)
+    except UnicodeEncodeError:
+        sep = kwargs.get("sep", " ")
+        end = kwargs.get("end", "\n")
+        flush = kwargs.get("flush", False)
+        file = kwargs.get("file", sys.stdout)
+        text = sep.join(str(arg) for arg in args)
+        encoding = getattr(file, "encoding", None) or "utf-8"
+        safe_text = text.encode(encoding, errors="replace").decode(
+            encoding, errors="replace"
+        )
+        builtins.print(safe_text, end=end, file=file, flush=flush)
+
+
+# Keep module-level print calls from crashing on Windows code pages.
+print = console_print
 
 # 🌟 PyObjC 原生 macOS 状态栏支持
 try:

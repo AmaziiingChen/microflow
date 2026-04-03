@@ -1,20 +1,18 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 from PyInstaller.building.datastruct import TOC
+from PyInstaller.utils.hooks import collect_all
 
 block_cipher = None
 
 excluded_modules = [
-    'pandas', 'numpy', 'matplotlib', 'streamlit',
+    'pandas', 'matplotlib', 'streamlit',
     'scipy', 'sympy', 'notebook', 'PyQt5', 'PySide6', 'tkinter',
     'Cocoa', 'AppKit', 'Foundation', 'PyObjCTools', 'objc',
     'webview.platforms.cocoa',
     'pytest', '_pytest', 'py', 'IPython',
-    'boto3', 'botocore', 's3transfer',
     'sqlalchemy', 'fsspec',
-    'langchain_aws', 'langchain_community',
-    'langchain_mistralai', 'langchain_ollama',
-    'rich', 'babel', 'dateparser',
+    'rich',
     'tensorflow', 'torch'
 ]
 
@@ -30,6 +28,56 @@ hidden_modules = [
     'psutil._pswindows'
 ]
 
+ai_runtime_packages = [
+    'numpy',
+    'openai',
+    'playwright',
+    'undetected_playwright',
+    'tiktoken',
+    'ollama',
+    'langchain',
+    'langchain_classic',
+    'langchain_core',
+    'langchain_openai',
+    'langchain_community',
+    'langchain_aws',
+    'langchain_mistralai',
+    'langchain_ollama',
+    'scrapegraphai',
+    'scrapegraph_py',
+    'trafilatura',
+    'courlan',
+    'htmldate',
+    'justext',
+    'dateparser',
+    'babel',
+    'duckduckgo_search',
+    'free_proxy',
+    'html2text',
+    'minify_html',
+    'async_timeout',
+    'semchunk',
+    'boto3',
+    'botocore',
+    's3transfer',
+    'jmespath',
+    'primp',
+    'tld',
+    'mpire',
+]
+
+ai_datas = []
+ai_binaries = []
+ai_hiddenimports = []
+
+for package_name in ai_runtime_packages:
+    datas, binaries, hiddenimports = collect_all(package_name)
+    ai_datas += datas
+    ai_binaries += binaries
+    ai_hiddenimports += hiddenimports
+
+hidden_modules = sorted(set(hidden_modules + ai_hiddenimports))
+
 a = Analysis(
     ['main.py'],
     pathex=[],
@@ -38,7 +86,7 @@ a = Analysis(
         ('frontend', 'frontend'),
         ('data', 'data'),
         ('src/services/snapshot_template.html', 'src/services'),
-    ],
+    ] + ai_datas,
     hiddenimports=hidden_modules,
     hookspath=[],
     hooksconfig={},
@@ -64,7 +112,7 @@ EXCLUDED_DATA_MARKERS = (
 filtered_binaries = []
 filtered_datas = []
 
-for dest_name, src_name, typecode in a.binaries:
+for dest_name, src_name, typecode in TOC(list(a.binaries) + ai_binaries):
     normalized_target = f"{dest_name}::{src_name}".replace("\\", "/")
     if PLAYWRIGHT_BROWSER_MARKER not in normalized_target:
         filtered_binaries.append((dest_name, src_name, typecode))

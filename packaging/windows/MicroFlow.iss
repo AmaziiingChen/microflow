@@ -3,10 +3,10 @@
   #define MyAppVersion "v1.0.0"
 #endif
 #ifndef MySourceDir
-  #define MySourceDir "dist\\MicroFlow"
+  #define MySourceDir "..\\..\\dist\\MicroFlow"
 #endif
 #ifndef MyOutputDir
-  #define MyOutputDir "release\\windows"
+  #define MyOutputDir "..\\..\\release\\windows"
 #endif
 
 [Setup]
@@ -16,7 +16,7 @@ AppVersion={#MyAppVersion}
 DefaultDirName={autopf}\MicroFlow
 DefaultGroupName=MicroFlow
 UninstallDisplayIcon={app}\MicroFlow.exe
-SetupIconFile=frontend\icons\icon.ico
+SetupIconFile=..\..\frontend\icons\icon.ico
 OutputDir={#MyOutputDir}
 OutputBaseFilename=MicroFlow-Setup-{#MyAppVersion}
 Compression=lzma

@@ -83,16 +83,17 @@ Windows 必须在 Windows 机器上执行，当前仓库已提供：
 
 建议在 Windows 专用虚拟环境中打包：
 
+说明：当前 Windows 打包基线为 Python 3.11；如果本机没有 3.11，请先安装后再执行下面命令。
+
 ```powershell
 cd C:\path\to\MicroFlow
 
-py -3.12 -m venv .venv-pack-win
-.venv-pack-win\Scripts\Activate.ps1
+py -3.11 -m venv .venv-pack-win
 
-python -m pip install --upgrade pip setuptools wheel
-pip install -r requirements-packaging.txt
+.\.venv-pack-win\Scripts\python.exe -m pip install --upgrade pip setuptools wheel
+.\.venv-pack-win\Scripts\python.exe -m pip install -r requirements-packaging.txt
 
-python scripts\build_release_icons.py
+.\.venv-pack-win\Scripts\python.exe scripts\build_release_icons.py
 
 # 强烈建议：先在开发环境里完成校验，再回到这个干净的打包环境执行 PyInstaller
 # node --check frontend\js\app.js
@@ -103,7 +104,7 @@ if (Test-Path build) { Remove-Item build -Recurse -Force }
 if (Test-Path dist) { Remove-Item dist -Recurse -Force }
 if (Test-Path release\windows) { Remove-Item release\windows -Recurse -Force }
 
-python -m PyInstaller --clean --noconfirm MicroFlow.windows.spec
+.\.venv-pack-win\Scripts\python.exe -m PyInstaller --clean --noconfirm MicroFlow.windows.spec
 ```
 
 如果本机已安装 Inno Setup 6，可继续生成正式安装包：

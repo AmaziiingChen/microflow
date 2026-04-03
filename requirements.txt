@@ -1,40 +1,38 @@
 # ============================================================
-# MicroFlow 依赖清单
-# 更新时间: 2026-03-26
-# 版本: v1.0.0
+# MicroFlow dependencies
+# Updated: 2026-03-26
+# Version: v1.0.0
 # ============================================================
 
-# === 核心框架 ===
-pywebview>=4.0              # 跨平台桌面 GUI 框架
-pillow>=10.0                # 图像处理（托盘图标、截图）
+# Core framework
+pywebview>=4.0
+pillow>=10.0
 
-# === 网络请求 ===
-requests>=2.28              # HTTP 请求库
-urllib3>=2.0                # HTTP 连接池（requests 依赖）
-beautifulsoup4>=4.12        # HTML/XML 解析
-lxml>=5.0                   # XML 解析后端（加速 BeautifulSoup）
-feedparser>=6.0             # RSS/Atom 订阅解析
+# Networking
+requests>=2.28
+urllib3>=2.0
+beautifulsoup4>=4.12
+lxml>=5.0
+feedparser>=6.0
 
-# === AI 能力 ===
-openai>=1.0                 # OpenAI 兼容 API 客户端
+# AI
+openai>=1.0
 
-# === 工具库 ===
-mistune>=3.0                # Markdown 渲染（邮件快照）
-python-dateutil>=2.8.0        # 增强的日期解析（支持多种日期格式）
-python-dotenv>=1.0          # 环境变量加载
-psutil>=6.0                # 性能监控（CPU / 内存采样）
+# Utilities
+mistune>=3.0
+python-dateutil>=2.8.0
+python-dotenv>=1.0
+psutil>=6.0
 
-# === 系统托盘 ===
-pyobjc>=10.0; sys_platform == "darwin"   # macOS 原生 API 绑定
-pystray>=0.19; sys_platform != "darwin"  # Windows/Linux 托盘备选
+# System tray
+pyobjc>=10.0; sys_platform == "darwin"
+pystray>=0.19; sys_platform != "darwin"
 
-# === 桌面通知 ===
-plyer>=2.1                  # 跨平台桌面通知
+# Desktop notifications
+plyer>=2.1
 
-# === SSL 信任（可选）===
-truststore>=0.8.0           # 系统原生 SSL 信任库注入
+# SSL trust
+truststore>=0.8.0
 
-# ============================================================
-# 打包工具（开发环境）
-# ============================================================
-pyinstaller>=6.0            # Python 打包工具
+# Packaging tools
+pyinstaller>=6.0
