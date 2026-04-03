@@ -89,3 +89,4 @@ htmlcov/
 
 # === Demo 测试文件 ===
 demo*.html
+.pyinstaller-config/
