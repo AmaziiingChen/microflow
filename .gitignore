@@ -87,6 +87,9 @@ htmlcov/
 .pytest_cache/
 .mypy_cache/
 
+# === 临时目录 ===
+tmp/
+
 # === Demo 测试文件 ===
 demo*.html
 .pyinstaller-config/
