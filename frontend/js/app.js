@@ -11500,7 +11500,10 @@ try {
           chipRect.width / 2;
         const clampedLeft = Math.min(Math.max(0, targetLeft), maxScrollLeft);
 
-        animateFilterScroll(container, clampedLeft);
+        // 🌟 Windows 优化：延迟滚动动画，让 CSS 展开动画先执行，避免割裂感
+        setTimeout(() => {
+          animateFilterScroll(container, clampedLeft);
+        }, 50);
       };
 
       // 🌟 新增：按来源筛选方法

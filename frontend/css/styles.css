@@ -7152,7 +7152,8 @@ body.is-capturing .dock-group {
   background: var(--chip-active-bg, var(--color-accent-primary));
   color: var(--filter-chip-active-text);
   padding-inline: 18px;
-  /* 去掉 saturate(1.02)，这种极其微小的滤镜极其消耗 GPU，且肉眼不可见 */
+  /* 🌟 Windows 优化：提前告知浏览器将要变化的属性，避免展开和平移割裂 */
+  will-change: width, transform, background-color;
 }
 
 .filter-chip.active .filter-chip-icon,
