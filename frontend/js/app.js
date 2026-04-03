@@ -11679,12 +11679,8 @@ try {
           ) {
             e.preventDefault();
             if (isDetailPaneVisible.value && activeArticle.value) {
-              // 手动触发复制按钮的动画
               const copyBtn = document.querySelector(".btn-copy");
-              if (copyBtn) {
-                copyBtn.classList.add("is-copied");
-                setTimeout(() => copyBtn.classList.remove("is-copied"), 1500);
-              }
+              triggerCopyButtonFeedback(copyBtn);
               copyText(activeArticle.value);
             }
           }
@@ -13460,6 +13456,21 @@ try {
 
       window.openMarkdownImageSource = openMarkdownImageSource;
 
+      const triggerCopyButtonFeedback = (button = null) => {
+        const targetButton = button || document.querySelector(".btn-copy");
+        if (!targetButton) return;
+
+        if (targetButton._copyFeedbackTimer) {
+          clearTimeout(targetButton._copyFeedbackTimer);
+        }
+
+        targetButton.classList.add("is-copied");
+        targetButton._copyFeedbackTimer = setTimeout(() => {
+          targetButton.classList.remove("is-copied");
+          targetButton._copyFeedbackTimer = null;
+        }, 1500);
+      };
+
       // 👇 替换原有的 copyText 函数
       const copyText = (item, event = null) => {
         forceMarkRead(); // 🚀 记录实质性交互
@@ -13475,24 +13486,26 @@ try {
           item.url ? `详情链接：${item.url}` : "",
         ].filter(Boolean);
         const textToCopy = textSections.join("\n\n");
+        const btn = event ? event.currentTarget : document.querySelector(".btn-copy");
+
+        triggerCopyButtonFeedback(btn);
 
         // 👇 替换原有的 copyText 函数的最后一步
         // 4. 写入剪贴板
         navigator.clipboard
           .writeText(textToCopy)
           .then(() => {
-            // 获取当前点击的按钮并赋予动画类名
-            const btn = event
-              ? event.currentTarget
-              : document.querySelector(".btn-copy");
-            if (btn) {
-              btn.classList.add("is-copied");
-              setTimeout(() => btn.classList.remove("is-copied"), 1500);
-            }
             fireTelemetryEvent("article_copy", buildArticleTelemetryProps(item));
           })
           .catch((err) => {
             console.error("复制失败", err);
+            if (btn) {
+              btn.classList.remove("is-copied");
+              if (btn._copyFeedbackTimer) {
+                clearTimeout(btn._copyFeedbackTimer);
+                btn._copyFeedbackTimer = null;
+              }
+            }
             showNotification("复制失败", "请检查浏览器权限", "error", 3000);
           });
       };
