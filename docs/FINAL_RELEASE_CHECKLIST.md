@@ -87,6 +87,7 @@ shasum -a 256 release/macos/MicroFlow-v1.0.0-macos-arm64.dmg
 
 - [ ] 在 Windows 机器上新建干净打包环境 `.venv-pack-win`
 - [ ] 安装 [requirements-packaging.txt](/Users/chen/Code/MicroFlow/requirements-packaging.txt)
+- [ ] 已安装 Python `3.12.x` 或 `3.11.x`，`3.13` 仅作备选，不要使用 Python `3.14`
 - [ ] 确认测试机已安装 Microsoft Edge / Chrome / Chromium 之一
 - [ ] 成功生成 `dist\\MicroFlow`
 - [ ] 成功通过 Inno Setup 生成 `release\\windows\\MicroFlow-Setup-v1.0.0.exe`
